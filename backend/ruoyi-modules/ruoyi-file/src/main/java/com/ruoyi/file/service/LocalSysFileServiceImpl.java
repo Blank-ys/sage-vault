@@ -1,6 +1,8 @@
 package com.ruoyi.file.service;
 
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,7 +17,8 @@ import com.ruoyi.file.utils.FileUploadUtils;
  */
 @Primary
 @Service
-public class LocalSysFileServiceImpl implements ISysFileService
+@ConditionalOnProperty(name = "storage.type", havingValue = "local")
+public class LocalSysFileServiceImpl implements ISysFileService, InitializingBean
 {
     /**
      * 资源映射路径 前缀
@@ -61,5 +64,10 @@ public class LocalSysFileServiceImpl implements ISysFileService
     {
         String localFile = StringUtils.substringAfter(fileUrl, localFilePrefix);
         FileUtils.deleteFile(localFilePath + localFile);
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        System.out.println(" --- 文件服务 local ---");
     }
 }

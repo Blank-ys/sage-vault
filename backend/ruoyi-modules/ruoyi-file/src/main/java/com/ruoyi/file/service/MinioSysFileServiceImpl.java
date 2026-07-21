@@ -1,7 +1,10 @@
 package com.ruoyi.file.service;
 
 import java.io.InputStream;
+
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import com.alibaba.nacos.common.utils.IoUtils;
@@ -18,7 +21,8 @@ import io.minio.RemoveObjectArgs;
  * @author ruoyi
  */
 @Service
-public class MinioSysFileServiceImpl implements ISysFileService
+@ConditionalOnProperty(name = "storage.type", havingValue = "minio")
+public class MinioSysFileServiceImpl implements ISysFileService, InitializingBean
 {
     @Autowired
     private MinioConfig minioConfig;
@@ -78,5 +82,10 @@ public class MinioSysFileServiceImpl implements ISysFileService
         {
             throw new RuntimeException("Minio Failed to delete file", e);
         }
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        System.out.println(" --- 文件服务 minio ---");
     }
 }
