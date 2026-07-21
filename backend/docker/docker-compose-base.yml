@@ -1,0 +1,70 @@
+version : '3.8'
+services:
+  ruoyi-nacos:
+    container_name: ruoyi-nacos
+    image: nacos/nacos-server:v3.0.3
+    build:
+      context: ./nacos
+    environment:
+      - MODE=standalone
+      - NACOS_AUTH_TOKEN=base64xxx          # openssl rand -base64 32
+      - NACOS_AUTH_IDENTITY_KEY=blank
+      - NACOS_AUTH_IDENTITY_VALUE=blank_value
+      - NACOS_CONSOLE_PORT=8180
+      - PREFER_HOST_MODE=ip                 # 优先使用IP对外暴露
+      - NACOS_SERVER_IP=192.168.150.100     # 必须填客户端可访问的宿主机IP，否则客户端会拿到容器内网IP
+      - SPRING_DATASOURCE_PLATFORM=mysql    # 指定数据源为MySQL
+      - MYSQL_SERVICE_HOST=mysql            # 同compose内直接用服务名访问MySQL
+      - MYSQL_SERVICE_PORT=3306
+      - MYSQL_SERVICE_DB_NAME=ry-config
+      - MYSQL_SERVICE_USER=root
+      - MYSQL_SERVICE_PASSWORD=root
+      - MYSQL_SERVICE_DB_PARAM=characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useSSL=false&serverTimezone=Asia/Shanghai
+      - NACOS_AUTH_ENABLE=false             # 生产环境建议开启鉴权
+      - TZ=Asia/Shanghai
+    restart: always
+    volumes:
+      - ./nacos/logs/:/home/nacos/logs
+      - ./nacos/conf/application.properties:/home/nacos/conf/application.properties
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+      - "8180:8180"
+    depends_on:
+      - ruoyi-mysql
+  ruoyi-mysql:
+    container_name: ruoyi-mysql
+    image: mysql:8.0.45
+    build:
+      context: ./mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql/conf:/etc/mysql/conf.d
+      - ./mysql/logs:/logs
+      - ./mysql/data:/var/lib/mysql
+    command: [
+      'mysqld',
+      '--innodb-buffer-pool-size=80M',
+      '--character-set-server=utf8mb4',
+      '--collation-server=utf8mb4_unicode_ci',
+      '--default-time-zone=+8:00',
+      '--lower-case-table-names=1'
+    ]
+    environment:
+      MYSQL_DATABASE: 'ry-cloud'
+      MYSQL_ROOT_PASSWORD: root
+  ruoyi-redis:
+    container_name: ruoyi-redis
+    image: redis:7
+    build:
+      context: ./redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/conf/redis.conf:/home/ruoyi/redis/redis.conf
+      - ./redis/data:/data
+    command: redis-server /home/ruoyi/redis/redis.conf
