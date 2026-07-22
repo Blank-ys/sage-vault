@@ -16,6 +16,10 @@ _Avoid_: 密级、权限组
 Java 中台随问答请求下发给 Python 的、代表当前用户身份的角色/部门标签集合。Python 按它与 chunk 标签求交来执行过滤。授权在 Java,执行在 Python。见 [ADR-0001](docs/adr/0001-rag-orchestration-and-permission-boundary.md)。
 _Avoid_: 权限令牌、token
 
+**哨兵标签 (Sentinel Tag)**:
+标签求交的 fail-closed 兜底手段——当一篇制度文档的可见范围标签正在被重写(尚未确认完成)时,Java 先同步把该文档在 Milvus 里的标签替换为一个不与任何用户标签相交的空集,使其在窗口期内对**所有人**(包括原本有权限的人)暂时不可检索,而不是保留旧标签直到重写完成。用于杜绝"标签重写窗口期内旧标签仍生效"这类间接泄露。重写失败时也维持哨兵标签,绝不回退旧标签。
+_Avoid_: 临时标签、空标签
+
 **例外覆盖层 (Exception Overlay)**:
 叠加在标签求交之上的一小段显式 grant/deny 的 documentId 列表,只装"临时单独授权某人看某篇"这类例外,天然短。日常权限靠标签,例外靠它。
 _Avoid_: 白名单、黑名单
