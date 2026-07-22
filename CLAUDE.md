@@ -2,8 +2,8 @@
 
 ### Issue tracker
 
-Issues live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+问题作为本地 markdown 文件存放在 `.scratch/<feature>/` 下。详见 `docs/agents/issue-tracker.md`。
 
 ### Domain docs
 
-Single-context layout — root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+单一上下文布局 — 根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
