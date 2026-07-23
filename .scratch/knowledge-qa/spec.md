@@ -22,191 +22,191 @@ V1 需要先提供一个可由小范围真实团队使用的内部试点版：�
 
 ## User Stories
 
-1. As a 普通用户, I want to use my existing RuoYi account to access Knowledge QA, so that I do not need a separate account.
-2. As a 普通用户, I want to see every available knowledge base's name and description, so that I can choose the most relevant search boundary.
-3. As a 普通用户, I want unavailable or deleting knowledge bases to be excluded from selection, so that I do not start work in a boundary that cannot answer.
-4. As a 普通用户, I want to create a new conversation by selecting exactly one knowledge base, so that every question has an unambiguous retrieval boundary.
-5. As a 普通用户, I want an empty knowledge base to remain selectable, so that I can enter its workspace before documents become available.
-6. As a 普通用户, I want a clear “该知识库暂无可用文档” response when I ask an empty knowledge base, so that I understand why it cannot answer.
-7. As a 普通用户, I want the first question to become the default conversation title, so that new conversations are recognizable without extra work.
-8. As a 普通用户, I want to rename a conversation, so that I can organize my history in language meaningful to me.
-9. As a 普通用户, I want to ask multiple questions inside one conversation, so that related independent records can be kept together.
-10. As a 普通用户, I want each question to be processed independently of earlier messages, so that V1 behavior is predictable and does not infer unstated context.
-11. As a 普通用户, I want every question in a conversation to search only its bound knowledge base, so that unrelated knowledge bases do not contaminate the answer.
-12. As a 普通用户, I want the system to accept natural Chinese questions and semantic paraphrases, so that I do not need to know the document's exact wording.
-13. As a 普通用户, I want the answer to start streaming while it is generated, so that I receive useful feedback without waiting for the whole answer.
-14. As a 普通用户, I want streaming states to distinguish start, content, completion, refusal and error, so that the interface always represents what is happening.
-15. As a 普通用户, I want answers to state the conclusion first and add only necessary explanation, so that they remain easy to scan.
-16. As a 普通用户, I want answers to use only retrieved enterprise document content, so that model general knowledge is not mistaken for company knowledge.
-17. As a 普通用户, I want a clear refusal when relevant evidence is insufficient, so that the system does not invent an answer.
-18. As a 普通用户, I want to stop an answer that is generating, so that I do not have to wait for irrelevant or overly long output.
-19. As a 普通用户, I want already streamed text to remain visible after I stop generation, so that useful partial content is not lost.
-20. As a 普通用户, I want a stopped answer to be marked “已停止”, so that it is not confused with a complete answer or system failure.
-21. As a 普通用户, I want partial text to be saved when generation fails, so that I can inspect what was produced before the failure.
-22. As a 普通用户, I want a failed partial answer to be marked “未完成”, so that I do not rely on it as a complete answer.
-23. As a 普通用户, I want only one answer to generate for me at a time, so that accidental duplicate requests do not consume the limited trial capacity.
-24. As a 普通用户, I want a clear prompt to wait or stop the active answer before asking again, so that the concurrency rule is understandable.
-25. As a 普通用户, I want complete, stopped and incomplete QA records in my history, so that I can revisit the actual outcome of previous requests.
-26. As a 普通用户, I want my history retained by default, so that I do not lose useful enterprise knowledge conversations during the V1 trial.
-27. As a 普通用户, I want to delete my own QA records or conversations, so that I control the content retained in my history.
-28. As a 普通用户, I want deleting a conversation to delete all its QA records and feedback content, so that no hidden copy of my content remains in the business data.
-29. As a 普通用户, I want a deleted knowledge base's old conversation history to remain readable and marked “知识库已删除”, so that past answers are retained without implying the source remains usable.
-30. As a 普通用户, I want a conversation bound to a deleted knowledge base to reject new questions, so that it cannot silently search a different boundary.
-31. As a 普通用户, I want to report an answer as incorrect, missing an answer, incomplete or other, so that a knowledge administrator can investigate quality problems.
-32. As a 普通用户, I want to add an optional explanation to feedback, so that I can describe what I expected.
-33. As a 普通用户, I want feedback submission to clearly authorize sharing that QA record with knowledge administrators, so that the privacy consequence is explicit.
-34. As a 普通用户, I want knowledge administrators to be unable to read QA content I have not shared, so that ordinary use does not become employee monitoring.
-35. As a 普通用户, I want every usable knowledge base to be available to every logged-in user in V1, so that the trial does not depend on document permission configuration.
-36. As a 普通用户, I want the system not to expose document lists, previews or downloads, so that V1 remains focused on question answering.
-37. As a 知识管理员, I want to use the ordinary question-answering capability as well as administration features, so that I can verify the knowledge I manage.
-38. As a 知识管理员, I want to create a knowledge base with a unique name and description, so that enterprise documents can be grouped by topic.
-39. As a 知识管理员, I want knowledge base names to be unique without regard to letter case, so that visually duplicate boundaries cannot be created.
-40. As a 知识管理员, I want to rename a knowledge base or edit its description without breaking existing conversations, so that its presentation can evolve safely.
-41. As a 知识管理员, I want all knowledge administrators to manage all knowledge bases, so that V1 does not require owner and collaborator administration.
-42. As a 知识管理员, I want to enter a knowledge base's document management page and view its document list and original files, so that document operations and troubleshooting remain scoped to the selected knowledge base.
-43. As a 知识管理员, I want to upload text-bearing PDF, DOCX, MD and TXT documents, so that common enterprise document types can enter the RAG pipeline.
-44. As a 知识管理员, I want unsupported, encrypted, corrupt, empty, scanned or otherwise non-extractable files to fail with an understandable reason, so that I know how to correct the source.
-45. As a 知识管理员, I want to select multiple files in one upload request, so that a knowledge base can be initialized efficiently.
-46. As a 知识管理员, I want the entire upload request rejected before persistence when any selected filename conflicts, so that a batch has a clear all-or-nothing validation result.
-47. As a 知识管理员, I want the rejection to list every conflicting filename, so that I can fix the batch in one attempt.
-48. As a 知识管理员, I want duplicate filenames within the selected batch to count as conflicts, so that concurrent processing cannot create ambiguous documents.
-49. As a 知识管理员, I want filename uniqueness to be case-insensitive within one knowledge base, so that equivalent names cannot be uploaded twice.
-50. As a 知识管理员, I want different knowledge bases to permit the same filename, so that common names such as `产品手册.pdf` do not create global conflicts.
-51. As a 知识管理员, I want processing, available and failed documents to reserve their filename, so that retry and recovery preserve document identity.
-52. As a 知识管理员, I want a filename released only after deletion cleanup succeeds, so that a replacement upload cannot overlap stale source or vectors.
-53. As a 知识管理员, I want files that pass batch validation to process independently, so that one later parsing failure does not invalidate other files.
-54. As a 知识管理员, I want upload to return promptly and processing to continue asynchronously, so that large documents do not block the administration page.
-55. As a 知识管理员, I want to see each document as 处理中, 可用, 处理失败 or 删除中, so that its participation in question answering is explicit.
-56. As a 知识管理员, I want a document to become available only after its entire ingestion succeeds, so that users never search partially published content.
-57. As a 知识管理员, I want failed ingestion artifacts cleaned up, so that retries cannot mix old and new chunks.
-58. As a 知识管理员, I want to retry a failed document using the same document record and filename, so that recovery does not create duplicates.
-59. As a 知识管理员, I want retry to process the whole document again, so that V1 does not depend on unreliable step-level checkpoints.
-60. As a 知识管理员, I want to delete a document and have it immediately excluded from new retrieval, so that removed knowledge stops influencing answers before physical cleanup completes.
-61. As a 知识管理员, I want document deletion to clean the MinIO object, parsed chunks and Milvus vectors, so that no inaccessible orphaned data remains.
-62. As a 知识管理员, I want historical QA records to survive document deletion, so that past results and submitted investigations retain their original context.
-63. As a 知识管理员, I want to delete a knowledge base with a second confirmation, so that destructive cascading cleanup is intentional.
-64. As a 知识管理员, I want knowledge base deletion to cascade asynchronously through all documents and storage, so that I do not have to delete documents one by one.
-65. As a 知识管理员, I want a deleting knowledge base to reject uploads, new conversations and questions immediately, so that no new work races with cleanup.
-66. As a 知识管理员, I want failed knowledge base cleanup to produce a 删除失败 state and reason, so that I can retry without restoring the boundary to use.
-67. As a 知识管理员, I want an upload-time notice that questions and retrieved chunks will be sent to Alibaba Cloud Bailian, so that I can make the document sensitivity judgment myself.
-68. As a 知识管理员, I want the notice not to claim automated compliance, classification or approval, so that V1 does not create a false security guarantee.
-69. As a 知识管理员, I want to see only feedback records that users deliberately submitted, so that troubleshooting respects the agreed privacy boundary.
-70. As a 知识管理员, I want feedback to include its shared question, complete or partial answer, request identifier and retrieval diagnostics, so that I can investigate the reported behavior.
-71. As a 知识管理员, I want to move feedback between 待处理 and 已处理 and store an internal note, so that the small V1 feedback queue can be managed.
-72. As a 知识管理员, I want my knowledge base, document and feedback actions audited with actor, object, time and result, so that administrative changes remain traceable.
-73. As a 系统管理员, I want to grant the knowledge administrator role through existing RuoYi role and menu permissions, so that access control reuses the current platform.
-74. As a 系统管理员, I want every logged-in user to receive ordinary question-answering access without a second account model, so that onboarding remains simple.
-75. As a 系统管理员, I want anonymous users rejected, so that enterprise question answering remains inside the authenticated system.
-76. As a 运维人员, I want model names, credentials and service settings supplied by deployment configuration, so that secrets and provider choices are not hard-coded.
-77. As a 运维人员, I want Java and Python to discover each other through Nacos, so that internal service addresses do not need to be fixed in application code.
-78. As a 运维人员, I want request and task identifiers to correlate Java, Python, storage and model activity, so that distributed failures can be traced.
-79. As a 运维人员, I want technical logs to record stages, identifiers, scores, timing, model request identifiers, SSE progress, retries and errors, so that failures can be diagnosed.
-80. As a 普通用户, I want technical logs not to copy my question or answer content, so that business content is not dispersed through logging systems.
-81. As a 知识管理员, I want technical logs not to copy enterprise chunks or full prompts, so that document content is not duplicated outside managed storage.
-82. As a 试点负责人, I want objective quality and performance acceptance criteria, so that V1 success is judged by evidence rather than impressions.
-83. As a 试点负责人, I want the system to support up to 1,000 documents, 20 GB total source files, 50 ordinary users and 5 concurrent answers, so that the intended trial team can use it.
-84. As a 试点负责人, I want 95% of documents up to 50 MB to become available within five minutes, so that ingestion is practical for ongoing administration.
-85. As a 试点负责人, I want 95% of answers to start streaming within five seconds and complete within fifteen seconds when Bailian is healthy, so that interaction feels responsive.
-86. As a 试点负责人, I want an annotated Chinese evaluation set covering answerable, cross-chunk, unanswerable and paraphrased questions, so that retrieval and refusal can be tuned reproducibly.
-87. As a 试点负责人, I want at least 80% of answerable questions to have a correct conclusion, so that the trial has a meaningful answer-quality floor.
-88. As a 试点负责人, I want at least 90% of unanswerable questions to be refused, so that hallucination risk is bounded.
-89. As a 试点负责人, I want answers to introduce no key fact absent from retrieved content, so that generated text remains grounded in enterprise documents.
+1. 作为普通用户，我希望使用已有的 RuoYi 账号即可访问知识问答，无需单独注册。
+2. 作为普通用户，我希望看到所有可用知识库的名称和描述，以便选择最相关的检索范围。
+3. 作为普通用户，我希望不可用或正在删除的知识库不被列入可选范围，以免在无法作答的知识库中开始提问。
+4. 作为普通用户，我希望通过选择一个知识库来创建新会话，使每个问题都有明确的检索边界。
+5. 作为普通用户，我希望空知识库仍然可选，以便在文档就绪前就能进入该知识库的工作空间。
+6. 作为普通用户，当向空知识库提问时，我希望收到明确的"该知识库暂无可用文档"提示，以便理解为何无法回答。
+7. 作为普通用户，我希望第一个问题自动成为会话的默认标题，无需额外操作即可识别新会话。
+8. 作为普通用户，我希望能够重命名会话，以便按对自己有意义的语言组织历史记录。
+9. 作为普通用户，我希望在一个会话中提出多个问题，以便将相关的独立记录保存在一起。
+10. 作为普通用户，我希望每个问题独立处理，不参考之前的消息，使 V1 行为可预测，不会推断未明确表达的上下文。
+11. 作为普通用户，我希望会话中的每个问题只搜索其绑定的知识库，避免无关知识库污染答案。
+12. 作为普通用户，我希望系统能接受中文自然语言提问和语义改写，无需知道文档的精确措辞。
+13. 作为普通用户，我希望答案在生成过程中就开始流式输出，无需等待完整答案即可获得有用反馈。
+14. 作为普通用户，我希望流式状态能区分开始、内容、完成、拒答和错误，使界面始终明确当前状态。
+15. 作为普通用户，我希望答案先给出结论，再附加必要的解释，便于快速浏览。
+16. 作为普通用户，我希望答案仅使用检索到的企业文档内容，避免将模型的通用知识误认为公司知识。
+17. 作为普通用户，当相关证据不足时，我希望系统明确拒答，避免编造答案。
+18. 作为普通用户，我希望能够停止正在生成的答案，无需等待无关或过长的输出。
+19. 作为普通用户，我希望停止生成后已输出的文本仍然可见，不丢失有用的部分内容。
+20. 作为普通用户，我希望被停止的答案标记为"已停止"，不与完整答案或系统故障混淆。
+21. 作为普通用户，当生成失败时，我希望部分已生成的文本被保存，以便检查失败前产出了什么。
+22. 作为普通用户，我希望生成失败的部分答案标记为"未完成"，避免将其当作完整答案使用。
+23. 作为普通用户，我希望同一时间只能有一个答案在生成，防止意外重复请求消耗有限的试点容量。
+24. 作为普通用户，我希望在再次提问前收到清晰的提示——等待或停止当前作答，使并发规则易于理解。
+25. 作为普通用户，我希望历史记录中包含已完成、已停止和未完成的问答记录，以便查看之前请求的实际结果。
+26. 作为普通用户，我希望历史记录默认保留，不会在 V1 试点期间丢失有价值的企业知识问答记录。
+27. 作为普通用户，我希望能够删除自己的问答记录或会话，自主控制历史记录中保留的内容。
+28. 作为普通用户，我希望删除会话时同时删除其所有问答记录和反馈内容，确保业务数据中没有隐藏副本。
+29. 作为普通用户，我希望已删除知识库的旧会话历史仍然可读并标记为"知识库已删除"，保留历史答案的同时明确表示来源已不可用。
+30. 作为普通用户，我希望绑定到已删除知识库的会话拒绝新问题，避免静默地搜索其他范围。
+31. 作为普通用户，我希望能够反馈答案错误、未找到答案、回答不完整或其他问题，供知识管理员排查质量缺陷。
+32. 作为普通用户，我希望在反馈时可附加可选的文字说明，以便描述我预期的结果。
+33. 作为普通用户，我希望提交反馈时明确授权将该问答记录共享给知识管理员，使隐私后果清晰透明。
+34. 作为普通用户，我希望知识管理员无法读取我未分享的问答内容，避免日常使用变成员工监控。
+35. 作为普通用户，我希望 V1 中每个可用知识库对所有登录用户开放，使试点不依赖文档权限配置。
+36. 作为普通用户，我希望系统不暴露文档列表、预览或下载功能，使 V1 聚焦在问答上。
+37. 作为知识管理员，我希望既能使用普通问答功能，也能使用管理功能，以便验证我管理的知识。
+38. 作为知识管理员，我希望创建具有唯一名称和描述的知识库，以便按主题分组企业文档。
+39. 作为知识管理员，我希望知识库名称不区分大小写唯一，避免创建视觉上重复的知识库。
+40. 作为知识管理员，我希望重命名知识库或编辑其描述时不影响已有会话，使其展示信息可以安全演进。
+41. 作为知识管理员，我希望所有知识管理员都能管理所有知识库，V1 不需要知识库所有者或协作者机制。
+42. 作为知识管理员，我希望进入知识库的文档管理页面，查看其文档列表和原始文件，使文档操作和故障排查限定在所选知识库范围内。
+43. 作为知识管理员，我希望上传含有可提取文本层的 PDF、DOCX、MD 和 TXT 文档，使常见企业文档类型能进入 RAG 流水线。
+44. 作为知识管理员，我希望不支持、加密、损坏、空白、扫描件或其他无法提取文本的文件以可理解的原因失败，以便知道如何修正源文件。
+45. 作为知识管理员，我希望一次上传请求中选择多个文件，以便高效初始化知识库。
+46. 作为知识管理员，当所选文件名存在冲突时，我希望整个上传请求在持久化前被拒绝，使批次验证结果明确为全有或全无。
+47. 作为知识管理员，我希望拒绝时列出所有冲突的文件名，以便一次性修正整个批次。
+48. 作为知识管理员，我希望所选批次内的重复文件名也视为冲突，避免并发处理产生歧义文档。
+49. 作为知识管理员，我希望在同一知识库内文件名不区分大小写唯一，避免等效名称被上传两次。
+50. 作为知识管理员，我希望不同知识库可以允许相同的文件名，使像"产品手册.pdf"这样的常用名不会造成全局冲突。
+51. 作为知识管理员，我希望处理中、可用和处理失败的文档均保留其文件名，使重试和恢复能保持文档身份一致。
+52. 作为知识管理员，我希望文件名只有在删除清理完成后才释放，避免替换上传与残留源文件或向量重叠。
+53. 作为知识管理员，我希望通过批次验证的文件独立处理，避免一个文件后续解析失败导致其他文件也无效。
+54. 作为知识管理员，我希望上传快速返回，处理异步进行，避免大文档阻塞管理页面。
+55. 作为知识管理员，我希望每个文档显示为"处理中"、"可用"、"处理失败"或"删除中"，使其在问答中的参与状态一目了然。
+56. 作为知识管理员，我希望文档只有在整个入库流程全部成功后才变为可用，避免用户搜索到部分发布的内容。
+57. 作为知识管理员，我希望入库失败的中间产物被清理，避免重试时新旧片段混合。
+58. 作为知识管理员，我希望对失败的文档可以重试，使用相同的文档记录和文件名，避免恢复过程产生重复。
+59. 作为知识管理员，我希望重试时重新处理整个文档，V1 不依赖不可靠的步骤级检查点。
+60. 作为知识管理员，我希望删除文档后立即将其从新检索中排除，使已移除的知识在物理清理完成前不再影响答案。
+61. 作为知识管理员，我希望删除文档时清理 MinIO 对象、解析片段和 Milvus 向量，不留无法访问的孤儿数据。
+62. 作为知识管理员，我希望历史问答记录在文档删除后仍然保留，使过去的结果和已提交的反馈保持原始上下文。
+63. 作为知识管理员，我希望删除知识库需要二次确认，确保破坏性的级联清理是有意的操作。
+64. 作为知识管理员，我希望知识库删除时异步级联清理所有文档和存储，无需逐个删除文档。
+65. 作为知识管理员，我希望正在删除中的知识库立即拒绝上传、新建会话和提问，避免新操作与清理过程并发冲突。
+66. 作为知识管理员，我希望知识库清理失败时产生"删除失败"状态和原因说明，以便可以重试而不必将知识库恢复为可用状态。
+67. 作为知识管理员，我希望上传时有提示说明用户问题和检索到的片段将被发送到阿里云百炼，以便自行判断文档的敏感性。
+68. 作为知识管理员，我希望该提示不声称自动合规、分类或已审批，避免 V1 制造虚假的安全保证。
+69. 作为知识管理员，我希望只看到用户主动提交的反馈记录，使故障排查尊重约定的隐私边界。
+70. 作为知识管理员，我希望反馈包含已共享的问题、完整或部分答案、请求标识和检索诊断信息，以便调查所报告的行为。
+71. 作为知识管理员，我希望能够将反馈在"待处理"和"已处理"之间流转并存储内部备注，使 V1 小规模反馈队列可管理。
+72. 作为知识管理员，我希望我的知识库、文档和反馈操作被审计记录，包含操作人、对象、时间和结果，使管理变更可追溯。
+73. 作为系统管理员，我希望通过现有的 RuoYi 角色和菜单权限授予知识管理员角色，使访问控制复用当前平台。
+74. 作为系统管理员，我希望每个登录用户自动获得普通问答权限，无需第二套账号模型，简化用户接入。
+75. 作为系统管理员，我希望拒绝匿名用户访问，确保企业问答始终在已认证系统内部。
+76. 作为运维人员，我希望模型名称、凭证和服务设置来自部署配置，避免密钥和供应商选择硬编码。
+77. 作为运维人员，我希望 Java 和 Python 通过 Nacos 互相发现，避免内部服务地址固定在应用代码中。
+78. 作为运维人员，我希望请求和任务标识能够关联 Java、Python、存储和模型的调用链路，使分布式故障可追踪。
+79. 作为运维人员，我希望技术日志记录阶段、标识符、分数、耗时、模型请求标识、SSE 进度、重试次数和错误，使故障可诊断。
+80. 作为普通用户，我希望技术日志不复制我的问题或答案内容，避免业务内容散布到日志系统中。
+81. 作为知识管理员，我希望技术日志不复制企业文档片段或完整提示词，避免文档内容在受管存储之外重复留存。
+82. 作为试点负责人，我希望有客观的质量和性能验收标准，使 V1 的成功基于证据而非主观印象。
+83. 作为试点负责人，我希望系统支持最多 1000 个文档、20 GB 源文件总量、50 个普通用户和 5 个并发作答，确保目标试点团队能够使用。
+84. 作为试点负责人，我希望 95% 不超过 50 MB 的文档在五分钟内变为可用，使入库操作在日常管理中是可行的。
+85. 作为试点负责人，我希望 95% 的答案在百炼正常时五秒内开始流式输出、十五秒内完成，使交互响应流畅。
+86. 作为试点负责人，我希望有一套带标注的中文评测集，涵盖可回答、跨片段、不可回答和语义改写问题，使检索和拒答可被可复现地调优。
+87. 作为试点负责人，我希望至少 80% 的可回答问题得到正确结论，使试点具备有意义的答案质量基线。
+88. 作为试点负责人，我希望至少 90% 的不可回答问题被拒答，使幻觉风险可控。
+89. 作为试点负责人，我希望答案不引入检索内容中不存在的关键事实，使生成文本始终基于企业文档。
 
 ## Implementation Decisions
 
-- V1 is an internal trial, not a demonstration-only prototype and not a production-grade high-availability service.
-- The existing RuoYi Vue frontend remains the only browser application. It adds the question-answering workspace, conversation history, knowledge base management, per-knowledge-base document management and feedback processing views while retaining existing login, user and role management.
-- The RuoYi Java platform is authoritative for authentication, roles, knowledge bases, enterprise document records, asynchronous task records, conversations, QA records, feedback, business API responses and audit data.
-- A new Python AI service owns document parsing, chunking, embedding, vector retrieval, refusal evaluation and answer generation.
-- Browser traffic goes only to Java. Java and Python use Nacos-discovered internal HTTP communication rather than fixed peer addresses.
-- The Java-Python contract must support asynchronous document ingestion, document cleanup, knowledge base cascading cleanup, result callbacks, idempotency, retries, error reporting, streaming answers and cancellation. Exact payload schemas are to be fixed alongside the domain state machines without changing the external behavior in this specification.
-- Question answering uses SSE. Java forwards the Python stream to the browser and preserves at least `started`, `delta`, `completed`, `refused` and `error` semantics.
-- A user may have only one generating QA record at a time. A second request is rejected with an actionable wait-or-stop response. The trial supports up to five users generating concurrently.
-- Cancellation propagates from the browser through Java to Python, which makes a best effort to cancel the Bailian generation. Already emitted text is persisted as an `已停止` QA record.
-- A stream that fails after emitting content persists that content as an `未完成` QA record. Incomplete or stopped output is never counted as a successful answer.
-- A conversation belongs to one ordinary user and is permanently bound to one knowledge base. Its title defaults to the first question and remains editable.
-- A conversation can contain multiple QA records, but previous QA records are not supplied to retrieval, question rewriting or the model. V1 is single-turn retrieval presented inside a conversation container.
-- All available knowledge bases are visible and selectable by all logged-in users. Ordinary users do not receive document lists, source previews or download capabilities.
-- Knowledge base names are globally unique using case-insensitive comparison. A knowledge base has a description and the externally meaningful states `可用`, `删除中` and `删除失败`.
-- Renaming a knowledge base does not alter existing conversation bindings because relationships use stable identifiers rather than names.
-- Knowledge base deletion is cascading and asynchronous. Entering deletion immediately prevents uploads, new conversations and new questions. Cleanup removes all owned documents, MinIO objects, parsed data and Milvus vectors before final removal.
-- Failed cascading cleanup leaves the knowledge base unavailable in `删除失败` and exposes a reason and retry action; it does not restore the knowledge base to use.
-- Every enterprise document belongs to exactly one knowledge base and has a globally unique stable identifier.
-- Original filenames are case-insensitively unique within a knowledge base. Processing, available and failed records reserve the name. Different knowledge bases may contain the same filename. A name is released only when deletion cleanup has completed.
-- V1 accepts text-bearing PDF, DOCX, MD and TXT files up to 50 MB each. Encrypted, corrupt, empty, scanned-only or otherwise non-extractable files fail with an understandable reason. V1 does not store passwords, run OCR or provide online source editing.
-- Multi-file upload first validates the entire batch. Any conflict with an existing reserved filename or another selected filename rejects the whole request, reports all conflicts and creates no document records or source objects.
-- After upload validation succeeds, each file receives its own asynchronous ingestion outcome. One file's later processing failure does not roll back other files from the accepted batch.
-- Document states exposed to administrators are `处理中`, `可用`, `处理失败` and `删除中`. A retry reuses the same document record and reruns the full pipeline.
-- Ingestion uses an all-or-nothing publication rule. Parsing, chunking, embedding and vector publication must all succeed before the document becomes searchable. Failure removes artifacts written by the attempt and leaves the entire document unavailable.
-- Deleting a document excludes it from new retrieval immediately and then asynchronously removes its source object, parsed chunks and vectors. After cleanup succeeds, its active business record disappears from the document list and its filename becomes reusable. Existing conversations, QA records and feedback remain.
-- Source files are stored in MinIO. Java stores business records and opaque object keys in MySQL. Python reads sources using internal storage credentials.
-- Parsing prefers headings and natural paragraph boundaries. Oversized content is split using configurable length and overlap parameters. Processing retains stable document and chunk identifiers, original filename, chunk order and PDF page number when available.
-- Source metadata needed for future citations is retained in V1, but neither the API nor the ordinary-user interface displays citations.
-- All vectors use one Milvus Collection. Each chunk carries `knowledgeBaseId`, `documentId`, `chunkId` and source metadata. Every retrieval applies the current conversation's `knowledgeBaseId` as a mandatory scalar filter.
-- V1 uses local `bge-m3` embeddings and dense vector retrieval only. Chunk size, overlap, recall count and refusal threshold are configurable and tuned against the accepted evaluation set.
-- V1 does not use keyword retrieval or a reranking model. Retrieval remains behind a replaceable service boundary so later improvements do not redefine the user-facing contract.
-- Generation uses Alibaba Cloud Bailian with `qwen-plus` as the default model. Model identity and credentials come from deployment configuration, and generation is hidden behind a replaceable adapter.
-- The answer prompt requires concise Chinese, conclusion first, grounding only in retrieved chunks and refusal when evidence is insufficient. General model knowledge cannot be used as fallback.
-- An available knowledge base without available documents returns a specific empty-knowledge-base refusal. Documents still processing, failed or deleting are never eligible for retrieval.
-- The upload interface displays that user questions and retrieved chunks will be sent to Bailian. V1 performs no automated sensitivity classification, masking, approval or upload blocking; the knowledge administrator makes the upload decision.
-- Existing RuoYi users, roles, menus and button permissions are reused. Every logged-in user has ordinary question-answering access; the knowledge administrator role controls knowledge base, document and feedback administration. Anonymous access is not allowed.
-- All knowledge administrators can manage every knowledge base, document and submitted feedback. V1 has no knowledge base owner or collaborator model.
-- QA records persist the question, complete or partial answer, status and timestamps indefinitely by default. Users can delete their own QA records and conversations.
-- Deleting a conversation deletes its QA records and associated feedback content. A content-free audit event may remain. Deleting a source document or knowledge base does not retroactively delete historical QA records.
-- Feedback categories are `答案错误`, `未找到答案`, `回答不完整` and `其他`, with an optional user explanation. Feedback state is `待处理` or `已处理` and may include an internal administrator note.
-- Feedback submission is the authorization boundary for administrators to view that QA record's question and answer. Unsubmitted QA content is unavailable to administrators, although aggregate statistics and content-free technical metadata remain available.
-- Technical logs include correlation identifiers, user and service instance identifiers, processing stage, document and chunk identifiers, retrieval scores, timing, model request identifiers, SSE event progress, retry counts and error stacks. They exclude question text, chunk text, full prompts and generated text.
-- Knowledge base, document and feedback administration records actor, target, time and result through the existing operation-audit capability.
-- V1 formally supports Chinese documents and Chinese questions. English handling is best effort and is not part of acceptance.
-- Trial capacity targets are 1,000 documents, 50 MB per file, 20 GB total source files, 50 ordinary users and five concurrent answer streams. These are acceptance targets rather than values hard-coded into domain logic.
-- Performance targets are: 95% of files up to 50 MB become available within five minutes; 95% of healthy-provider questions begin output within five seconds and complete within fifteen seconds.
-- Product quality targets are: at least 80% correct conclusions on answerable evaluation questions, at least 90% correct refusals on unanswerable questions and no key facts introduced beyond retrieved content.
+- V1 是内部试点，不是仅演示的原型，也不是生产级高可用服务。
+- 继续使用现有的 RuoYi Vue 前端作为唯一的浏览器应用。在保留现有登录、用户和角色管理的基础上，新增问答工作台、会话历史、知识库管理、按知识库的文档管理和反馈处理视图。
+- RuoYi Java 平台是认证、角色、知识库、企业文档记录、异步任务记录、会话、问答记录、反馈、业务 API 响应和审计数据的权威来源。
+- 新增的 Python AI 服务负责文档解析、切块、嵌入、向量检索、拒答评估和答案生成。
+- 浏览器流量只经过 Java。Java 和 Python 之间使用 Nacos 发现的内网 HTTP 通信，而非固定的对端地址。
+- Java-Python 契约必须支持异步文档入库、文档清理、知识库级联清理、结果回调、幂等性、重试、错误上报、流式作答和取消。精确的载荷模式需要与领域状态机一同确定，但不改变本规范中的外部行为。
+- 问答使用 SSE。Java 将 Python 流转发给浏览器，至少保留 `started`、`delta`、`completed`、`refused` 和 `error` 语义。
+- 一个用户同一时间只能有一个正在生成的问答记录。第二个请求会被拒绝，并返回可操作的等待或停止提示。试点最多支持五个用户同时生成。
+- 取消操作从浏览器经 Java 传播到 Python，Python 尽力取消百炼的生成。已经输出的文本持久化为"已停止"的问答记录。
+- 输出内容后失败的流，其内容持久化为"未完成"的问答记录。不完整或已停止的输出不计为成功回答。
+- 会话属于一个普通用户，并永久绑定到一个知识库。其标题默认为第一个问题，且可编辑。
+- 一个会话可以包含多个问答记录，但之前的问答记录不会提供给检索、问题改写或模型使用。V1 是在会话容器内呈现的单轮检索。
+- 所有可用知识库对所有登录用户可见和可选。普通用户不获得文档列表、源文件预览或下载能力。
+- 知识库名称全局唯一，不区分大小写比较。知识库有描述信息和对外可见的状态：`可用`、`删除中`和`删除失败`。
+- 重命名知识库不会改变已有会话的绑定关系，因为绑定使用稳定的标识符而非名称。
+- 知识库删除是级联且异步的。进入删除状态后立即阻止上传、新建会话和新提问。清理过程在最终移除前删除所有所属文档、MinIO 对象、解析数据和 Milvus 向量。
+- 级联清理失败使知识库保持不可用状态"删除失败"，并显示原因和重试操作；不将知识库恢复为可用状态。
+- 每个企业文档属于且仅属于一个知识库，并具有全局唯一的稳定标识符。
+- 原始文件名在同一知识库内不区分大小写唯一。处理中、可用和处理失败的记录均保留该文件名。不同知识库可以包含相同文件名。文件名只有在删除清理完成后才释放。
+- V1 接受带可提取文本层的 PDF、DOCX、MD 和 TXT 文件，每个最大 50 MB。加密、损坏、空白、纯扫描件或其他无法提取文本的文件以可理解的原因失败。V1 不存储密码、运行 OCR 或提供在线源文件编辑。
+- 多文件上传首先验证整个批次。与已有保留文件名或批次内其他文件名冲突时拒绝整个请求，报告所有冲突，不创建任何文档记录或源对象。
+- 上传验证通过后，每个文件独立经历其异步入库流程。一个文件后续处理失败不回滚批次中其他已接受的文件。
+- 向管理员展示的文档状态为：`处理中`、`可用`、`处理失败`和`删除中`。重试复用同一文档记录并重新执行完整流水线。
+- 入库采用全有或全无的发布规则。解析、切块、嵌入和向量发布必须全部成功，文档才变为可检索。失败时清除本次尝试写入的中间产物，使整个文档保持不可用状态。
+- 删除文档立即将其排除出新检索，然后异步移除其源对象、解析片段和向量。清理成功后，活跃业务记录从文档列表中消失，文件名变为可复用。已有会话、问答记录和反馈保留不变。
+- 源文件存储在 MinIO 中。Java 在 MySQL 中存储业务记录和不透明的对象键。Python 使用内部存储凭证读取源文件。
+- 解析优先使用标题和自然段落边界。超长内容使用可配置的长度和重叠参数进行切分。处理过程保留稳定的文档和片段标识符、原始文件名、片段顺序和 PDF 页码（如有）。
+- V1 保留未来引用所需的源元数据，但 API 和普通用户界面均不展示引用。
+- 所有向量使用同一个 Milvus Collection。每个片段携带 `knowledgeBaseId`、`documentId`、`chunkId` 和源元数据。每次检索都将当前会话的 `knowledgeBaseId` 作为强制标量过滤条件。
+- V1 仅使用本地 `bge-m3` 嵌入和稠密向量检索。切片大小、重叠、召回数量和拒答阈值为可配置参数，针对已验收的评测集调优。
+- V1 不使用关键词检索或重排序模型。检索保留在可替换的服务边界之后，使后续改进不重新定义面向用户的契约。
+- 生成使用阿里云百炼，默认模型为 `qwen-plus`。模型标识和凭证来自部署配置，生成隐藏在可替换的适配器之后。
+- 答案提示词要求简洁中文、结论优先、仅基于检索到的片段、证据不足时拒答。模型通用知识不能作为备用答案。
+- 可用但无可用文档的知识库返回特定的空知识库拒答。仍在处理中、失败或删除中的文档始终不参与检索。
+- 上传界面提示用户问题和检索到的片段将被发送到百炼。V1 不执行自动敏感分类、脱敏、审批或上传拦截；知识管理员自行做出上传决定。
+- 复用现有 RuoYi 用户、角色、菜单和按钮权限。每个登录用户拥有普通问答权限；知识管理员角色控制知识库、文档和反馈管理。不允许匿名访问。
+- 所有知识管理员可以管理所有知识库、文档和已提交的反馈。V1 没有知识库所有者或协作者模型。
+- 问答记录默认永久保存问题、完整或部分答案、状态和时间戳。用户可以删除自己的问答记录和会话。
+- 删除会话即删除其问答记录和关联的反馈内容。可能保留不含内容的审计事件。删除源文档或知识库不会追溯删除历史问答记录。
+- 反馈类别为：`答案错误`、`未找到答案`、`回答不完整`和`其他`，可附加用户的可选说明。反馈状态为`待处理`或`已处理`，可包含内部管理员备注。
+- 提交反馈是管理员查看该问答记录问题和答案的授权边界。未提交的问答内容对管理员不可见，但聚合统计和不含内容的技术元数据仍然可用。
+- 技术日志包含关联标识符、用户和服务实例标识符、处理阶段、文档和片段标识符、检索分数、耗时、模型请求标识符、SSE 事件进度、重试次数和错误堆栈。不包含问题文本、片段文本、完整提示词和生成的文本。
+- 知识库、文档和反馈管理操作通过现有的操作审计能力记录操作人、目标、时间和结果。
+- V1 正式支持中文文档和中文提问。英文处理尽力而为，不纳入验收标准。
+- 试点容量目标：1000 个文档、每文件 50 MB、源文件总量 20 GB、50 个普通用户、5 个并发答案流。这些是验收目标，而非硬编码到领域逻辑中的值。
+- 性能目标：95% 不超过 50 MB 的文件在五分钟内变为可用；95% 在供应商健康时的提问在五秒内开始输出、十五秒内完成。
+- 产品质量目标：可回答评测问题中至少 80% 结论正确，不可回答问题中至少 90% 正确拒答，不引入检索内容之外的关键事实。
 
 ## Testing Decisions
 
-- Tests assert externally observable behavior rather than private classes, parsing helper calls, SQL shape, prompt wording or internal step ordering.
-- The primary seam is a system-level acceptance suite against the RuoYi external HTTP and SSE APIs. It runs Java and Python with real MySQL, MinIO and Milvus, while injecting a deterministic fake generation model.
-- The primary seam covers authentication and role boundaries, knowledge base lifecycle, case-insensitive uniqueness, batch upload validation, asynchronous ingestion states, whole-document publication, retry, immediate retrieval exclusion, document cleanup and knowledge base cascading cleanup.
-- The same seam covers conversation creation and renaming, binding to one knowledge base, independent single-turn questions, the one-active-answer rule, SSE event semantics, completion, refusal, mid-stream failure, user cancellation, history persistence and deletion.
-- The same seam covers feedback consent, administrator visibility only after submission, feedback processing, preservation of historical QA records after source deletion and removal of feedback content after user deletion.
-- A small parser integration suite supplements the primary seam because file-format behavior is difficult to diagnose solely through asynchronous system tests. It supplies representative text-bearing PDF, DOCX, MD and TXT fixtures plus encrypted, corrupt, empty and scanned-only failures, and asserts extracted text and retained source metadata rather than parser-library internals.
-- A small real-Milvus integration suite supplements the primary seam to protect the mandatory knowledge base boundary. Given semantically identical or higher-scoring chunks in two knowledge bases, retrieval must return only chunks whose `knowledgeBaseId` matches the selected conversation. Deleted, failed, processing and deleting documents must remain ineligible.
-- The generation adapter is replaced with a fake in all automated tests. The fake produces deterministic complete, refused, slow, failed and cancellable streams so tests can assert status transitions and partial persistence without network access, credentials, cost or model nondeterminism.
-- Automated tests do not call Alibaba Cloud Bailian and do not add a dedicated API connectivity test. Real provider connectivity is checked by a manual question-answering smoke test after deployment.
-- A manually curated Chinese evaluation set contains answerable questions, questions requiring evidence across chunks, unanswerable questions and semantic paraphrases. Evaluation reports conclusion correctness, refusal correctness, unsupported key facts, first-output latency and total latency.
-- Quality acceptance requires at least 80% correct conclusions for answerable questions, at least 90% refusal for unanswerable questions and zero unsupported key facts in accepted answers.
-- Performance acceptance measures 95th-percentile document ingestion for files up to 50 MB, first SSE output, total answer time and five-stream concurrency under the agreed trial data volume. Bailian outages are excluded from the answer-latency target but must still yield correct error and incomplete-state behavior.
-- Privacy tests assert that ordinary users access only their own conversations and QA records, knowledge administrators cannot read unsubmitted QA content, feedback submission exposes only the selected record, and technical-log capture contains none of the prohibited content fields.
-- Cleanup tests verify observable absence from retrieval first, then eventual removal from MinIO and Milvus, idempotent retry after interruption and prevention of filename reuse until cleanup completes.
-- The current repository contains no prior automated-test structure for the RuoYi backend or Vue frontend. The new suite therefore establishes the first project-specific testing precedent and should remain concentrated at the external system seam rather than creating broad implementation-coupled unit suites.
+- 测试断言外部可观察行为，而非私有类、解析辅助函数调用、SQL 结构、提示词措辞或内部步骤顺序。
+- 主要测试缝是针对 RuoYi 外部 HTTP 和 SSE API 的系统级验收套件。它运行 Java 和 Python，使用真实的 MySQL、MinIO 和 Milvus，同时注入确定性的假生成模型。
+- 该测试缝覆盖认证和角色边界、知识库生命周期、不区分大小写的唯一性、批次上传验证、异步入库状态、整篇文档发布、重试、检索即时排除、文档清理和知识库级联清理。
+- 同一测试缝覆盖会话创建和重命名、绑定到单个知识库、独立的单轮问题、单活跃回答规则、SSE 事件语义、完成、拒答、流中失败、用户取消、历史持久化和删除。
+- 同一测试缝覆盖反馈同意、管理员仅在提交后可见、反馈处理、源删除后历史问答记录保留，以及用户删除后反馈内容的移除。
+- 一个小型解析器集成测试套件补充主测试缝，因为文件格式行为难以仅通过异步系统测试诊断。它提供代表性的含文本层 PDF、DOCX、MD 和 TXT 测试夹具，以及加密、损坏、空白和纯扫描件等失败案例，断言提取的文本和保留的源元数据，而非解析库内部实现。
+- 一个小型真实 Milvus 集成测试套件补充主测试缝，以保护强制知识库边界。给定两个知识库中语义相同或得分更高的片段，检索必须只返回 `knowledgeBaseId` 与所选会话匹配的片段。已删除、失败、处理中和删除中的文档必须保持不可检索。
+- 在所有自动化测试中，生成适配器被替换为假实现。假实现产生确定性的完成、拒答、慢速、失败和可取消的流，使测试无需网络访问、凭证、费用或模型非确定性即可断言状态转换和部分持久化。
+- 自动化测试不调用阿里云百炼，也不添加专用的 API 连通性测试。真实供应商连通性在部署后通过手工问答冒烟测试验证。
+- 手动编制的中文评测集包含可回答问题、需要跨片段证据的问题、不可回答问题和语义改写问题。评测报告结论正确率、拒答正确率、不支持的关键事实、首次输出延迟和总延迟。
+- 质量验收要求：可回答问题至少 80% 结论正确，不可回答问题至少 90% 被拒答，已接受的答案中零个不支持的关键事实。
+- 性能验收衡量：50 MB 以下文件的第 95 百分位文档入库时间、首次 SSE 输出时间、总回答时间，以及在约定试点数据量下的五流并发。百炼故障排除在回答延迟目标之外，但仍需产生正确的错误和不完整状态行为。
+- 隐私测试断言：普通用户只能访问自己的会话和问答记录，知识管理员不能读取未提交的问答内容，反馈提交只暴露所选记录，技术日志不包含任何被禁止的内容字段。
+- 清理测试首先验证检索中可观察的缺失，然后验证从 MinIO 和 Milvus 的最终移除、中断后幂等重试，以及清理完成前禁止文件名复用。
+- 当前仓库中没有 RuoYi 后端或 Vue 前端的既有自动化测试结构。因此新套件建立了首个项目特定测试先例，应集中在外部系统测试缝上，而不是创建广泛的实现耦合单元测试套件。
 
 ## Out of Scope
 
-- Document-level, knowledge-base-level, department-level, role-level or user-level retrieval permissions. All logged-in users may select all available knowledge bases in V1.
-- Citation display, source cards, source snippets, original-document preview, download or page navigation. V1 retains source metadata only for future work.
-- Multi-turn context, pronoun resolution, conversation summarization, question rewriting, retrieval based on previous messages or cross-knowledge-base questions.
-- OCR, image understanding, spreadsheet ingestion, scanned-only documents, webpage crawling, third-party knowledge connectors, archive upload and folder upload.
-- Document replacement, version history, publishing workflow, approval, taxonomy, tags and classification beyond membership in one knowledge base.
-- Content-hash duplicate detection. V1 duplicate validation uses the original filename within a knowledge base.
-- Keyword/BM25 retrieval, hybrid retrieval, reranking, multiple embedding models, multiple vector stores and administrator-facing model selection.
-- Citation-specific clause parsing or regulation-specific structure recognition. V1 uses general heading, paragraph and length-aware chunking.
-- Automated data sensitivity detection, data masking, mandatory confirmation checkbox, security level fields, upload approval, private model deployment and production supplier compliance decisions.
-- Knowledge base owners, collaborators, per-knowledge-base administrators and fine-grained management permissions.
-- Administrator access to all user questions, employee monitoring, administrator replies to users, in-product feedback notifications, automated answer reruns and external ticket workflow.
-- Streaming resume after reconnect, checkpoint resume for document processing and partial-document publication.
-- Real Bailian calls in automated tests or a dedicated provider connectivity test.
-- Anonymous access, a separate account system and a public knowledge portal.
-- Independent landing pages, dashboards, model configuration screens, source editing, answer export and advanced presentation modes.
-- High availability, disaster recovery, multi-region deployment, large-scale concurrency and formal production compliance certification.
-- Automatic 180-day QA retention and seven-day expiry notification. V1 retains QA records indefinitely unless the user deletes them.
-- Formal support or acceptance targets for English documents, English questions or cross-language retrieval.
+- 文档级、知识库级、部门级、角色级或用户级的检索权限。V1 中所有登录用户可以选择所有可用知识库。
+- 引用展示、来源卡片、来源片段、原始文档预览、下载或页面导航。V1 仅为后续工作保留源元数据。
+- 多轮上下文、代词消解、会话摘要、问题改写、基于历史消息的检索或跨知识库提问。
+- OCR、图片理解、电子表格入库、纯扫描文档、网页爬取、第三方知识连接器、压缩包上传和文件夹上传。
+- 文档替换、版本历史、发布流程、审批、分类体系、标签以及归属单个知识库之外的分类。
+- 内容哈希去重检测。V1 的重复验证基于知识库内的原始文件名。
+- 关键词/BM25 检索、混合检索、重排序、多个嵌入模型、多个向量库以及面向管理员侧的模型选择。
+- 引用级条款解析或法规级结构识别。V1 使用通用的标题、段落和长度感知切块。
+- 自动化数据敏感检测、数据脱敏、强制确认复选框、密级字段、上传审批、私有模型部署和生产级供应商合规决策。
+- 知识库所有者、协作者、按知识库的管理员和细粒度管理权限。
+- 管理员查看所有用户问题、员工监控、管理员回复用户、产品内反馈通知、自动化答案重新生成和外部工单流程。
+- 重连后流式恢复、文档处理的检查点恢复和部分文档发布。
+- 自动化测试中的真实百炼调用或专用的供应商连通性测试。
+- 匿名访问、独立账号系统和公共知识门户。
+- 独立登录页面、仪表盘、模型配置界面、源文件编辑、答案导出和高级展示模式。
+- 高可用、容灾、多区域部署、大规模并发和正式的生产合规认证。
+- 自动 180 天问答保留和 7 天过期通知。V1 默认无限期保留问答记录，除非用户主动删除。
+- 对英文文档、英文提问或跨语言检索的正式支持或验收目标。
 
 ## Further Notes
 
-- The V1 destination is a small real-team trial that proves the general RAG loop before adding security and citation complexity.
-- The initial implementation should preserve the existing Java/Python architectural split and the Bailian egress decision. Domain states and the Java-Python payload contract should be finalized before parallel work begins on asynchronous processing and streaming behavior.
-- UI prototyping remains useful for validating the five new product areas: question-answering workspace, conversation history, knowledge base management, per-knowledge-base document management and feedback processing. A prototype may refine layout without changing the behavior in this specification.
-- Retrieval and refusal parameters are configuration, not product promises. They should be tuned with the evaluation set, and failure patterns may justify a later decision to add hybrid retrieval or reranking.
-- The future citation feature should be able to reuse the source metadata retained during V1 ingestion, avoiding a mandatory full re-ingestion solely to recover document identity, chunk order or PDF page numbers.
-- The upload warning is informational. It explicitly does not mean the system has classified a document as safe to send to Bailian.
-- Existing obsolete planning artifacts for regulation-only question answering, permission-aware retrieval, clause-level citation and DeepSeek generation are not V1 requirements.
+- V1 的目标是交付一个小型真实团队试点，在增加安全性和引用复杂度之前先验证通用 RAG 闭环。
+- 初始实现应保留现有的 Java/Python 架构分离和百炼出口决策。领域状态和 Java-Python 载荷契约应在异步处理和流式行为的并行开发开始前确定。
+- UI 原型设计对验证五个新产品区域仍有价值：问答工作台、会话历史、知识库管理、按知识库的文档管理和反馈处理。原型可以优化布局，但不改变本规范中的行为。
+- 检索和拒答参数是配置项，而非产品承诺。应使用评测集调优，失败模式可能为后续决定增加混合检索或重排序提供依据。
+- 未来引用功能应能复用 V1 入库期间保留的源元数据，避免仅为了恢复文档标识符、片段顺序或 PDF 页码而强制完全重新入库。
+- 上传警告是告知性信息。它明确不意味着系统已将文档分类为可安全发送到百炼。
+- 已有的针对规章制度问答、权限感知检索、条款级引用和 DeepSeek 生成的过时规划产物不是 V1 的需求。
