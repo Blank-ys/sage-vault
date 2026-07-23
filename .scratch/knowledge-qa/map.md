@@ -1,5 +1,33 @@
-# Knowledge QA Map
+# 通用企业文档问答 V1 路线图
 
-## Current Decisions
+## Destination
 
-- [01 - Java-Python secure service contract](issues/01-establish-java-python-service-contract.md): resolved. The shared [service contract](../../docs/contracts/java-python-service-contract.md) defines Nacos discovery, the `/answer` and asynchronous task endpoints, authenticated direct callbacks, independent document state machines, idempotency, and fail-closed Sentinel Tag behavior.
+形成一份可直接进入实施拆票的 V1 完整规格：基于现有 RuoYi backend/frontend，面向知识管理员与普通用户，明确用户场景、文档治理、问答体验、质量与性能指标、系统边界和试点验收条件。
+
+## Notes
+
+- 本路线图只消除实施前的决策，不交付 V1 功能；路线走完后再将规格拆成实施工单。
+- 每次处理票据时使用 `grilling` 和 `domain-modeling`；涉及界面行为时使用 `prototype`。
+- 领域术语以根目录 `CONTEXT.md` 为准，既有工程事实以 `backend/` 和 `frontend/` 为准。
+- V1 是内部试点版，复用 RuoYi Java/Vue 底座，新增 Python AI 服务。
+
+## Decisions so far
+
+- [确定通用企业文档问答 V1 产品基线](wayfinder-design/01-define-v1-product-baseline.md) — 已锁定用户、知识库、文档、会话、反馈、RAG 范围、试点指标和明确延期项。
+
+## Not yet specified
+
+- 首轮解析与检索原型可能暴露某些文档需要预处理规范、专有名词检索或重排；在原型结果出现前，尚不能判断是否需要为这些失败模式新增 V1 决策。
+- Java-Python 流式与异步契约可能暴露取消、超时、重试和回调竞态；先确定领域状态机，再把可复现的竞态毕业为独立票据。
+- 试点部署的真实资源条件尚未给出；若既定容量在目标环境无法成立，再新增容量取舍票据。
+
+## Out of scope
+
+- 文档级、知识库级或用户级检索权限；V1 的所有登录用户可选择全部可用知识库。
+- 回答中展示引用、原文片段、文档预览或下载；V1 只保留未来引用所需的来源元数据。
+- 多轮上下文、问题改写和跨知识库检索；会话只用于组织独立问答记录。
+- OCR、图片、表格文件、网页抓取、第三方知识源、压缩包和文件夹上传。
+- 关键词混合检索、重排模型、多嵌入模型、多向量库和多生成模型后台配置。
+- 数据脱敏、敏感性校验、审批、密级、知识库负责人和细粒度管理权限。
+- 高可用、容灾、大规模并发和正式生产合规；V1 只面向小范围内部试点。
+- 问答记录 180 天到期与提前 7 天通知；V1 默认永久保留。
