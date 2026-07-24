@@ -6,6 +6,7 @@
 
 ## Notes
 
+- 当前综合规格见 [通用企业文档问答 V1 规格](spec.md)；地图只维护决策前沿和范围索引。
 - 本路线图只消除实施前的决策，不交付 V1 功能；路线走完后再将规格拆成实施工单。
 - 每次处理票据时使用 `grilling` 和 `domain-modeling`；涉及界面行为时使用 `prototype`。
 - 领域术语以根目录 `CONTEXT.md` 为准，既有工程事实以 `backend/` 和 `frontend/` 为准。
