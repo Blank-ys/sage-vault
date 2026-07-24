@@ -68,3 +68,14 @@ services:
       - ./redis/conf/redis.conf:/home/ruoyi/redis/redis.conf
       - ./redis/data:/data
     command: redis-server /home/ruoyi/redis/redis.conf
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.9
+    container_name: sentinel-dashboard
+    ports:
+      - "8858:8858"
+    restart: always
+    environment:
+      - SERVER_PORT=8858
+      # 默认账号密码 sentinel / sentinel，可自定义
+      - SENTINEL_DASHBOARD_AUTH_USERNAME=sentinel
+      - SENTINEL_DASHBOARD_AUTH_PASSWORD=sentinel

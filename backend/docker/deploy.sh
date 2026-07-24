@@ -26,22 +26,25 @@ port(){
 
 # 启动基础环境（必须）
 base(){
-	docker-compose up -d ruoyi-mysql ruoyi-redis ruoyi-nacos
+	docker compose -f docker-compose-base.yml up -d
+	docker compose -f docker-compose-milvus.yml up -d
 }
 
 # 启动程序模块（必须）
 modules(){
-	docker-compose up -d ruoyi-nginx ruoyi-gateway ruoyi-auth ruoyi-modules-system
+	docker compose -f docker-compose.yml up -d ruoyi-nginx ruoyi-gateway ruoyi-auth ruoyi-modules-system
 }
 
 # 关闭所有环境/模块
 stop(){
-	docker-compose stop
+	docker compose -f docker-compose.yml stop
+	docker compose -f docker-compose-base.yml stop
 }
 
 # 删除所有环境/模块
 rm(){
-	docker-compose rm
+	docker compose -f docker-compose.yml rm
+	docker compose -f docker-compose-base.yml rm
 }
 
 # 根据输入参数，选择执行对应方法，不输入则执行使用说明
