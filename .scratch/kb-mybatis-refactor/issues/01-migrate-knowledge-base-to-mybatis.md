@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** resolved
+**Status:** ready-for-agent
 
 ## Answer
 
@@ -24,3 +24,9 @@ Implemented the knowledge-base MyBatis migration and verified it against the reb
 - [ ] Service 与现有最小白名单审计 adapter 通过 Spring 构造器注入；不增加审计事务顺序、可靠投递、重试或补偿语义。
 - [ ] 删除公开的通用知识库状态 setter，保留窄的按 ID 可用性检查；不可用状态由测试 fixture 安排，不为测试扩大公开 Service。
 - [ ] 真实 MySQL 测试复用生产 schema，证明 XML 绑定、显式映射、枚举名称读写、自增主键、唯一键兜底、时间更新和列表排序。
+
+## Comments
+
+### 2026-07-26 reopened for completion
+
+This ticket was previously marked resolved before the full Issue 01 refactor and verification were complete. The implementation also added explicit transactions around single-SQL knowledge-base writes and an after-commit audit ordering guarantee, both outside this ticket's accepted scope. Complete the remaining checks before resolving it again: keep `KnowledgeBaseName` as the single owner of trim/case normalization, retain the minimal direct `ManagementAudit` call, and rerun the scoped Service, authorization, and real MySQL tests.

@@ -2,6 +2,7 @@ package com.sagevault.kb.knowledgebase.service.impl;
 
 import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity;
+import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseName;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseResponse;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
 import com.sagevault.kb.knowledgebase.domain.UpdateKnowledgeBaseRequest;
@@ -11,12 +12,8 @@ import com.sagevault.kb.knowledgebase.service.port.ManagementAudit;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.util.List;
-import java.util.Locale;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
@@ -29,18 +26,17 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public KnowledgeBaseResponse create(CreateKnowledgeBaseRequest request) {
-        String name = requiredName(request.name());
+        KnowledgeBaseName name = KnowledgeBaseName.of(request.name());
         ensureUnique(name, null);
-        KnowledgeBaseEntity entity = entity(0, name, request.description(), KnowledgeBaseStatus.AVAILABLE);
+        KnowledgeBaseEntity entity = entity(0, name.value(), request.description(), KnowledgeBaseStatus.AVAILABLE);
         try {
             mapper.insert(entity);
         } catch (DuplicateKeyException exception) {
             throw nameConflict();
         }
         KnowledgeBaseResponse response = response(entity);
-        recordAfterCommit(ManagementAudit.Operation.CREATE, response.id());
+        audit.record(ManagementAudit.Operation.CREATE, response.id());
         return response;
     }
 
@@ -54,19 +50,18 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public KnowledgeBaseResponse update(long id, UpdateKnowledgeBaseRequest request) {
         KnowledgeBaseEntity current = requireEntity(id);
-        String name = requiredName(request.name());
+        KnowledgeBaseName name = KnowledgeBaseName.of(request.name());
         ensureUnique(name, id);
-        KnowledgeBaseEntity entity = entity(id, name, request.description(), current.getStatus());
+        KnowledgeBaseEntity entity = entity(id, name.value(), request.description(), current.getStatus());
         try {
             mapper.update(entity);
         } catch (DuplicateKeyException exception) {
             throw nameConflict();
         }
         KnowledgeBaseResponse response = response(entity);
-        recordAfterCommit(ManagementAudit.Operation.UPDATE, response.id());
+        audit.record(ManagementAudit.Operation.UPDATE, response.id());
         return response;
     }
 
@@ -95,8 +90,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return entity;
     }
 
-    private void ensureUnique(String name, Long currentId) {
-        KnowledgeBaseEntity existing = mapper.findByNormalizedName(normalize(name));
+    private void ensureUnique(KnowledgeBaseName name, Long currentId) {
+        KnowledgeBaseEntity existing = mapper.findByNormalizedName(name.normalizedValue());
         if (existing != null && (currentId == null || !existing.getId().equals(currentId))) {
             throw nameConflict();
         }
@@ -106,7 +101,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         KnowledgeBaseEntity entity = new KnowledgeBaseEntity();
         entity.setId(id == 0 ? null : id);
         entity.setName(name);
-        entity.setNormalizedName(normalize(name));
+        entity.setNormalizedName(KnowledgeBaseName.of(name).normalizedValue());
         entity.setDescription(description == null ? "" : description.trim());
         entity.setStatus(status);
         return entity;
@@ -117,31 +112,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 entity.getStatus());
     }
 
-    private static String requiredName(String value) {
-        if (value == null || value.isBlank()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "知识库名称不能为空");
-        }
-        return value.trim();
-    }
-
-    private static String normalize(String value) {
-        return value.trim().toLowerCase(Locale.ROOT);
-    }
-
     private static BusinessException nameConflict() {
         return new BusinessException(ErrorCode.KNOWLEDGE_BASE_NAME_CONFLICT, "知识库名称已存在");
     }
 
-    private void recordAfterCommit(ManagementAudit.Operation operation, long knowledgeBaseId) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            audit.record(operation, knowledgeBaseId);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                audit.record(operation, knowledgeBaseId);
-            }
-        });
-    }
 }
