@@ -1,0 +1,18 @@
+server:
+  port: 9210
+
+spring:
+  application:
+    name: ruoyi-kb-management
+  profiles:
+    active: local
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 192.168.150.100:8848
+      config:
+        server-addr: 192.168.150.100:8848
+  config:
+    import:
+      - nacos:application-${spring.profiles.active}.yml
+      - nacos:${spring.application.name}-${spring.profiles.active}.yml

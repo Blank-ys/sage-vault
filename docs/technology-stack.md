@@ -66,7 +66,7 @@ V1 不使用 PostgreSQL、pgvector、Redisson 或 Redis Stream。异步任务由
 | Markdown 解析 | markdown-it-py `>=4.2,<5` | V1 目标 |
 | 编码识别 | charset-normalizer `>=3.4,<4` | V1 目标 |
 | 服务发现 | nacos-sdk-python `>=3.2,<4` | V1 目标 |
-| 测试 | pytest `>=9.1,<10`、pytest-asyncio `>=1.4,<2`、HTTPX `>=0.28,<0.29` | V1 目标 |
+| 测试 | pytest `>=9.1,<10`、pytest-asyncio `>=1.4,<2`、HTTPX `>=0.28,<0.29`、jsonschema `>=4.26,<5` | V1 目标；jsonschema 校验根级 SSE 契约样例 |
 | 依赖工具 | uv `0.11.32` | V1 精确目标 |
 | Lint / 类型检查 | Ruff `0.16.0`、mypy `2.3.0` | V1 精确目标 |
 

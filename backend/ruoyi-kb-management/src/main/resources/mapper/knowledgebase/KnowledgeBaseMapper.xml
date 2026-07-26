@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.knowledgebase.mapper.KnowledgeBaseMapper">
+    <resultMap id="knowledgeBaseResult" type="com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="normalizedName" column="normalized_name"/>
+        <result property="description" column="description"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <sql id="columns">id, name, normalized_name, description, status</sql>
+
+    <insert id="insert" parameterType="com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_knowledge_base (name, normalized_name, description, status)
+        VALUES (#{name}, #{normalizedName}, #{description}, #{status})
+    </insert>
+
+    <update id="update" parameterType="com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity">
+        UPDATE sv_knowledge_base
+        SET name = #{name}, normalized_name = #{normalizedName}, description = #{description}, status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="knowledgeBaseResult">
+        SELECT <include refid="columns"/> FROM sv_knowledge_base WHERE id = #{id}
+    </select>
+
+    <select id="findByNormalizedName" resultMap="knowledgeBaseResult">
+        SELECT <include refid="columns"/> FROM sv_knowledge_base WHERE normalized_name = #{normalizedName}
+    </select>
+
+    <select id="findAll" resultMap="knowledgeBaseResult">
+        SELECT <include refid="columns"/> FROM sv_knowledge_base ORDER BY updated_at DESC, id DESC
+    </select>
+
+    <select id="findByStatus" resultMap="knowledgeBaseResult">
+        SELECT <include refid="columns"/> FROM sv_knowledge_base
+        WHERE status = #{status}
+        ORDER BY updated_at DESC, id DESC
+    </select>
+</mapper>
