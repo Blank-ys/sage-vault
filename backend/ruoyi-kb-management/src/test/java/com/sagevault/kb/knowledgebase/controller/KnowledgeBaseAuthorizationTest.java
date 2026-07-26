@@ -14,6 +14,9 @@ import com.ruoyi.common.security.handler.GlobalExceptionHandler;
 import com.ruoyi.common.security.service.TokenService;
 import com.ruoyi.system.api.model.LoginUser;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
+import com.sagevault.kb.platform.error.BusinessException;
+import com.sagevault.kb.platform.error.BusinessExceptionHandler;
+import com.sagevault.kb.platform.error.ErrorCode;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +44,7 @@ class KnowledgeBaseAuthorizationTest {
         proxyFactory.addAspect(new PreAuthorizeAspect());
         Object controller = proxyFactory.getProxy();
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new BusinessExceptionHandler(), new GlobalExceptionHandler())
                 .build();
     }
 
@@ -75,6 +78,18 @@ class KnowledgeBaseAuthorizationTest {
         mockMvc.perform(get("/knowledge-bases").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void businessExceptionUsesRegisteredCodeAndMessage() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION));
+        when(knowledgeBases.get(9L)).thenThrow(new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_AVAILABLE,
+                "knowledge base is unavailable"));
+
+        mockMvc.perform(get("/knowledge-bases/9").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(ErrorCode.KNOWLEDGE_BASE_NOT_AVAILABLE.code()))
+                .andExpect(jsonPath("$.msg").value("knowledge base is unavailable"));
     }
 
     private void authenticate(Set<String> permissions) {

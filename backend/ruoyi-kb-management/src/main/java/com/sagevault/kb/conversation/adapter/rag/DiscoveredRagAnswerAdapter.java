@@ -15,6 +15,7 @@ import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient.Builder;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
@@ -24,7 +25,7 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
     private final WebClient webClient;
     private final RagProperties properties;
 
-    public DiscoveredRagAnswerAdapter(DiscoveryClient discovery, WebClient.Builder webClient, RagProperties properties) {
+    public DiscoveredRagAnswerAdapter(DiscoveryClient discovery, Builder webClient, RagProperties properties) {
         this.discovery = discovery;
         this.webClient = webClient.build();
         this.properties = properties;

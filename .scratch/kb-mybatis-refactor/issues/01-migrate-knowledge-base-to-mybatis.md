@@ -27,6 +27,10 @@ Implemented the knowledge-base MyBatis migration and verified it against the reb
 
 ## Comments
 
+### 2026-07-26 Issue 04 final seam evidence
+
+Issue 04 is resolved without closing this parent issue. It removed manual WebClient configuration, moved the Sage Vault business exception HTTP advice to `platform/error`, and verified the MyBatis capability seams. Focused affected tests (15), HTTP advice coverage (4), final full KB reactor suite (25), and KB packaging passed against the supplied MySQL and local Maven repository. Root contract schema/example validation passed. Python provider/consumer testing remains blocked by missing `fastapi` and host-denied `uv`; browser/Gateway acceptance remains blocked by absent Gateway URL and authorized user tokens.
+
 ### 2026-07-26 reopened for completion
 
 This ticket was previously marked resolved before the full Issue 01 refactor and verification were complete. The implementation also added explicit transactions around single-SQL knowledge-base writes and an after-commit audit ordering guarantee, both outside this ticket's accepted scope. Complete the remaining checks before resolving it again: keep `KnowledgeBaseName` as the single owner of trim/case normalization, retain the minimal direct `ManagementAudit` call, and rerun the scoped Service, authorization, and real MySQL tests.
