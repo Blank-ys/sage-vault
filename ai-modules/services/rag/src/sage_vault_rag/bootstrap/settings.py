@@ -2,10 +2,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # 服务注册与安全
     signing_key: str
     replay_window_seconds: int = 60
     nacos_server_address: str
     service_ip: str = "127.0.0.1"
     service_port: int = 8000
     service_name: str = "sage-vault-rag"
+
+    # Milvus
+    milvus_host: str = "127.0.0.1"
+    milvus_port: int = 19530
+    milvus_collection_name: str = "sage_vault_chunks"
+    milvus_vector_dim: int = 1024
+
+    # 本地嵌入模型
+    embedding_model_path: str
+    embedding_profile: str = "cpu-dev"  # 或 "gpu"
+    embedding_batch_size: int = 1
+    embedding_max_length: int = 8192
+    embedding_max_concurrent_requests: int = 1
+    embedding_max_queue_size: int = 0
+
+    # 文档切块
+    chunk_size: int = 512
+    chunk_overlap: int = 64
+
     model_config = SettingsConfigDict(env_prefix="SAGE_VAULT_RAG_", env_file=".env")

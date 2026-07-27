@@ -15,6 +15,9 @@
 # Qoder
 .qoder/
 
+# Trae
+.trae/
+
 # claude
 .claude/
 

@@ -72,6 +72,8 @@ V1 不使用 PostgreSQL、pgvector、Redisson 或 Redis Stream。异步任务由
 
 `bge-m3` 必须固定实际 40 位 Hugging Face commit SHA；`main`、tag 或只有模型名不算版本。Ollama 不属于 V1 技术基线。
 
+当前开发环境使用的是 HuggingFace cache 的 `master` 快照，尚未锁定 commit SHA；发布前必须替换为固定 commit 的模型目录，并完成逐文件 SHA-256 与 MinIO 不可变版本标识。
+
 ## Frontend: Vue 与构建
 
 前端代码位于 `frontend/`，使用 JavaScript/ES Modules，不是 TypeScript 项目。

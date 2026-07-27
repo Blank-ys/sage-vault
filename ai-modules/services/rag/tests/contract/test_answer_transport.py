@@ -19,7 +19,11 @@ class NoOpRegistration:
 
 
 def settings_for_test() -> Settings:
-    return Settings(signing_key="test-key", nacos_server_address="nacos.test:8848")
+    return Settings(
+        signing_key="test-key",
+        nacos_server_address="nacos.test:8848",
+        embedding_model_path="/dev/null/model",
+    )
 
 
 def test_empty_knowledge_base_streams_started_then_refused() -> None:
