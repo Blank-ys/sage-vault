@@ -10,9 +10,13 @@
 *.iws
 *.iml
 *.ipr
+*application-local.yml
 
 # Qoder
 .qoder/
+
+# claude
+.claude/
 
 # Eclipse
 .classpath
@@ -20,7 +24,7 @@
 .settings/
 
 # ==============================================
-# 前端项目通用 (mall-admin-web / mall-app-web)
+# 前端项目通用
 # ==============================================
 # 依赖目录
 node_modules/
@@ -56,7 +60,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 
 # ==============================================
-# Java / Maven 项目 (mall-swarm)
+# Java / Maven 项目
 # ==============================================
 # 编译产物
 target/
@@ -118,3 +122,8 @@ Desktop.ini
 # 补丁文件
 *.patch
 *.diff
+# Python local environments and test caches
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc

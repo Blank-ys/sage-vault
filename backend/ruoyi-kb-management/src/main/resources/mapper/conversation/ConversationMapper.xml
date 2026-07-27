@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.conversation.mapper.ConversationMapper">
+    <resultMap id="conversationResult" type="com.sagevault.kb.conversation.domain.ConversationEntity">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="knowledgeBaseId" column="knowledge_base_id"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.sagevault.kb.conversation.domain.ConversationEntity"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_conversation (user_id, knowledge_base_id) VALUES (#{userId}, #{knowledgeBaseId})
+    </insert>
+
+    <select id="findById" resultMap="conversationResult">
+        SELECT id, user_id, knowledge_base_id FROM sv_conversation WHERE id = #{id}
+    </select>
+</mapper>

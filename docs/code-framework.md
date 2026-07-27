@@ -32,7 +32,7 @@ sage-vault/
 │   │   │   └── 002_seed.sql
 │   │   └── src/
 │   │       ├── main/
-│   │       │   ├── java/com/ruoyi/kb/
+│   │       │   ├── java/com/sagevault/kb/
 │   │       │   └── resources/
 │   │       └── test/
 │   └── docker/                 # existing RuoYi image/support assets
@@ -92,42 +92,53 @@ sage-vault/
 
 知识库管理由后端父工程直接聚合，与现有 `ruoyi-modules` 同级。它可以依赖 RuoYi 的安全、数据源、Swagger 等平台机制，但不得把 Sage Vault 业务类型或流程放入 `ruoyi-system`、`ruoyi-file` 或 `ruoyi-common`。
 
-`com.ruoyi.kb` 是规范根包。按业务能力优先、技术角色其次组织：
+`com.sagevault.kb` 是规范根包。按业务能力优先、技术角色其次组织：
 
 ```text
-com/ruoyi/kb/
+com/sagevault/kb/
 ├── bootstrap/                   # Spring 启动与发布单元装配
 ├── knowledgebase/
 │   ├── controller/
-│   ├── application/             # public use-case interfaces + implementations
+│   ├── service/                 # public XxxService interfaces
+│   │   └── impl/                # XxxServiceImpl use-case implementations
+│   │   └── port/                # narrow external-system interfaces
 │   ├── domain/
 │   ├── mapper/
 │   └── adapter/
 ├── document/
 │   ├── controller/
-│   ├── application/
+│   ├── service/
+│   │   └── impl/
+│   │   └── port/
 │   ├── domain/
 │   ├── mapper/
 │   └── adapter/                 # MinIO and Python command/callback adapters
 ├── conversation/
 │   ├── controller/
-│   ├── application/
-│   ├── domain/
+│   ├── service/
+│   │   └── impl/
+│   │   └── port/
+│   ├── domain/                  # includes Java-owned AnswerEvent
 │   ├── mapper/
 │   └── adapter/                 # Python stream/cancel adapter
 ├── qarecord/
-│   ├── application/
+│   ├── service/
+│   │   └── impl/
+│   │   └── port/
 │   ├── domain/
 │   └── mapper/
 ├── feedback/
 │   ├── controller/
-│   ├── application/
+│   ├── service/
+│   │   └── impl/
+│   │   └── port/
 │   ├── domain/
 │   ├── mapper/
 │   └── adapter/
 └── platform/
     ├── security/                 # RuoYi security context adapter
     ├── audit/                    # ManagementAudit adapter
+    ├── error/                    # BusinessException, ErrorCode and HTTP handler
     └── observability/            # safe technical logging mechanisms
 ```
 
@@ -135,17 +146,33 @@ com/ruoyi/kb/
 
 ### Java 依赖规则
 
-- Controller 只调用所属能力的 application interface。
-- application 实现拥有流程，通过 Mapper 或 adapter 产生副作用。
-- Mapper 模型不得作为 HTTP 或跨进程契约。
-- 跨能力只导入对方公开 application interface；不得导入 Mapper、持久化对象、实现类或 adapter。
+- Controller 只调用所属能力的 `XxxService` interface；该 interface 是本能力的公开 application interface。
+- 有真实 HTTP 入口的类命名为 `XxxController`，公开接口命名为 `XxxService`，实现命名为 `XxxServiceImpl`，MyBatis 持久化接口命名为 `XxxMapper`；不保留 `XxxApplication` 或无 owner 的 Service 命名，也不为无 HTTP 入口的能力创建空 Controller。
+- 浏览器与 Java 之间的 Request/Response 随所属能力放在 `service`，作为公开 `XxxService` 契约；只有 HTTP 契约与 Service 契约真实分化时才增加 controller-private DTO。
+- `XxxServiceImpl` 拥有流程。模块内 MySQL 持久化直接通过本能力的 MyBatis Mapper 产生副作用；外部系统通过 port/adapter 接入。
+- Mapper 只使用独立的 `XxxEntity` 持久化模型；Request/Response 不得作为 Mapper 参数或返回值，Entity 也不得作为 HTTP 或跨进程契约。公开 Request/Response 保持不可变，Entity 可为 MyBatis generated-key 回填提供可写属性，但不承载业务行为。
+- `XxxServiceImpl` 负责业务模型与 Entity 的显式映射；出现真实的重复或复杂映射前不预建通用 converter。
+- MyBatis Mapper 接口只声明持久化方法，SQL 统一放在 `resources/mapper/<capability>/` 的 XML 中；XML 使用完整接口名作为 namespace、显式 `resultMap` 和列清单，不混用 SQL 注解或 `SELECT *`。
+- 自增主键使用 MyBatis generated-key 映射；名称规范化等业务值由 `XxxServiceImpl` 或业务类型计算，Mapper 只持久化结果。
+- 跨能力只导入对方公开 `XxxService` interface；不得导入 Mapper、持久化对象、`XxxServiceImpl` 或 adapter。
+- `ConversationService` 同时公开创建会话与发起问题用例；`ConversationServiceImpl` 直接使用 `ConversationMapper` 访问本能力数据，并通过 `KnowledgeBaseService`、`QaRecordService` 和 RAG port 完成回答编排，不创建重复的回答 Service，也不进行 Service 自调用。
+- `AnswerEvent` 是会话回答流程的 Java-owned domain model，放在 `conversation/domain`；RAG adapter 将 Python wire event 映射为它。问答记录能力只接收明确的状态裁决，不依赖流事件类型；不创建根级 `model`、`event` 或 `shared` 包。
+- 领域状态使用带不可变 `desc` 描述的 enum；MyBatis 按 enum `name()` 持久化，`desc` 不参与状态判断或数据库存储。Issue 01 不自动把描述扩展到 HTTP Response；有真实展示需求时由 Response 显式映射。
+- Issue 01 保持单一 `KnowledgeBaseService`，并以 `requireAvailable(knowledgeBaseId)` 等意图化窄方法服务跨能力协作；消费者不得取得完整 Response 后自行复制可用性规则。出现真实且稳定的权限或消费者分化前不预拆 Query/Management Service。
 - 知识库能力协调知识库级联删除；会话能力协调会话、问答记录和反馈正文删除。被协调能力只提供窄清理 interface。
 - MinIO、Python、RuoYi 审计和安全上下文都位于 adapter seam 后。
+- 每个能力的 `service/port` 只放 `XxxServiceImpl` 调用外部系统的窄 interface，adapter 实现对应 port；Mapper 是模块内 MySQL persistence seam，不属于 port。不得创建发布单元根级 `ports` 包。
+- Java/Python 请求、响应和 SSE wire model 只存在于调用 Python 的 owner 能力 adapter 内，默认作为 adapter 私有类型；只有契约测试等真实消费者需要复用时才拆入该 adapter 的 `transport` 子包。port 只暴露 Java 项目自有类型，不暴露 HTTP、SSE、Python 或第三方 SDK 类型。
 - 不得直接使用会序列化 Sage Vault 请求/响应正文的默认审计注解。
+- 发布单元级 `BusinessException`、`ErrorCode` 与 `GlobalExceptionHandler` 统一放在 `platform/error`，不随能力复制。Mapper 和 adapter 故障由 Service 边界映射为已注册业务错误；未预期异常只返回安全通用文案并记录脱敏异常日志。
 
 ### SQL 与配置
 
 V1 不使用 Flyway。业务 SQL 是人工执行、不可变的增量编号脚本：首个 schema 和种子脚本发布后不得改写，后续只追加。RuoYi 底座 SQL 可以链接业务安装说明，但不得复制业务 schema。Java MySQL 集成测试必须复用同一组脚本。
+
+`ruoyi-kb-management` 显式声明 MyBatis starter，但使用后端父 POM 已锁定的版本且不在模块 POM 重复版本号；不引入 MyBatis-Plus。移除全部 `JdbcTemplate` 使用后移除模块直接声明的 JDBC starter，同时保留数据源机制和 MySQL 驱动。模块在 `bootstrap/MyBatisConfiguration` 中通过 `@MapperScan("com.sagevault.kb.**.mapper")` 统一注册 Mapper，不扩大 RuoYi 公共 `com.ruoyi.**.mapper` 扫描范围，也不在每个 Mapper interface 重复添加 `@Mapper`。模块自有配置显式声明 `mybatis.mapper-locations: classpath*:mapper/**/*.xml`，不依赖环境中未登记的隐式扫描配置。
+
+`XxxServiceImpl` 使用 Spring `@Service`，外部 adapter 使用对应的 Spring stereotype，并统一通过构造器注入；Mapper 由模块私有 `@MapperScan` 注册，不添加 stereotype。跨能力只注入公开 `XxxService` interface。bootstrap 只装配 `WebClient.Builder` 等发布单元级基础设施对象，不手工 `new` 业务 Service 或唯一实现的 adapter。
 
 本地 `bootstrap.yml` 只包含服务名、端口、profile 和 Nacos 导入规则。业务配置字段、默认值和校验随模块代码维护；真实地址、密码和密钥只从 Nacos 或环境变量取得。
 
@@ -270,6 +297,8 @@ Nacos Data ID 的实际配置在 `deploy/dev/nacos-config/` 保留本地副本�
 | 真实百炼 | 部署后的人工 smoke，不进入自动化 |
 
 测试断言外部行为，不断言 Controller/Mapper 调用顺序、Vue 私有方法、Pinia 内部实现、LangChain chain 或第三方 SDK 对象。仓库当前没有 Sage Vault 自动化测试先例；新套件优先建立少量高 seam 验证，不扩散浅层实现测试。
+
+MyBatis 改动以 Service 行为测试和真实 MySQL Mapper 集成测试互补验证。Mapper 集成测试复用生产 SQL，至少覆盖 XML 扫描与绑定、显式映射、自增主键回填、知识库名称唯一约束、会话字段映射，以及问答记录条件更新与迟到事件保护；它不能替代 Java/Python 契约测试或浏览器经 Gateway 到 Java、由 Java 分别协作 MySQL 与 Python 的系统验收。Python 不访问 MySQL。
 
 ## 实施工单导航
 

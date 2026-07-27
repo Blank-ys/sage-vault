@@ -1,0 +1,12 @@
+{
+  "request": {
+    "knowledgeBaseId": 1,
+    "question": "这里有什么内容？",
+    "requestId": "req-1",
+    "generationId": "8bcdd88e-9e64-4cd1-b781-f9a890f691a6"
+  },
+  "events": [
+    {"type": "started", "generationId": "8bcdd88e-9e64-4cd1-b781-f9a890f691a6"},
+    {"type": "refused", "generationId": "8bcdd88e-9e64-4cd1-b781-f9a890f691a6", "message": "该知识库暂无可用文档"}
+  ]
+}

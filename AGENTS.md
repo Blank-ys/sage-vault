@@ -4,6 +4,13 @@ Sage Vault 是基于 RuoYi Cloud 与 Vue 3 的企业知识库问答系统。Java
 
 本文件是跨工具 Agent 入口，只保存长期有效、代码里不容易直接推断、猜错会影响结果的规则。系统关系在 `docs/architecture.md`，代码落点在 `docs/code-framework.md`，完整技术栈与版本登记在 `docs/technology-stack.md`，更细的目录规则放在 `.agents/rules/` 需要时再读取。
 
+## Safety rules
+
+- Do not run destructive commands such as `rm -rf`, `git reset --hard`, or database migrations unless explicitly requested.
+- Before modifying package dependencies, explain why the dependency is needed.
+- Prefer read-only exploration before editing files.
+- Show a short plan before large refactors.
+
 ## 开工前必读
 
 规划或修改代码前必须按顺序读取：
@@ -48,6 +55,7 @@ Python RAG、根级契约和 V1 项目级 compose 仍是目标结构；对应清
 - 业务异常必须使用 `BusinessException(ErrorCode.XXX, "描述信息")`。
 - 全局异常处理器返回 HTTP 200 + `R.error(code, message)`。
 - 请求体优先用不可变 `record`，命名后缀使用 `XxxRequest` / `XxxResponse` / `XxxDTO` / `XxxEntity`。
+- `XxxEntity` / `XxxDTO` 实体尽量使用 Lombok `@Data`，避免使用 Java 原生 `getter/setter` 方法。
 - Entity 到 DTO/Response 的映射优先使用 MapStruct。
 - 使用构造器注入，优先配合 Lombok `@RequiredArgsConstructor`。
 - 代码无通配符导入、避免内联全限定类名。

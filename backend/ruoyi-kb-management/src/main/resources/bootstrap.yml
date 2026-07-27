@@ -1,0 +1,20 @@
+server:
+  port: 9216
+
+spring:
+  application:
+    name: ruoyi-kb-management
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 192.168.150.100:8848
+      config:
+        server-addr: 192.168.150.100:8848
+        group: DEFAULT_GROUP
+        file-extension: yml
+  config:
+    import:
+      - nacos:application-${spring.profiles.active}.${spring.cloud.nacos.config.file-extension}
+      - nacos:${spring.application.name}-${spring.profiles.active}.${spring.cloud.nacos.config.file-extension}

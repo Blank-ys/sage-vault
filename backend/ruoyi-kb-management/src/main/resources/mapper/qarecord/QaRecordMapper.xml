@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.qarecord.mapper.QaRecordMapper">
+    <resultMap id="qaRecordResult" type="com.sagevault.kb.qarecord.domain.QaRecordEntity">
+        <id property="id" column="id"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="requestId" column="request_id"/>
+        <result property="generationId" column="generation_id"/>
+        <result property="question" column="question"/>
+        <result property="answer" column="answer"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <sql id="columns">id, conversation_id, user_id, request_id, generation_id, question, answer, status</sql>
+
+    <insert id="insert" parameterType="com.sagevault.kb.qarecord.domain.QaRecordEntity"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_qa_record (conversation_id, user_id, request_id, generation_id, question, answer, status)
+        VALUES (#{conversationId}, #{userId}, #{requestId}, #{generationId}, #{question}, #{answer}, #{status})
+    </insert>
+
+    <update id="updateTerminalState">
+        UPDATE sv_qa_record
+        SET status = #{status}, answer = #{answer}
+        WHERE generation_id = #{generationId} AND status = 'STARTED'
+    </update>
+
+    <select id="findByGenerationId" resultMap="qaRecordResult">
+        SELECT <include refid="columns"/> FROM sv_qa_record WHERE generation_id = #{generationId}
+    </select>
+</mapper>

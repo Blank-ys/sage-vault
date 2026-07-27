@@ -61,6 +61,12 @@ RAG (Python)
 
 发布单元内部按五个业务能力组织：知识库、企业文档、会话、问答记录和反馈。异步任务随发起它的能力就近组织。每个能力的 Controller 只调用本能力 application interface；跨能力协作也只能调用对方公开 application interface，不得直接访问 Mapper、持久化对象、Service 实现或 adapter。
 
+会话能力拥有创建会话与发起问题的用例编排，并通过单一公开 `ConversationService` 暴露给 Controller。其实现直接通过本能力 Mapper 校验会话归属，通过 `KnowledgeBaseService` 校验知识库可用性，通过 `QaRecordService` 创建和裁决问答记录，并通过 RAG port 发起回答；不得通过 Service 自调用来访问本能力数据。
+
+发起问题的流式方法不持有覆盖 RAG HTTP/SSE 生命周期的数据库事务。问答记录创建和每次状态裁决由 `QaRecordService` 的独立短事务完成；事务提交后才调用外部 RAG，流错误通过新的短事务裁决为未完成，连接断开仍不等同于用户主动取消。
+
+Issue 01 中 `STARTED` 表示 Java 已接受本次生成；Python 的 `started` SSE 事件只向浏览器确认执行链路开始，不重复更新数据库，也不为此新增 `PENDING` 或 `ACCEPTED`。最小问答记录迁移是 `STARTED` 到 `REFUSED` 或 `UNFINISHED`。同一终态的重复事件幂等成功，迟到事件不得覆盖已有终态；`QaRecordService` 裁决零行更新是幂等、终态冲突还是记录缺失，Mapper 只执行 Service 指定的条件 SQL。
+
 Java 是以下事实的唯一权威：
 
 - 知识库及其可用、删除中、删除失败等状态。
@@ -68,6 +74,10 @@ Java 是以下事实的唯一权威：
 - 入库和清理任务、尝试次数、重试资格、租约和恢复裁决。
 - 会话绑定、问答记录、单个用户的活跃回答和最终状态。
 - 反馈授权、处理状态和可见正文。
+
+知识库名称唯一性由 Service 预检和 MySQL `normalized_name` 唯一约束共同保证：预检提供正常路径的明确反馈，数据库约束裁决并发竞争。名称规范化由 Java 业务类型完成，Mapper 只持久化结果；Service 将唯一键冲突统一映射为知识库名称冲突业务异常。
+
+普通用户的可用知识库列表由 Service 指定 `AVAILABLE`，Mapper 在 MySQL 中过滤；知识管理员完整列表与普通用户可用列表都按 `updated_at DESC, id DESC` 稳定排序，但使用不同查询。创建、修改内容或变更状态都会推进知识库更新时间；时间字段属于持久化排序事实，Issue 01 不因此扩展公开 Response。
 
 企业文档原文件通过模块内 MinIO adapter 管理，不经过 `ruoyi-file`。业务表只引用稳定的 RuoYi 用户 ID，不复制用户、角色或部门信息，也不建立跨服务数据库外键。
 
@@ -168,7 +178,7 @@ Nacos 只负责发现和配置，不构成认证机制。
 
 liveness 只检查进程和事件循环。完整 readiness 在启动或模型重载后校验模型 revision/哈希、目标设备、模型加载和固定中文嵌入并缓存结果；日常检查只读取状态。CUDA OOM、设备丢失或推理异常立即撤销 readiness。
 
-最高且主要的验证 seam 是浏览器到 Java 的真实 HTTP/SSE interface。系统验收同时运行 Java 与 Python，使用真实 MySQL、MinIO 和 Milvus，并在自动化中注入确定性假生成 adapter。必要补充包括：
+最高且主要的验证 seam 是浏览器经 Gateway 到 Java 的真实 HTTP/SSE interface。Java 分别访问权威业务状态 MySQL 与 Python RAG；Python 不访问 MySQL，也不得直连 Sage Vault 业务表。完整系统验收同时运行 Java 与 Python，使用真实 MySQL、MinIO 和 Milvus，并在自动化中注入确定性假生成 adapter。必要补充包括：
 
 - Java application、MySQL、MinIO、恢复、权限与审计测试。
 - Java-Python schema、样例和双向 consumer/provider 契约测试。

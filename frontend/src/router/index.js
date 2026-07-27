@@ -77,6 +77,18 @@ export const constantRoutes = [
     meta: { title: '锁定屏幕' }
   },
   {
+    path: '/sage/qa',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        component: () => import('@/features/conversations/pages/WorkspacePage.vue'),
+        name: 'KnowledgeQa',
+        meta: { title: '知识问答', icon: 'question' }
+      }
+    ]
+  },
+  {
     path: '/user',
     component: Layout,
     hidden: true,
