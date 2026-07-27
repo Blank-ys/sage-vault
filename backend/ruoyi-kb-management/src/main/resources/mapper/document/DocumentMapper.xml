@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.document.mapper.DocumentMapper">
+    <resultMap id="documentResult" type="com.sagevault.kb.document.domain.DocumentEntity">
+        <id property="id" column="id"/>
+        <result property="kbId" column="kb_id"/>
+        <result property="filename" column="filename"/>
+        <result property="normalizedName" column="normalized_name"/>
+        <result property="status" column="status"/>
+        <result property="objectKey" column="object_key"/>
+        <result property="size" column="size"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, kb_id, filename, normalized_name, status, object_key, size, error_message, created_at, updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.sagevault.kb.document.domain.DocumentEntity"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_enterprise_document (kb_id, filename, normalized_name, status, object_key, size, error_message)
+        VALUES (#{kbId}, #{filename}, #{normalizedName}, #{status}, #{objectKey}, #{size}, #{errorMessage})
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE sv_enterprise_document
+        SET status = #{status}, error_message = #{errorMessage}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="documentResult">
+        SELECT <include refid="columns"/> FROM sv_enterprise_document WHERE id = #{id}
+    </select>
+
+    <select id="findByKbIdAndNormalizedName" resultMap="documentResult">
+        SELECT <include refid="columns"/>
+        FROM sv_enterprise_document
+        WHERE kb_id = #{kbId} AND normalized_name = #{normalizedName}
+    </select>
+
+    <select id="findByKbId" resultMap="documentResult">
+        SELECT <include refid="columns"/>
+        FROM sv_enterprise_document
+        WHERE kb_id = #{kbId}
+        ORDER BY created_at DESC, id DESC
+    </select>
+</mapper>

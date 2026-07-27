@@ -1,1 +1,1 @@
-export { listAvailableKnowledgeBases } from './api/knowledgeBases'
+export { listAvailableKnowledgeBases, listKnowledgeBases } from './api/knowledgeBases'

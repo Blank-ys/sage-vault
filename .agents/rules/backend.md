@@ -33,7 +33,7 @@ paths:
 ## API、契约与数据
 
 - 浏览器只经 Gateway/Java 访问业务能力；Java 负责认证授权、状态裁决、用户文案和 SSE 转发。
-- 公开 Request/Response 优先使用不可变 `record`。仅供 MyBatis Mapper 使用的 `XxxEntity` 可以为 generated-key 回填采用可写属性，但不得承载业务校验、跨能力流转或作为 HTTP/跨进程契约；优先使用窄的访问器，避免 Lombok `@Data` 扩大语义。
+- 公开 Request/Response 优先使用不可变 `record`。仅供 MyBatis Mapper 使用的 `XxxEntity` 可以为 generated-key 回填采用可写属性，但不得承载业务校验、跨能力流转或作为 HTTP/跨进程契约；`XxxEntity` / `XxxDTO` 实体尽量使用 Lombok `@Data`，其余实体优先使用窄的访问器，避免 Lombok `@Data` 扩大语义；
 - 领域状态 enum 包含不可变 `desc`，数据库按 enum `name()` 存储；描述不参与状态判断或持久化，未经公开契约决策不得自动加入 Response。
 - HTTP、回调和 SSE 模型只在 transport adapter 内映射根 `contracts/java-python-rag/` 契约，不得复制 schema 或临时新增未注册语义。
 - Mapper 模型不得直接作为 HTTP 响应或跨进程契约。业务表只引用稳定的 RuoYi 用户 ID，不复制用户、角色或部门数据，不建立跨服务数据库外键。

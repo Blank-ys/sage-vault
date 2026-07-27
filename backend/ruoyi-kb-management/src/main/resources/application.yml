@@ -12,3 +12,8 @@ sage-vault:
   rag:
     service-id: sage-vault-rag
     signing-key: ${SAGE_VAULT_RAG_SIGNING_KEY}
+  minio:
+    endpoint: ${SAGE_VAULT_MINIO_ENDPOINT}
+    access-key: ${SAGE_VAULT_MINIO_ACCESS_KEY}
+    secret-key: ${SAGE_VAULT_MINIO_SECRET_KEY}
+    bucket: ${SAGE_VAULT_MINIO_BUCKET:sage-vault-documents}
