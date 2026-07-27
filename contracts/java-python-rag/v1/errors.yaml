@@ -1,0 +1,4 @@
+errors:
+  - code: 510001
+    name: RAG_UNAVAILABLE
+    retryable: true

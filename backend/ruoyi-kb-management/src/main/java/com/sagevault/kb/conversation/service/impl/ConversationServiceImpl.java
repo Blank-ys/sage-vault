@@ -16,7 +16,6 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 @Service
@@ -35,7 +34,6 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public ConversationResponse create(long userId, CreateConversationRequest request) {
         knowledgeBases.requireAvailable(request.knowledgeBaseId());
         ConversationEntity entity = new ConversationEntity();

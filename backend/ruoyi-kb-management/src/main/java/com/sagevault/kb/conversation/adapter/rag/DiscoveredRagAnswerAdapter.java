@@ -6,7 +6,9 @@ import com.sagevault.kb.conversation.service.port.RagAnswerPort;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import javax.crypto.Mac;
@@ -60,7 +62,7 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(properties.signingKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (java.security.GeneralSecurityException exception) {
+        } catch (GeneralSecurityException exception) {
             throw new IllegalStateException("HMAC-SHA256 is unavailable", exception);
         }
     }
@@ -73,7 +75,7 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
     private static byte[] sha256(String value) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-        } catch (java.security.NoSuchAlgorithmException exception) {
+        } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
     }

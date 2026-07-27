@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "generationId", "message"],
+  "properties": {
+    "type": {"const": "refused"},
+    "generationId": {"type": "string", "format": "uuid"},
+    "message": {"const": "该知识库暂无可用文档"}
+  }
+}

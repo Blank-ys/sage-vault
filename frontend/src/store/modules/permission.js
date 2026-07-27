@@ -6,7 +6,10 @@ import ParentView from '@/components/ParentView'
 import InnerLink from '@/layout/components/InnerLink'
 
 // 匹配views里面所有的.vue文件
-const modules = import.meta.glob('./../../views/**/*.vue')
+const modules = {
+  ...import.meta.glob('./../../views/**/*.vue'),
+  ...import.meta.glob('./../../features/**/pages/*.vue')
+}
 
 const usePermissionStore = defineStore(
   'permission',
@@ -116,7 +119,9 @@ export function filterDynamicRoutes(routes) {
 export const loadView = (view) => {
   let res
   for (const path in modules) {
-    const dir = path.split('views/')[1].split('.vue')[0]
+    const dir = path.includes('/views/')
+      ? path.split('views/')[1].split('.vue')[0]
+      : `features/${path.split('features/')[1].split('.vue')[0]}`
     if (dir === view) {
       res = () => modules[path]()
     }

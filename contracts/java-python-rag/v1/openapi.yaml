@@ -1,0 +1,35 @@
+openapi: 3.1.0
+info:
+  title: Sage Vault Java-Python RAG Contract
+  version: 1.0.0
+paths:
+  /internal/v1/answers:
+    post:
+      operationId: answer
+      parameters:
+        - {name: X-Sage-Timestamp, in: header, required: true, schema: {type: string}}
+        - {name: X-Sage-Signature, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnswerRequest'
+      responses:
+        '200':
+          description: Project-owned SSE events
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {description: Invalid deployment signature}
+components:
+  schemas:
+    AnswerRequest:
+      type: object
+      additionalProperties: false
+      required: [knowledgeBaseId, question, requestId, generationId]
+      properties:
+        knowledgeBaseId: {type: integer, format: int64, minimum: 1}
+        question: {type: string, minLength: 1}
+        requestId: {type: string, minLength: 1}
+        generationId: {type: string, format: uuid}

@@ -55,7 +55,7 @@ Python RAG、根级契约和 V1 项目级 compose 仍是目标结构；对应清
 - 业务异常必须使用 `BusinessException(ErrorCode.XXX, "描述信息")`。
 - 全局异常处理器返回 HTTP 200 + `R.error(code, message)`。
 - 请求体优先用不可变 `record`，命名后缀使用 `XxxRequest` / `XxxResponse` / `XxxDTO` / `XxxEntity`。
-- 实体属性需要 `setter/getter` 方法时，尽量使用 Lombok `@Data`，避免手写 Java 原生 `getter/setter` 方法。
+- `XxxEntity` / `XxxDTO` 实体尽量使用 Lombok `@Data`，避免使用 Java 原生 `getter/setter` 方法。
 - Entity 到 DTO/Response 的映射优先使用 MapStruct。
 - 使用构造器注入，优先配合 Lombok `@RequiredArgsConstructor`。
 - 代码无通配符导入、避免内联全限定类名。

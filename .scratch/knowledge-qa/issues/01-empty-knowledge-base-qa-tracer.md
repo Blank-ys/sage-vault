@@ -4,13 +4,13 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 知识管理员可创建、查看和修改知识库；名称按不区分大小写全局唯一，所有已登录用户只能选择状态为可用的知识库。
-- [ ] 普通用户可绑定一个知识库新建会话；空知识库允许创建会话，但提问得到明确的“该知识库暂无可用文档”拒答。
-- [ ] 浏览器只连接 Java，Java 通过 Nacos 发现 Python，并以 SSE 转发至少 `started` 和 `refused` 事件；匿名请求被拒绝。
-- [ ] 建立项目首个外部 HTTP/SSE 系统验收接缝，使用真实 Java、Python 和 MySQL，生成侧注入确定性假模型。
-- [ ] 普通用户看不到知识库管理入口、企业文档列表、预览或下载能力。
+- [x] 知识管理员可创建、查看和修改知识库；名称按不区分大小写全局唯一，所有已登录用户只能选择状态为可用的知识库。
+- [x] 普通用户可绑定一个知识库新建会话；空知识库允许创建会话，但提问得到明确的“该知识库暂无可用文档”拒答。
+- [x] 浏览器只连接 Java，Java 通过 Nacos 发现 Python，并以 SSE 转发至少 `started` 和 `refused` 事件；匿名请求被拒绝。
+- [x] 建立项目首个外部 HTTP/SSE 系统验收接缝，使用真实 Java、Python 和 MySQL，生成侧注入确定性假模型。
+- [x] 普通用户看不到知识库管理入口、企业文档列表、预览或下载能力。
 
 ## Comments
 
@@ -78,3 +78,27 @@ Known residual risks:
 - Java/Python contract tests need final confirmation that both consumers read the root contract rather than duplicating literals; the Java HTTP provider fixture still contains literal SSE payloads.
 - Python Dockerfile uses `python:3.12.7-slim` without a digest. It is a development asset, not a verified reproducible release baseline.
 - Local `uv` was `0.11.29`, while `docs/technology-stack.md` records target `0.11.32`; the generated lock is development evidence only until verified with the target CLI.
+
+### 2026-07-27 final verification, review, and resolution
+
+All seven continuation steps completed on a real local environment (Gateway 8899 / Auth / System / kb-management 9216 / sage-vault-rag 8000, all five services registered in Nacos at 192.168.150.100:8848; MySQL and Redis on 192.168.150.100).
+
+Verification evidence:
+
+1. Python: `uv lock` regenerated (uv 0.11.29, target 0.11.32 deviation stands), `ruff check` clean, strict `mypy` clean over 16 files, `pytest` 3 passed.
+2. Root contract tests: `python -m unittest discover -s contracts/tests -v` inside the RAG uv environment, 1 test OK with formal `jsonschema` Draft 2020-12 validation of the root schemas.
+3. Java: module tests 27/27 passed including 5 real-MySQL integration tests (enabled via `SAGE_VAULT_MYSQL_TEST_*` env vars); `package` succeeded. HTTP authorization tests exist and pass: `KnowledgeBaseAuthorizationTest` (4) and `ConversationAuthorizationTest` (2) cover anonymous/general-user/admin paths.
+4. Gateway route for `/ruoyi-kb-management/**` documented reproducibly in `system-tests/knowledge-qa/README.md`; no unapproved real Nacos config committed. Route verified live through the running Gateway.
+5. Frontend `yarn build:prod` passed (must be run from an uppercase drive letter `F:\` on Windows; lowercase breaks vite:html-inline-proxy).
+6. Black-box system test `system-tests/knowledge-qa/test_empty_knowledge_base.py` passed against the real stack. One test assertion was corrected during this run: RuoYi Gateway rejects anonymous requests with HTTP 200 plus body code 401 (the repo-wide `R.error` convention), so the anonymous assertion now checks HTTP 200 and body code 401 instead of HTTP 401/403.
+7. Full backend Maven suite: BUILD SUCCESS across all 23 modules. `code-review` skill ran Standards and Spec reviews in parallel from baseline `0e7fe621`; Spec review confirmed the state machine (`STARTED -> REFUSED/UNFINISHED` conditional updates), removal of `changeStatus`, ordering, and that short transactions never span the RAG stream (terminal-state writes are cross-bean calls from reactive callbacks, each holding only a single-UPDATE transaction).
+
+Acceptance item 5 evidence: the management page is supplied only by the permission-backed database menu (no static route), and the passing authorization tests plus the live system test prove general users are denied `sage:knowledge-base:manage` APIs.
+
+Review findings accepted as known debt (user decision, not fixed in this issue):
+
+- P0 debt: `backend/ruoyi-kb-management/src/main/resources/application.yml` contains a plaintext datasource password and `sage-vault.rag.signing-key`, violating the "secrets only in `.env`" rule. To be fixed when configuration migrates to Nacos/env placeholders; do not copy this pattern into new modules.
+- P1 debt: the `-Dfile.encoding=UTF-8` `jvmArguments` block in `backend/ruoyi-kb-management/pom.xml` stays commented out by user choice; running the jar on Windows still requires passing `-Dfile.encoding=UTF-8` manually.
+- `HealthController.java` (`/checkAliveServer`) is out-of-spec, user-added for health probing; it stays untracked in the working tree and is excluded from this issue's commit.
+
+Final commit is performed by the user.
