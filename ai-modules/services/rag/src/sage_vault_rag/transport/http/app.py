@@ -15,6 +15,7 @@ from sage_vault_rag.adapters.bge_m3.embedder import BgeM3Embedder
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
 from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
 from sage_vault_rag.adapters.document_storage.http_client import HttpDocumentStorage
+from sage_vault_rag.adapters.docx_parser.parser import DocxParser
 from sage_vault_rag.adapters.fake_generation.generator import FakeGenerationAdapter
 from sage_vault_rag.adapters.java_callback.callback import JavaCallbackClient
 from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
@@ -151,6 +152,7 @@ def build_indexing_service(settings: Settings) -> IndexingService:
                 "txt": TxtParser(),
                 "md": MarkdownParser(),
                 "pdf": PdfParser(),
+                "docx": DocxParser(),
             }
         ),
         chunker=ParagraphChunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
