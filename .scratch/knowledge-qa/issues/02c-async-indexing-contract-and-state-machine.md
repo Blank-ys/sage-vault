@@ -4,7 +4,7 @@
 
 **Blocked by:** 02a — Java 企业文档上传、MinIO 原文件与业务记录；02b — Python RAG TXT 入库.
 
-**Status:** completed
+**Status:** resolved
 
 - [x] 扩展 `contracts/java-python-rag/v1/`，新增入库命令、回调、相关事件 schema 和错误码
 - [x] Java 新增任务记录持久化（taskId、attempt、status 等），由 `document` 业务能力拥有

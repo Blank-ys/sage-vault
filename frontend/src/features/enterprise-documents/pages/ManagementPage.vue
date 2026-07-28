@@ -51,7 +51,7 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { listKnowledgeBases } from '../../knowledge-bases'
+import { listKnowledgeBases } from '@/features/knowledge-bases'
 import { listDocuments, uploadDocument } from '../api/documents'
 
 const loading = ref(false)
