@@ -52,6 +52,8 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
         }
         return switch (event.type()) {
             case "started" -> new AnswerEvent.Started(event.generationId());
+            case "delta" -> new AnswerEvent.Delta(event.generationId(), event.delta());
+            case "completed" -> new AnswerEvent.Completed(event.generationId());
             case "refused" -> new AnswerEvent.Refused(event.generationId(), event.message());
             default -> throw new BusinessException(ErrorCode.RAG_UNAVAILABLE, "问答服务返回了未知事件");
         };
@@ -81,5 +83,5 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
     }
 
     private record RagAnswerRequest(long knowledgeBaseId, String question, String requestId, String generationId) { }
-    private record RagEvent(String type, String generationId, String message) { }
+    private record RagEvent(String type, String generationId, String delta, String message) { }
 }

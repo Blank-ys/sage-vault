@@ -39,10 +39,19 @@ async function ask() {
   try {
     const conversation = await createConversation(knowledgeBaseId.value)
     await askQuestion(conversation.id, question.value, event => {
-      if (event.type === 'refused') { refused.value = true; answer.value = event.message }
+      if (event.type === 'delta') {
+        answer.value = answer.value === '正在处理问题…' ? event.delta : answer.value + event.delta
+      } else if (event.type === 'refused') {
+        refused.value = true
+        answer.value = event.message
+      }
     }, controller.signal)
   } catch (error) {
-    if (error.name !== 'AbortError') ElMessage.error(error.message || '提问失败')
+    if (error.name !== 'AbortError') {
+      const message = error.message || '提问失败'
+      answer.value = message
+      ElMessage.error(message)
+    }
   } finally { asking.value = false; controller = undefined }
 }
 

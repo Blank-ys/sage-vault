@@ -80,6 +80,12 @@ public final class InMemoryRepositories {
     private static final class QaRecords implements QaRecordMapper {
         private final Map<String, QaRecordEntity> values = new LinkedHashMap<>();
         public int insert(QaRecordEntity value) { values.put(value.getGenerationId(), value); return 1; }
+        public int appendAnswer(String generationId, String delta) {
+            QaRecordEntity value = values.get(generationId);
+            if (value == null || value.getStatus() != QaRecordStatus.STARTED) { return 0; }
+            value.setAnswer(value.getAnswer() + delta);
+            return 1;
+        }
         public int updateTerminalState(String generationId, QaRecordStatus status, String answer) {
             QaRecordEntity value = values.get(generationId);
             if (value == null || value.getStatus() != QaRecordStatus.STARTED) { return 0; }

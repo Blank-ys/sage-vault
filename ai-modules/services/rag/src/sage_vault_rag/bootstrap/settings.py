@@ -32,4 +32,9 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
 
+    # 检索与回答
+    retrieval_top_k: int = 5
+    retrieval_refusal_threshold: float = 1.0
+    answer_delta_length: int = 5
+
     model_config = SettingsConfigDict(env_prefix="SAGE_VAULT_RAG_", env_file=".env")

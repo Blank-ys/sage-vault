@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sage_vault_rag.adapters.bge_m3.embedder import BgeM3Embedder
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
 from sage_vault_rag.adapters.document_storage.http_client import HttpDocumentStorage
+from sage_vault_rag.adapters.fake_generation.generator import FakeGenerationAdapter
 from sage_vault_rag.adapters.java_callback.callback import JavaCallbackClient
 from sage_vault_rag.adapters.milvus.store import MilvusVectorStore
 from sage_vault_rag.adapters.nacos.registration import NacosRegistration
@@ -21,7 +22,7 @@ from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.bootstrap.settings import Settings
-from sage_vault_rag.model.events import Refused, Started
+from sage_vault_rag.model.events import Completed, Delta, Refused, Started
 from sage_vault_rag.model.indexing_command import IndexingCommand
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ def create_app(
             await service_registration.close()
 
     app = FastAPI(title="Sage Vault RAG", lifespan=lifespan)
-    answer_service = answering or AnsweringService()
+    answer_service = answering or build_answering_service(settings)
     indexing_runner = indexing or _IndexingServiceAdapter(build_indexing_service(settings))
     seen_requests: dict[str, int] = {}
     seen_indexing_requests: dict[str, int] = {}
@@ -95,9 +96,15 @@ def create_app(
         verify_signature(request, x_sage_timestamp, x_sage_signature, settings, seen_requests)
 
         async def events() -> AsyncIterator[str]:
-            async for event in answer_service.answer(request.generation_id):
+            async for event in answer_service.answer(
+                request.knowledge_base_id, request.question, request.generation_id
+            ):
                 if isinstance(event, Started):
                     payload = {"type": "started", "generationId": event.generation_id}
+                elif isinstance(event, Delta):
+                    payload = {"type": "delta", "generationId": event.generation_id, "delta": event.delta}
+                elif isinstance(event, Completed):
+                    payload = {"type": "completed", "generationId": event.generation_id}
                 elif isinstance(event, Refused):
                     payload = {"type": "refused", "generationId": event.generation_id, "message": event.message}
                 yield f"event: {payload['type']}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -138,25 +145,43 @@ def build_indexing_service(settings: Settings) -> IndexingService:
         document_storage=HttpDocumentStorage(),
         text_parser=TxtParser(),
         chunker=ParagraphChunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
-        embedder=BgeM3Embedder(
-            model_path=settings.embedding_model_path,
-            profile=settings.embedding_profile,
-            batch_size=settings.embedding_batch_size,
-            max_length=settings.embedding_max_length,
-            max_concurrent_requests=settings.embedding_max_concurrent_requests,
-            max_queue_size=settings.embedding_max_queue_size,
-        ),
-        vector_store=MilvusVectorStore(
-            host=settings.milvus_host,
-            port=settings.milvus_port,
-            collection_name=settings.milvus_collection_name,
-            vector_dim=settings.milvus_vector_dim,
-        ),
+        embedder=_build_embedder(settings),
+        vector_store=_build_vector_store(settings),
         callback=JavaCallbackClient(
             callback_url=settings.java_callback_url,
             signing_key=settings.java_callback_signing_key,
             timeout_seconds=60.0,
         ),
+    )
+
+
+def build_answering_service(settings: Settings) -> AnsweringService:
+    return AnsweringService(
+        embedder=_build_embedder(settings),
+        vector_store=_build_vector_store(settings),
+        generator=FakeGenerationAdapter(delta_length=settings.answer_delta_length),
+        top_k=settings.retrieval_top_k,
+        refusal_threshold=settings.retrieval_refusal_threshold,
+    )
+
+
+def _build_embedder(settings: Settings) -> BgeM3Embedder:
+    return BgeM3Embedder(
+        model_path=settings.embedding_model_path,
+        profile=settings.embedding_profile,
+        batch_size=settings.embedding_batch_size,
+        max_length=settings.embedding_max_length,
+        max_concurrent_requests=settings.embedding_max_concurrent_requests,
+        max_queue_size=settings.embedding_max_queue_size,
+    )
+
+
+def _build_vector_store(settings: Settings) -> MilvusVectorStore:
+    return MilvusVectorStore(
+        host=settings.milvus_host,
+        port=settings.milvus_port,
+        collection_name=settings.milvus_collection_name,
+        vector_dim=settings.milvus_vector_dim,
     )
 
 

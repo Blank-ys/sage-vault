@@ -58,9 +58,16 @@ public class ConversationServiceImpl implements ConversationService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "请求已处理", exception);
         }
         AtomicBoolean terminal = new AtomicBoolean();
+        StringBuilder answer = new StringBuilder();
         return Flux.defer(() -> rag.answer(conversation.getKnowledgeBaseId(), request.question(), request.requestId(), generationId))
                 .doOnNext(event -> {
-                    if (event instanceof AnswerEvent.Refused refused) {
+                    if (event instanceof AnswerEvent.Delta delta) {
+                        records.appendAnswer(generationId, delta.delta());
+                        answer.append(delta.delta());
+                    } else if (event instanceof AnswerEvent.Completed) {
+                        records.markCompleted(generationId, answer.toString());
+                        terminal.set(true);
+                    } else if (event instanceof AnswerEvent.Refused refused) {
                         records.markRefused(generationId, refused.message());
                         terminal.set(true);
                     }

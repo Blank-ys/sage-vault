@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["type", "generationId", "message"],
+  "required": ["type", "generationId", "delta"],
   "properties": {
-    "type": {"const": "refused"},
+    "type": {"const": "delta"},
     "generationId": {"type": "string", "format": "uuid"},
-    "message": {"type": "string", "minLength": 1}
+    "delta": {"type": "string"}
   }
 }

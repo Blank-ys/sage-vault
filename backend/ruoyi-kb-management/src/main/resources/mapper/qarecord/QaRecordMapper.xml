@@ -20,6 +20,12 @@
         VALUES (#{conversationId}, #{userId}, #{requestId}, #{generationId}, #{question}, #{answer}, #{status})
     </insert>
 
+    <update id="appendAnswer">
+        UPDATE sv_qa_record
+        SET answer = CONCAT(answer, #{delta})
+        WHERE generation_id = #{generationId} AND status = 'STARTED'
+    </update>
+
     <update id="updateTerminalState">
         UPDATE sv_qa_record
         SET status = #{status}, answer = #{answer}

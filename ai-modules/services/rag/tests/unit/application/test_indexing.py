@@ -8,6 +8,7 @@ from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.model.chunk import Chunk
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
+from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
 
 
 class InMemoryDocumentStorage:
@@ -41,6 +42,14 @@ class InMemoryVectorStore:
         self.deleted.append(document_id)
         self.saved = [(chunk, vector) for chunk, vector in self.saved if chunk.document_id != document_id]
 
+    async def search(
+        self,
+        knowledge_base_id: int,
+        vector: list[float],
+        top_k: int,
+    ) -> list[RetrievedChunk]:
+        return []
+
 
 class InMemoryCallback:
     def __init__(self) -> None:
@@ -56,6 +65,14 @@ class FailingVectorStore:
 
     async def delete_by_document(self, document_id: str) -> None:
         pass
+
+    async def search(
+        self,
+        knowledge_base_id: int,
+        vector: list[float],
+        top_k: int,
+    ) -> list[RetrievedChunk]:
+        return []
 
 
 @dataclass

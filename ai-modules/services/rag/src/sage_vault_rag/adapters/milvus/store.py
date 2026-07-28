@@ -11,6 +11,7 @@ from pymilvus import (
 )
 
 from sage_vault_rag.model.chunk import Chunk
+from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,37 @@ class MilvusVectorStore:
                 break
             offset += page_size
         return total
+
+    async def search(
+        self,
+        knowledge_base_id: int,
+        vector: list[float],
+        top_k: int,
+    ) -> list[RetrievedChunk]:
+        collection = self._get_collection()
+        collection.load()
+        results = collection.search(
+            data=[vector],
+            anns_field="vector",
+            param={"metric_type": "L2", "params": {}},
+            limit=top_k,
+            expr=f"knowledge_base_id == {knowledge_base_id}",
+            output_fields=["chunk_id", "document_id", "filename", "sequence", "text"],
+        )
+        chunks: list[RetrievedChunk] = []
+        for hits in results:
+            for hit in hits:
+                chunks.append(
+                    RetrievedChunk(
+                        chunk_id=hit.entity.get("chunk_id"),
+                        document_id=hit.entity.get("document_id"),
+                        filename=hit.entity.get("filename"),
+                        sequence=hit.entity.get("sequence"),
+                        text=hit.entity.get("text"),
+                        score=float(hit.distance),
+                    )
+                )
+        return chunks
 
     @staticmethod
     def _document_expr(document_id: str) -> str:

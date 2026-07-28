@@ -49,7 +49,7 @@ async def test_callback_posts_signed_result() -> None:
     timestamp = request.headers["X-Sage-Timestamp"]
     expected = (
         f"{payload['taskId']}:{payload['attempt']}:{payload['documentId']}:"
-        f"{payload['success']}:{payload['chunksCount']}:{payload['requestId']}:{timestamp}"
+        f"{str(payload['success']).lower()}:{payload['chunksCount']}:{payload['requestId']}:{timestamp}"
     ).encode()
     assert hmac.compare_digest(
         request.headers["X-Sage-Signature"],

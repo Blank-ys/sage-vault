@@ -33,6 +33,27 @@ public class QaRecordServiceImpl implements QaRecordService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void appendAnswer(String generationId, String delta) {
+        if (mapper.appendAnswer(generationId, delta) == 1) {
+            return;
+        }
+        QaRecordEntity record = mapper.findByGenerationId(generationId);
+        if (record == null) {
+            throw new BusinessException(ErrorCode.QA_RECORD_NOT_FOUND, "问答记录不存在");
+        }
+        if (record.getStatus() != QaRecordStatus.STARTED) {
+            throw new BusinessException(ErrorCode.QA_RECORD_STATE_CONFLICT, "问答记录状态冲突");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markCompleted(String generationId, String answer) {
+        decideTerminalState(generationId, QaRecordStatus.COMPLETED, answer);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void markRefused(String generationId, String answer) {
         decideTerminalState(generationId, QaRecordStatus.REFUSED, answer);
     }

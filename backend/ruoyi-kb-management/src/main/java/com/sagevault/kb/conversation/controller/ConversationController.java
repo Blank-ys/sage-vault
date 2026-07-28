@@ -36,6 +36,19 @@ public class ConversationController {
     @RequiresLogin
     public Flux<ServerSentEvent<AnswerEvent>> ask(@PathVariable long id, @RequestBody AskQuestionRequest request) {
         return conversations.ask(SecurityUtils.getUserId(), id, request).map(event -> ServerSentEvent.builder(event)
-                .event(event instanceof AnswerEvent.Started ? "started" : "refused").build());
+                .event(eventName(event)).build());
+    }
+
+    private static String eventName(AnswerEvent event) {
+        if (event instanceof AnswerEvent.Started) {
+            return "started";
+        }
+        if (event instanceof AnswerEvent.Delta) {
+            return "delta";
+        }
+        if (event instanceof AnswerEvent.Completed) {
+            return "completed";
+        }
+        return "refused";
     }
 }

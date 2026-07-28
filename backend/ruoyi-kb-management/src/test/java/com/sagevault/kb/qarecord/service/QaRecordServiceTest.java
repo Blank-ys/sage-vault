@@ -49,12 +49,37 @@ class QaRecordServiceTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    @Test
+    void appendsDeltasToStartedRecord() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records);
+
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.appendAnswer("generation-1", "片段一");
+        service.appendAnswer("generation-1", "片段二");
+        service.markCompleted("generation-1", records.findByGenerationId("generation-1").getAnswer());
+
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.COMPLETED);
+        assertThat(record.getAnswer()).isEqualTo("片段一片段二");
+    }
+
     private static final class Records implements QaRecordMapper {
         private final Map<String, QaRecordEntity> records = new LinkedHashMap<>();
 
         @Override
         public int insert(QaRecordEntity entity) {
             records.put(entity.getGenerationId(), entity);
+            return 1;
+        }
+
+        @Override
+        public int appendAnswer(String generationId, String delta) {
+            QaRecordEntity entity = records.get(generationId);
+            if (entity == null || entity.getStatus() != QaRecordStatus.STARTED) {
+                return 0;
+            }
+            entity.setAnswer(entity.getAnswer() + delta);
             return 1;
         }
 

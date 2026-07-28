@@ -51,8 +51,9 @@ class JavaCallbackClient:
             response.raise_for_status()
 
     def _sign(self, payload: dict[str, Any], timestamp: str) -> str:
+        success = str(payload["success"]).lower()
         value = (
             f"{payload['taskId']}:{payload['attempt']}:{payload['documentId']}:"
-            f"{payload['success']}:{payload['chunksCount']}:{payload['requestId']}:{timestamp}"
+            f"{success}:{payload['chunksCount']}:{payload['requestId']}:{timestamp}"
         ).encode()
         return hmac.new(self._signing_key.encode(), value, hashlib.sha256).hexdigest()

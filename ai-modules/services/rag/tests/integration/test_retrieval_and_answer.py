@@ -7,9 +7,12 @@ import pytest
 
 from sage_vault_rag.adapters.bge_m3.embedder import BgeM3Embedder
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
+from sage_vault_rag.adapters.fake_generation.generator import FakeGenerationAdapter
 from sage_vault_rag.adapters.milvus.store import MilvusVectorStore
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
+from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.application.indexing.service import IndexingService
+from sage_vault_rag.model.events import Completed, Delta, Refused, Started
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
 from sage_vault_rag.ports.callback import CallbackPort
@@ -51,7 +54,7 @@ def milvus_store() -> Generator[MilvusVectorStore]:
     store = MilvusVectorStore(
         host=host,
         port=port,
-        collection_name=f"verify_txt_indexing_{uuid.uuid4().hex[:8]}",
+        collection_name=f"verify_retrieval_answer_{uuid.uuid4().hex[:8]}",
         vector_dim=1024,
     )
     yield store
@@ -77,15 +80,14 @@ async def _index(
     embedder: BgeM3Embedder,
     milvus_store: MilvusVectorStore,
     chunker: ParagraphChunker,
-) -> tuple[IndexingCommand, IndexingResult]:
-    callback = InMemoryCallback()
+) -> None:
     service = IndexingService(
         document_storage=InMemoryDocumentStorage(content),
         text_parser=TxtParser(),
         chunker=chunker,
         embedder=embedder,
         vector_store=milvus_store,
-        callback=callback,
+        callback=InMemoryCallback(),
     )
     command = IndexingCommand(
         task_id=f"verify-{document_id}",
@@ -96,102 +98,93 @@ async def _index(
         source_url=f"http://minio/{filename}",
         request_id=f"req-{document_id}",
     )
-    result = await service.index(command)
-    return command, result
+    await service.index(command)
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
-async def test_short_single_paragraph_document(
+async def test_answer_streams_based_on_retrieved_chunks(
     embedder: BgeM3Embedder,
     milvus_store: MilvusVectorStore,
     chunker: ParagraphChunker,
 ) -> None:
-    """单一段落短文档应生成 1 个 chunk 并入 Milvus。"""
-    content = "Sage Vault 是企业知识库问答系统，支持文档上传与智能检索。".encode()
-    document_id = f"doc-short-{uuid.uuid4().hex[:8]}"
-    command, result = await _index(
-        content, document_id, "short.txt", 1, embedder, milvus_store, chunker
+    """真实 Milvus 中：索引中文文档后，同一知识库提问应得到基于召回片段的流式回答。"""
+    content = " Sage Vault 的员工福利包括带薪年假、健康体检和补充医疗保险。".encode()
+    document_id = f"doc-answer-{uuid.uuid4().hex[:8]}"
+    knowledge_base_id = 10
+    await _index(content, document_id, "benefits.txt", knowledge_base_id, embedder, milvus_store, chunker)
+
+    service = AnsweringService(
+        embedder=embedder,
+        vector_store=milvus_store,
+        generator=FakeGenerationAdapter(delta_length=4),
+        top_k=3,
+        refusal_threshold=1.0,
     )
 
-    assert result.success is True
-    assert result.chunks_count == 1
-    assert await milvus_store.count_by_document(command.document_id) == 1
+    events = [event async for event in service.answer(knowledge_base_id, "员工福利有哪些？", "gen-1")]
 
-    collection = milvus_store._get_collection()
-    collection.load()
-    rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
-        output_fields=["chunk_id", "knowledge_base_id", "document_id", "filename", "sequence", "text"],
-    )
-    assert len(rows) == 1
-    assert rows[0]["knowledge_base_id"] == 1
-    assert rows[0]["document_id"] == command.document_id
-    assert rows[0]["filename"] == "short.txt"
-    assert rows[0]["sequence"] == 0
-    assert "Sage Vault" in rows[0]["text"]
+    assert events[0] == Started("gen-1")
+    assert isinstance(events[-1], Completed)
+    deltas = [event.delta for event in events if isinstance(event, Delta)]
+    full_answer = "".join(deltas)
+    assert "带薪年假" in full_answer
+    assert "健康体检" in full_answer
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
-async def test_multi_paragraph_document_keeps_boundaries(
+async def test_similar_chunks_in_other_knowledge_base_are_not_recalled(
     embedder: BgeM3Embedder,
     milvus_store: MilvusVectorStore,
     chunker: ParagraphChunker,
 ) -> None:
-    """多段落文档应保持自然段落边界，每个段落对应一个 chunk。"""
-    content = (
-        "第一章 总则\n\n"
-        "第一条 为规范公司知识管理，制定本办法。\n\n"
-        "第二条 本办法适用于全体员工。\n\n"
-        "第三条 知识库按照主题进行分类维护。"
-    ).encode()
-    document_id = f"doc-paragraphs-{uuid.uuid4().hex[:8]}"
-    command, result = await _index(
-        content, document_id, "paragraphs.txt", 2, embedder, milvus_store, chunker
+    """真实 Milvus 隔离：语义相近的其他知识库片段不应被召回。"""
+    content_a = " Sage Vault 的员工福利包括带薪年假、健康体检和补充医疗保险。".encode()
+    content_b = " 另一家公司也提供带薪年假、健康体检和补充医疗保险。".encode()
+    document_a = f"doc-kb-a-{uuid.uuid4().hex[:8]}"
+    document_b = f"doc-kb-b-{uuid.uuid4().hex[:8]}"
+    await _index(content_a, document_a, "a.txt", 100, embedder, milvus_store, chunker)
+    await _index(content_b, document_b, "b.txt", 200, embedder, milvus_store, chunker)
+
+    service = AnsweringService(
+        embedder=embedder,
+        vector_store=milvus_store,
+        generator=FakeGenerationAdapter(delta_length=100),
+        top_k=3,
+        refusal_threshold=1.0,
     )
 
-    assert result.success is True
-    assert result.chunks_count == 2
-    assert await milvus_store.count_by_document(command.document_id) == 2
+    events = [event async for event in service.answer(100, "员工福利有哪些？", "gen-2")]
 
-    collection = milvus_store._get_collection()
-    collection.load()
-    rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
-        output_fields=["sequence", "text"],
-    )
-    rows.sort(key=lambda row: row["sequence"])
-    assert len(rows) == 2
-    assert rows[0]["text"].startswith("第一章 总则")
-    assert "本办法适用于全体员工" in rows[0]["text"]
-    assert rows[1]["text"].startswith("第三条")
+    assert isinstance(events[-1], Completed)
+    deltas = [event.delta for event in events if isinstance(event, Delta)]
+    full_answer = "".join(deltas)
+    assert "Sage Vault" in full_answer
+    assert "另一家公司" not in full_answer
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
-async def test_long_paragraph_is_chunked(
+async def test_unrelated_question_is_refused(
     embedder: BgeM3Embedder,
     milvus_store: MilvusVectorStore,
     chunker: ParagraphChunker,
 ) -> None:
-    """超长段落应按 chunk_size 切分为多个 chunk。"""
-    paragraph = "人工智能正在改变企业知识管理。" * 20
-    content = paragraph.encode()
-    document_id = f"doc-long-{uuid.uuid4().hex[:8]}"
-    command, result = await _index(
-        content, document_id, "long.txt", 3, embedder, milvus_store, chunker
+    """问题与文档内容无关时应返回 refused。"""
+    content = " Sage Vault 的员工福利包括带薪年假。".encode()
+    document_id = f"doc-refuse-{uuid.uuid4().hex[:8]}"
+    await _index(content, document_id, "benefits.txt", 30, embedder, milvus_store, chunker)
+
+    service = AnsweringService(
+        embedder=embedder,
+        vector_store=milvus_store,
+        generator=FakeGenerationAdapter(delta_length=4),
+        top_k=3,
+        refusal_threshold=0.1,
     )
 
-    assert result.success is True
-    assert result.chunks_count > 1
-    assert await milvus_store.count_by_document(command.document_id) == result.chunks_count
+    events = [event async for event in service.answer(30, "量子力学的基本原理是什么？", "gen-3")]
 
-    collection = milvus_store._get_collection()
-    collection.load()
-    rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
-        output_fields=["text"],
-    )
-    full_text = "".join(row["text"] for row in rows)
-    assert "人工智能正在改变企业知识管理" in full_text
+    assert events[0] == Started("gen-3")
+    assert isinstance(events[-1], Refused)
