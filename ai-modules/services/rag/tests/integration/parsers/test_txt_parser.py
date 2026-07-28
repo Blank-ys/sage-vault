@@ -16,10 +16,18 @@ class TestTxtParserIntegration:
             "第二章 知识库管理\n\n"
             "第三条 知识库按照主题进行分类维护。"
         ).encode()
-        text = await parser.parse(content, "regulations.txt")
-        assert "第一章 总则" in text
-        assert "第三条 知识库按照主题进行分类维护" in text
-        assert "\r" not in text
+        document = await parser.parse(content, "regulations.txt")
+
+        assert [p.text for p in document.paragraphs] == [
+            "第一章 总则",
+            "第一条 为规范公司知识管理，制定本办法。",
+            "第二条 本办法适用于全体员工。",
+            "第二章 知识库管理",
+            "第三条 知识库按照主题进行分类维护。",
+        ]
+        # TXT 解析器不识别标题或页码
+        assert all(p.heading is None for p in document.paragraphs)
+        assert all(p.page_number is None for p in document.paragraphs)
 
     async def test_rejects_unreliable_encoding(self, parser: TxtParser) -> None:
         # 随机字节通常会被检测到极低置信度并触发替换字符

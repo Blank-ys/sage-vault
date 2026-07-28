@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import pytest
 
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
+from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
+from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.model.chunk import Chunk
@@ -89,7 +91,7 @@ def fixture() -> IndexingServiceFixture:
     callback = InMemoryCallback()
     service = IndexingService(
         document_storage=InMemoryDocumentStorage(content),
-        text_parser=TxtParser(),
+        document_parser=TxtParser(),
         chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
         embedder=FakeEmbedder(),
         vector_store=vector_store,
@@ -130,7 +132,7 @@ async def test_index_failure_triggers_cleanup(command: IndexingCommand) -> None:
     callback = InMemoryCallback()
     failing_service = IndexingService(
         document_storage=InMemoryDocumentStorage(content),
-        text_parser=TxtParser(),
+        document_parser=TxtParser(),
         chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
         embedder=FakeEmbedder(),
         vector_store=FailingVectorStore(),
@@ -140,4 +142,43 @@ async def test_index_failure_triggers_cleanup(command: IndexingCommand) -> None:
     result = await failing_service.index(command)
 
     assert result.success is False
+    assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_index_md_failure_triggers_cleanup_and_callback(command: IndexingCommand) -> None:
+    """MD 空文档应使 IndexingService 走失败路径：清理 + 回调 success=False。
+
+    走 FormatDispatchingDocumentParser（与生产装配一致），验证扩展名分发后
+    MarkdownParser 抛出的 ValueError 经 IndexingService 映射为失败结果。
+    """
+    callback = InMemoryCallback()
+    vector_store = InMemoryVectorStore()
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(b""),
+        document_parser=FormatDispatchingDocumentParser({"md": MarkdownParser()}),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    md_command = IndexingCommand(
+        task_id="task-md",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-md",
+        filename="empty.md",
+        source_url="http://minio/empty.md",
+        request_id="req-md",
+    )
+
+    result = await service.index(md_command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "ValueError"
+    assert result.diagnostics["filename"] == "empty.md"
+    assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-md"]
     assert callback.results == [result]

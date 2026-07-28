@@ -2,13 +2,18 @@ import re
 import uuid
 
 from sage_vault_rag.model.chunk import Chunk
+from sage_vault_rag.model.parsed_document import ParsedDocument
 
-_PARAGRAPH_SPLIT = re.compile(r"\n\s*\n")
 _SENTENCE_END = re.compile(r"[。！？.!?]")
 
 
 class ParagraphChunker:
-    """优先保持自然段落边界，超长段落按长度与重叠切分。"""
+    """优先保持自然段边界，超长段落按长度与重叠切分。
+
+    输入为 `ParsedDocument`：解析器已按自然段（可能带标题/页码元数据）切分；
+    本 chunker 在此基础上按 `chunk_size` 合并相邻自然段，超长自然段按句子边界
+    与 `chunk_overlap` 切分。标题/页码元数据由 03e 工单写入 `Chunk`，本工单不涉及。
+    """
 
     def __init__(self, chunk_size: int, chunk_overlap: int) -> None:
         if chunk_size <= 0:
@@ -18,23 +23,29 @@ class ParagraphChunker:
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
 
-    def split(self, text: str, knowledge_base_id: int, document_id: str, filename: str) -> list[Chunk]:
-        paragraphs = [p.strip() for p in _PARAGRAPH_SPLIT.split(text) if p.strip()]
+    def split(
+        self,
+        document: ParsedDocument,
+        knowledge_base_id: int,
+        document_id: str,
+        filename: str,
+    ) -> list[Chunk]:
         chunk_texts: list[str] = []
         current = ""
-        for paragraph in paragraphs:
-            if len(paragraph) > self._chunk_size:
+        for paragraph in document.paragraphs:
+            paragraph_text = paragraph.text
+            if len(paragraph_text) > self._chunk_size:
                 if current:
                     chunk_texts.append(current)
                     current = ""
-                chunk_texts.extend(self._split_long_paragraph(paragraph))
+                chunk_texts.extend(self._split_long_paragraph(paragraph_text))
                 continue
-            candidate = f"{current}\n\n{paragraph}" if current else paragraph
+            candidate = f"{current}\n\n{paragraph_text}" if current else paragraph_text
             if len(candidate) <= self._chunk_size:
                 current = candidate
             else:
                 chunk_texts.append(current)
-                current = paragraph
+                current = paragraph_text
         if current:
             chunk_texts.append(current)
         return [
