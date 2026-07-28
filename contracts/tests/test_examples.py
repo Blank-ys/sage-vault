@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
+import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 
 
@@ -18,6 +19,20 @@ class ContractExamplesTest(unittest.TestCase):
         for event in example["events"]:
             schema = schemas[event["type"]]
             Draft202012Validator(schema, format_checker=FormatChecker()).validate(event)
+
+    def test_indexing_command_example_matches_schema(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        schemas = openapi["components"]["schemas"]
+        example = json.loads((root / "examples" / "indexing-command.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schemas["IndexingCommand"], format_checker=FormatChecker()).validate(example["request"])
+
+    def test_indexing_callback_example_matches_schema(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        schemas = openapi["components"]["schemas"]
+        example = json.loads((root / "examples" / "indexing-callback.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schemas["IndexingCallback"], format_checker=FormatChecker()).validate(example["request"])
 
 
 if __name__ == "__main__":

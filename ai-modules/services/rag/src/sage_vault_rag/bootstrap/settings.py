@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     service_port: int = 8000
     service_name: str = "sage-vault-rag"
 
+    # Java 回调
+    java_callback_url: str = ""
+    java_callback_signing_key: str = ""
+
     # Milvus
     milvus_host: str = "127.0.0.1"
     milvus_port: int = 19530

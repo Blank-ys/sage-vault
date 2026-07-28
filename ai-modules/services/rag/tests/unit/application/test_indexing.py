@@ -90,6 +90,7 @@ def command() -> IndexingCommand:
         document_id="doc-1",
         filename="test.txt",
         source_url="http://minio/test.txt",
+        request_id="req-1",
     )
 
 

@@ -11,3 +11,4 @@ class IndexingCommand:
     document_id: str
     filename: str
     source_url: str
+    request_id: str

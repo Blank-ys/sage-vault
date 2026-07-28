@@ -4,9 +4,11 @@ import com.sagevault.kb.document.adapter.MinioDocumentStorage;
 import com.sagevault.kb.document.domain.DocumentEntity;
 import com.sagevault.kb.document.domain.DocumentResponse;
 import com.sagevault.kb.document.domain.DocumentStatus;
+import com.sagevault.kb.document.domain.IndexingTaskEntity;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
 import com.sagevault.kb.document.service.DocumentService;
+import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,19 +24,28 @@ public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentMapper mapper;
     private final DocumentRecordWriter recordWriter;
+    private final IndexingTaskRecordWriter indexingTaskRecordWriter;
     private final MinioDocumentStorage storage;
+    private final IndexingCommandDispatcher dispatcher;
 
     public DocumentServiceImpl(DocumentMapper mapper, DocumentRecordWriter recordWriter,
-            MinioDocumentStorage storage) {
+            IndexingTaskRecordWriter indexingTaskRecordWriter, MinioDocumentStorage storage,
+            IndexingCommandDispatcher dispatcher) {
         this.mapper = mapper;
         this.recordWriter = recordWriter;
+        this.indexingTaskRecordWriter = indexingTaskRecordWriter;
         this.storage = storage;
+        this.dispatcher = dispatcher;
     }
 
     @Override
     public DocumentResponse upload(UploadDocumentRequest request) {
         DocumentEntity entity = recordWriter.create(request);
-        storeOriginal(entity, request);
+        if (!storeOriginal(entity, request)) {
+            return response(entity);
+        }
+        IndexingTaskEntity task = indexingTaskRecordWriter.create(entity);
+        dispatcher.dispatch(entity, task);
         return response(entity);
     }
 
@@ -43,14 +54,17 @@ public class DocumentServiceImpl implements DocumentService {
         return mapper.findByKbId(knowledgeBaseId).stream().map(this::response).toList();
     }
 
-    private void storeOriginal(DocumentEntity entity, UploadDocumentRequest request) {
+    private boolean storeOriginal(DocumentEntity entity, UploadDocumentRequest request) {
         try (InputStream content = request.file().getInputStream()) {
             storage.save(entity.getObjectKey(), content, entity.getSize(), CONTENT_TYPE_TXT);
+            return true;
         } catch (IOException exception) {
             log.error("Failed to read uploaded document {}", entity.getObjectKey(), exception);
             markFailed(entity, "读取上传文件失败");
+            return false;
         } catch (BusinessException exception) {
             markFailed(entity, exception.getMessage());
+            return false;
         }
     }
 

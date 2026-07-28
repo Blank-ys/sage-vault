@@ -1,0 +1,15 @@
+{
+  "request": {
+    "taskId": "task-01J3Q8Z9X0ABC123",
+    "attempt": 1,
+    "knowledgeBaseId": 7,
+    "documentId": "doc-01J3Q8Z9X0DEF456",
+    "filename": "regulations.txt",
+    "sourceUrl": "http://192.168.150.100:9000/sage-vault-documents/documents/7/uuid/regulations.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=600",
+    "requestId": "req-01J3Q8Z9X0GHI789"
+  },
+  "headers": {
+    "X-Sage-Timestamp": "1722049200",
+    "X-Sage-Signature": "abcdef1234567890"
+  }
+}

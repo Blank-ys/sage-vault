@@ -1,6 +1,7 @@
 import logging
 import os
 import uuid
+from collections.abc import Generator
 
 import pytest
 
@@ -45,7 +46,7 @@ def embedder() -> BgeM3Embedder:
 
 
 @pytest.fixture
-def milvus_store():
+def milvus_store() -> Generator[MilvusVectorStore]:
     host = os.environ.get("SAGE_VAULT_RAG_MILVUS_HOST", "127.0.0.1")
     port = int(os.environ.get("SAGE_VAULT_RAG_MILVUS_PORT", "19530"))
     store = MilvusVectorStore(
@@ -94,6 +95,7 @@ async def _index(
         document_id=document_id,
         filename=filename,
         source_url=f"http://minio/{filename}",
+        request_id=f"req-{document_id}",
     )
     result = await service.index(command)
     return command, result

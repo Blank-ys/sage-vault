@@ -1,4 +1,19 @@
 errors:
+  - code: 410010
+    name: INDEXING_COMMAND_INVALID
+    retryable: false
+  - code: 410011
+    name: INDEXING_CALLBACK_INVALID
+    retryable: false
+  - code: 410012
+    name: INDEXING_TASK_NOT_FOUND
+    retryable: false
   - code: 510001
     name: RAG_UNAVAILABLE
+    retryable: true
+  - code: 510004
+    name: INDEXING_DISPATCH_FAILED
+    retryable: true
+  - code: 510005
+    name: INDEXING_CALLBACK_FAILED
     retryable: true

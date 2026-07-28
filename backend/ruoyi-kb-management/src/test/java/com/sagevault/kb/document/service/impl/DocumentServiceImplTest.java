@@ -15,8 +15,11 @@ import com.sagevault.kb.document.adapter.MinioDocumentStorage;
 import com.sagevault.kb.document.domain.DocumentEntity;
 import com.sagevault.kb.document.domain.DocumentResponse;
 import com.sagevault.kb.document.domain.DocumentStatus;
+import com.sagevault.kb.document.domain.IndexingTaskEntity;
+import com.sagevault.kb.document.domain.IndexingTaskStatus;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
+import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.io.ByteArrayInputStream;
@@ -29,15 +32,20 @@ import org.springframework.web.multipart.MultipartFile;
 
 class DocumentServiceImplTest {
     @Test
-    void createsProcessingRecordThenStoresOriginalAndReturnsIt() throws Exception {
+    void createsProcessingRecordThenStoresOriginalDispatchesTaskAndReturnsIt() throws Exception {
         DocumentMapper mapper = mock(DocumentMapper.class);
         DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, storage);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
         byte[] content = "hello world".getBytes();
         MultipartFile file = file("notes.txt", content);
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", content.length);
+        IndexingTaskEntity task = taskEntity(entity.getId(), "task-1");
         when(recordWriter.create(any())).thenReturn(entity);
+        when(indexingTaskRecordWriter.create(entity)).thenReturn(task);
 
         DocumentResponse response = service.upload(new UploadDocumentRequest(7L, file));
 
@@ -45,6 +53,8 @@ class DocumentServiceImplTest {
         assertThat(response.filename()).isEqualTo("notes.txt");
         assertThat(response.size()).isEqualTo(11L);
         verify(storage).save(eq(entity.getObjectKey()), any(InputStream.class), eq(11L), eq("text/plain"));
+        verify(indexingTaskRecordWriter).create(entity);
+        verify(dispatcher).dispatch(entity, task);
         verify(mapper, never()).updateStatus(anyLong(), anyString(), anyString());
     }
 
@@ -52,8 +62,11 @@ class DocumentServiceImplTest {
     void marksFailedWhenStorageThrowsBusinessException() throws Exception {
         DocumentMapper mapper = mock(DocumentMapper.class);
         DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, storage);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
         byte[] content = "content".getBytes();
         MultipartFile file = file("notes.txt", content);
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", content.length);
@@ -68,6 +81,8 @@ class DocumentServiceImplTest {
         ArgumentCaptor<String> statusCaptor = ArgumentCaptor.forClass(String.class);
         verify(mapper).updateStatus(eq(entity.getId()), statusCaptor.capture(), eq("存储服务不可用"));
         assertThat(statusCaptor.getValue()).isEqualTo(DocumentStatus.FAILED.name());
+        verify(indexingTaskRecordWriter, never()).create(any());
+        verify(dispatcher, never()).dispatch(any(), any());
     }
 
     @Test
@@ -78,7 +93,8 @@ class DocumentServiceImplTest {
         when(mapper.findByKbId(7L)).thenReturn(List.of(first, second));
 
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
-                mock(MinioDocumentStorage.class));
+                mock(IndexingTaskRecordWriter.class), mock(MinioDocumentStorage.class),
+                mock(IndexingCommandDispatcher.class));
 
         assertThat(service.listByKnowledgeBase(7L)).extracting(DocumentResponse::filename)
                 .containsExactly("a.txt", "b.txt");
@@ -95,6 +111,16 @@ class DocumentServiceImplTest {
         entity.setSize(size);
         entity.setErrorMessage("");
         return entity;
+    }
+
+    private static IndexingTaskEntity taskEntity(long documentId, String taskId) {
+        IndexingTaskEntity task = new IndexingTaskEntity();
+        task.setId(100L);
+        task.setDocumentId(documentId);
+        task.setTaskId(taskId);
+        task.setAttempt(1);
+        task.setStatus(IndexingTaskStatus.PROCESSING);
+        return task;
     }
 
     private static MultipartFile file(String name, byte[] content) throws IOException {

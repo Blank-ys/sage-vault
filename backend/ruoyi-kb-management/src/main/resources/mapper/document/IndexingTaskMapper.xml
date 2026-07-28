@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.document.mapper.IndexingTaskMapper">
+    <resultMap id="indexingTaskResult" type="com.sagevault.kb.document.domain.IndexingTaskEntity">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="attempt" column="attempt"/>
+        <result property="status" column="status"/>
+        <result property="issuedAt" column="issued_at"/>
+        <result property="callbackReceivedAt" column="callback_received_at"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, document_id, task_id, attempt, status, issued_at, callback_received_at, error_message, created_at, updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.sagevault.kb.document.domain.IndexingTaskEntity"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_document_indexing_task (document_id, task_id, attempt, status, error_message)
+        VALUES (#{documentId}, #{taskId}, #{attempt}, #{status}, #{errorMessage})
+    </insert>
+
+    <select id="findByTaskId" resultMap="indexingTaskResult">
+        SELECT <include refid="columns"/> FROM sv_document_indexing_task WHERE task_id = #{taskId}
+    </select>
+
+    <update id="updateTerminalState">
+        UPDATE sv_document_indexing_task
+        SET attempt = #{attempt},
+            status = #{status},
+            error_message = #{errorMessage},
+            callback_received_at = #{callbackReceivedAt}
+        WHERE task_id = #{taskId}
+          AND (
+              attempt &lt; #{attempt}
+              OR (attempt = #{attempt} AND status NOT IN ('COMPLETED', 'FAILED'))
+          )
+    </update>
+</mapper>

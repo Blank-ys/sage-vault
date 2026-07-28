@@ -16,4 +16,8 @@ public class BusinessException extends RuntimeException {
     public ErrorCode errorCode() {
         return errorCode;
     }
+
+    public int getCode() {
+        return errorCode.code();
+    }
 }

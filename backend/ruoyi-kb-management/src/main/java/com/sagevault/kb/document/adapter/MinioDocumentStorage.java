@@ -5,15 +5,18 @@ import com.sagevault.kb.document.service.port.DocumentStorage;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import io.minio.BucketExistsArgs;
+import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.errors.MinioException;
+import io.minio.http.Method;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -50,6 +53,21 @@ public class MinioDocumentStorage implements DocumentStorage {
         } catch (MinioException | IOException | InvalidKeyException | NoSuchAlgorithmException exception) {
             log.error("Failed to store document object {}", objectKey, exception);
             throw new BusinessException(ErrorCode.DOCUMENT_STORAGE_FAILED, "文档原文件存储失败");
+        }
+    }
+
+    @Override
+    public String presignedUrl(String objectKey, Duration expiry) {
+        try {
+            return client.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(properties.bucket())
+                    .object(objectKey)
+                    .expiry((int) expiry.getSeconds())
+                    .build());
+        } catch (MinioException | IOException | InvalidKeyException | NoSuchAlgorithmException exception) {
+            log.error("Failed to generate presigned URL for object {}", objectKey, exception);
+            throw new BusinessException(ErrorCode.DOCUMENT_STORAGE_FAILED, "无法生成文档下载地址");
         }
     }
 
