@@ -5,12 +5,14 @@ import pytest
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
 from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
 from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
+from sage_vault_rag.adapters.pdf_parser.parser import PdfParser
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.model.chunk import Chunk
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
 from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
+from tests._pdf_fixtures import make_encrypted_pdf
 
 
 class InMemoryDocumentStorage:
@@ -181,4 +183,45 @@ async def test_index_md_failure_triggers_cleanup_and_callback(command: IndexingC
     assert result.diagnostics["filename"] == "empty.md"
     assert vector_store.saved == []
     assert vector_store.deleted == ["doc-md"]
+    assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_index_pdf_failure_triggers_cleanup_and_callback() -> None:
+    """加密 PDF 应使 IndexingService 走失败路径：清理 + 回调 success=False。
+
+    走 FormatDispatchingDocumentParser（与生产装配一致），验证扩展名分发后
+    PdfParser 抛出的 ValueError 经 IndexingService 映射为失败结果，
+    不向 Milvus 写入任何片段。
+    """
+    callback = InMemoryCallback()
+    vector_store = InMemoryVectorStore()
+    encrypted_content = make_encrypted_pdf("机密内容")
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(encrypted_content),
+        document_parser=FormatDispatchingDocumentParser({"pdf": PdfParser()}),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    pdf_command = IndexingCommand(
+        task_id="task-pdf",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-pdf",
+        filename="secret.pdf",
+        source_url="http://minio/secret.pdf",
+        request_id="req-pdf",
+    )
+
+    result = await service.index(pdf_command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "ValueError"
+    assert result.diagnostics["filename"] == "secret.pdf"
+    assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-pdf"]
     assert callback.results == [result]

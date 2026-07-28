@@ -11,6 +11,7 @@ dependencies = [
   "nacos-sdk-python>=3.2,<4",
   "pydantic-settings>=2.14,<3",
   "pymilvus>=2.4.10,<2.5",
+  "pypdf>=6.14,<7",
   "setuptools>=60,<71",
   "uvicorn>=0.51,<0.52",
 ]

@@ -20,6 +20,7 @@ from sage_vault_rag.adapters.java_callback.callback import JavaCallbackClient
 from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
 from sage_vault_rag.adapters.milvus.store import MilvusVectorStore
 from sage_vault_rag.adapters.nacos.registration import NacosRegistration
+from sage_vault_rag.adapters.pdf_parser.parser import PdfParser
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.application.indexing.service import IndexingService
@@ -149,6 +150,7 @@ def build_indexing_service(settings: Settings) -> IndexingService:
             {
                 "txt": TxtParser(),
                 "md": MarkdownParser(),
+                "pdf": PdfParser(),
             }
         ),
         chunker=ParagraphChunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
