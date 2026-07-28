@@ -25,9 +25,9 @@
             :auto-upload="false"
             :show-file-list="false"
             :on-change="handleFileChange"
-            accept=".txt"
+            accept=".txt,.pdf,.docx,.md"
           >
-            <el-button type="primary" :loading="uploading" :disabled="!selectedKnowledgeBaseId">上传 TXT</el-button>
+            <el-button type="primary" :loading="uploading" :disabled="!selectedKnowledgeBaseId">上传文档</el-button>
           </el-upload>
         </el-form-item>
       </el-form>
@@ -84,13 +84,16 @@ async function load() {
   }
 }
 
+const allowedExtensions = ['.txt', '.pdf', '.docx', '.md']
+
 async function handleFileChange(file) {
   if (!selectedKnowledgeBaseId.value) {
     ElMessage.warning('请先选择知识库')
     return
   }
-  if (!file.name.toLowerCase().endsWith('.txt')) {
-    ElMessage.warning('仅支持上传 TXT 文件')
+  const lowerName = file.name.toLowerCase()
+  if (!allowedExtensions.some(ext => lowerName.endsWith(ext))) {
+    ElMessage.warning('仅支持上传 TXT、PDF、DOCX、MD 文件')
     return
   }
   uploading.value = true

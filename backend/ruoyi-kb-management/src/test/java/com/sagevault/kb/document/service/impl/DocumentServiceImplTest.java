@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -56,6 +57,41 @@ class DocumentServiceImplTest {
         verify(indexingTaskRecordWriter).create(entity);
         verify(dispatcher).dispatch(entity, task);
         verify(mapper, never()).updateStatus(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void storesOriginalWithContentTypeMatchingFileExtension() throws Exception {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
+        MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
+
+        uploadAndVerifyContentType(recordWriter, indexingTaskRecordWriter, storage, service,
+                "spec.pdf", "application/pdf");
+        uploadAndVerifyContentType(recordWriter, indexingTaskRecordWriter, storage, service,
+                "guide.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        uploadAndVerifyContentType(recordWriter, indexingTaskRecordWriter, storage, service,
+                "readme.md", "text/markdown");
+    }
+
+    private static void uploadAndVerifyContentType(DocumentRecordWriter recordWriter,
+            IndexingTaskRecordWriter indexingTaskRecordWriter, MinioDocumentStorage storage,
+            DocumentServiceImpl service, String filename, String expectedContentType) throws Exception {
+        byte[] content = "content".getBytes();
+        MultipartFile file = file(filename, content);
+        DocumentEntity entity = processingEntity(7L, 11L, filename, "documents/11/uuid/" + filename, content.length);
+        IndexingTaskEntity task = taskEntity(entity.getId(), "task-1");
+        when(recordWriter.create(any())).thenReturn(entity);
+        when(indexingTaskRecordWriter.create(entity)).thenReturn(task);
+
+        service.upload(new UploadDocumentRequest(7L, file));
+
+        verify(storage).save(eq(entity.getObjectKey()), any(InputStream.class), eq((long) content.length),
+                eq(expectedContentType));
+        clearInvocations(storage);
     }
 
     @Test

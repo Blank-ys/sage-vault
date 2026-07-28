@@ -38,9 +38,25 @@ class DocumentFilenameTest {
     }
 
     @Test
-    void rejectsNonTxtFiles() {
-        assertThatThrownBy(() -> DocumentFilename.of("report.pdf"))
+    void rejectsUnsupportedExtension() {
+        assertThatThrownBy(() -> DocumentFilename.of("archive.exe"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("仅支持上传 TXT 文件");
+                .hasMessageContaining("仅支持上传 TXT、PDF、DOCX、MD 文件");
+    }
+
+    @Test
+    void acceptsPdfDocxAndMdExtensions() {
+        assertThat(DocumentFilename.of("spec.pdf").extension()).isEqualTo("pdf");
+        assertThat(DocumentFilename.of("guide.DOCX").extension()).isEqualTo("docx");
+        assertThat(DocumentFilename.of("notes.Md").extension()).isEqualTo("md");
+    }
+
+    @Test
+    void resolvesContentTypeByExtension() {
+        assertThat(DocumentFilename.of("notes.txt").contentType()).isEqualTo("text/plain");
+        assertThat(DocumentFilename.of("spec.pdf").contentType()).isEqualTo("application/pdf");
+        assertThat(DocumentFilename.of("guide.docx").contentType())
+                .isEqualTo("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        assertThat(DocumentFilename.of("readme.md").contentType()).isEqualTo("text/markdown");
     }
 }

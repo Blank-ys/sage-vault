@@ -2,6 +2,7 @@ package com.sagevault.kb.document.service.impl;
 
 import com.sagevault.kb.document.adapter.MinioDocumentStorage;
 import com.sagevault.kb.document.domain.DocumentEntity;
+import com.sagevault.kb.document.domain.DocumentFilename;
 import com.sagevault.kb.document.domain.DocumentResponse;
 import com.sagevault.kb.document.domain.DocumentStatus;
 import com.sagevault.kb.document.domain.IndexingTaskEntity;
@@ -20,7 +21,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class DocumentServiceImpl implements DocumentService {
     private static final Logger log = LoggerFactory.getLogger(DocumentServiceImpl.class);
-    private static final String CONTENT_TYPE_TXT = "text/plain";
 
     private final DocumentMapper mapper;
     private final DocumentRecordWriter recordWriter;
@@ -56,7 +56,8 @@ public class DocumentServiceImpl implements DocumentService {
 
     private boolean storeOriginal(DocumentEntity entity, UploadDocumentRequest request) {
         try (InputStream content = request.file().getInputStream()) {
-            storage.save(entity.getObjectKey(), content, entity.getSize(), CONTENT_TYPE_TXT);
+            String contentType = DocumentFilename.of(entity.getFilename()).contentType();
+            storage.save(entity.getObjectKey(), content, entity.getSize(), contentType);
             return true;
         } catch (IOException exception) {
             log.error("Failed to read uploaded document {}", entity.getObjectKey(), exception);
