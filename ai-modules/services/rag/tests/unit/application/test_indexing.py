@@ -129,6 +129,39 @@ async def test_index_success(command: IndexingCommand, fixture: IndexingServiceF
 
 
 @pytest.mark.asyncio
+async def test_index_propagates_section_title_from_markdown_to_chunks() -> None:
+    """03e：MD 文档入库后，保存到向量库的 Chunk 应携带 section_title 元数据。"""
+    content = "# 总则\n\n第一条 为规范公司知识管理，制定本办法。".encode()
+    vector_store = InMemoryVectorStore()
+    callback = InMemoryCallback()
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(content),
+        document_parser=FormatDispatchingDocumentParser({"md": MarkdownParser()}),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    md_command = IndexingCommand(
+        task_id="task-md-meta",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-md-meta",
+        filename="regulations.md",
+        source_url="http://minio/regulations.md",
+        request_id="req-md-meta",
+    )
+
+    result = await service.index(md_command)
+
+    assert result.success is True
+    assert len(vector_store.saved) >= 1
+    for chunk, _ in vector_store.saved:
+        assert chunk.section_title == "总则"
+        assert chunk.page_number is None
+
+
+@pytest.mark.asyncio
 async def test_index_failure_triggers_cleanup(command: IndexingCommand) -> None:
     content = "第一段。\n\n第二段。".encode()
     callback = InMemoryCallback()

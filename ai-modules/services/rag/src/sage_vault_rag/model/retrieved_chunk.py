@@ -11,3 +11,5 @@ class RetrievedChunk:
     sequence: int
     text: str
     score: float
+    section_title: str | None = None
+    page_number: int | None = None

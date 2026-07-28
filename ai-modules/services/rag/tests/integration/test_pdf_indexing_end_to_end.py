@@ -131,6 +131,15 @@ async def test_pdf_indexing_publishes_chunks_with_page_numbers(
     full_text = "\n\n".join(row["text"] for row in rows)
     assert "知识库管理办法" in full_text
 
+    # 03e：通过 search 验证来源元数据在召回结果中可观察
+    # PDF 解析器为片段填充 page_number（从 1 开始），section_title 始终为 None
+    query_vector = (await embedder.embed(["知识库管理办法"]))[0]
+    retrieved = await milvus_store.search(knowledge_base_id, query_vector, top_k=10)
+    assert len(retrieved) >= 1
+    for chunk in retrieved:
+        assert chunk.page_number == 1
+        assert chunk.section_title is None
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")

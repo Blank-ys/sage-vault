@@ -140,6 +140,17 @@ async def test_markdown_indexing_publishes_chunks_with_headings(
     assert "知识库按照主题进行分类维护" in full_text
     assert "本办法适用于全体员工" in full_text
 
+    # 03e：通过 search 验证来源元数据在召回结果中可观察
+    # MD 解析器为片段填充 section_title，page_number 始终为 None
+    query_vector = (await embedder.embed(["知识库管理办法总则"]))[0]
+    retrieved = await milvus_store.search(knowledge_base_id, query_vector, top_k=10)
+    assert len(retrieved) >= 1
+    retrieved_titles = {chunk.section_title for chunk in retrieved if chunk.section_title is not None}
+    assert "知识库管理办法" in retrieved_titles
+    assert "总则" in retrieved_titles
+    for chunk in retrieved:
+        assert chunk.page_number is None
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")

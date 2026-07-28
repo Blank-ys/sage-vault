@@ -70,6 +70,9 @@ class MilvusVectorStore:
         self._collection.create_index(field_name="vector", index_params=index_params)
 
     def _build_schema(self) -> CollectionSchema:
+        # pymilvus 2.4.x 的 FieldSchema 静默忽略 nullable=True，VARCHAR/INT64 字段
+        # 不支持 None 值入库。section_title/page_number 使用空字符串/0 作为哨兵值
+        # 表示"无元数据"，由 save_chunks/search 在适配器边界与 None 双向转换。
         fields = [
             FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
             FieldSchema(name="knowledge_base_id", dtype=DataType.INT64),
@@ -77,6 +80,8 @@ class MilvusVectorStore:
             FieldSchema(name="filename", dtype=DataType.VARCHAR, max_length=512),
             FieldSchema(name="sequence", dtype=DataType.INT64),
             FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="section_title", dtype=DataType.VARCHAR, max_length=512),
+            FieldSchema(name="page_number", dtype=DataType.INT64),
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=self._vector_dim),
         ]
         return CollectionSchema(fields, description="Sage Vault document chunks")
@@ -94,6 +99,8 @@ class MilvusVectorStore:
             [chunk.filename for chunk in chunks],
             [chunk.sequence for chunk in chunks],
             [chunk.text for chunk in chunks],
+            [chunk.section_title if chunk.section_title is not None else "" for chunk in chunks],
+            [chunk.page_number if chunk.page_number is not None else 0 for chunk in chunks],
             vectors,
         ]
         collection.insert(entities)
@@ -137,11 +144,13 @@ class MilvusVectorStore:
             param={"metric_type": "L2", "params": {}},
             limit=top_k,
             expr=f"knowledge_base_id == {knowledge_base_id}",
-            output_fields=["chunk_id", "document_id", "filename", "sequence", "text"],
+            output_fields=["chunk_id", "document_id", "filename", "sequence", "text", "section_title", "page_number"],
         )
         chunks: list[RetrievedChunk] = []
         for hits in results:
             for hit in hits:
+                section_title_raw = hit.entity.get("section_title")
+                page_number_raw = hit.entity.get("page_number")
                 chunks.append(
                     RetrievedChunk(
                         chunk_id=hit.entity.get("chunk_id"),
@@ -150,6 +159,8 @@ class MilvusVectorStore:
                         sequence=hit.entity.get("sequence"),
                         text=hit.entity.get("text"),
                         score=float(hit.distance),
+                        section_title=section_title_raw if section_title_raw != "" else None,
+                        page_number=page_number_raw if page_number_raw != 0 else None,
                     )
                 )
         return chunks
