@@ -46,8 +46,18 @@ class MilvusVectorStore:
             return self._collection
         self._connect()
         if utility.has_collection(self._collection_name, using=self._alias):
-            self._collection = Collection(self._collection_name, using=self._alias)
-            return self._collection
+            collection = Collection(self._collection_name, using=self._alias)
+            if self._schema_matches(collection):
+                self._collection = collection
+                return self._collection
+            logger.warning(
+                "Collection %s schema mismatch; dropping and recreating. "
+                "Expected fields: %s, existing fields: %s",
+                self._collection_name,
+                [field.name for field in self._build_schema().fields],
+                [field.name for field in collection.schema.fields],
+            )
+            utility.drop_collection(self._collection_name, using=self._alias)
         schema = self._build_schema()
         self._collection = Collection(
             name=self._collection_name,
@@ -85,6 +95,34 @@ class MilvusVectorStore:
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=self._vector_dim),
         ]
         return CollectionSchema(fields, description="Sage Vault document chunks")
+
+    def _schema_matches(self, collection: Collection) -> bool:
+        """校验现有 collection 的 schema 与目标 schema 是否一致。"""
+        expected = self._build_schema()
+        expected_fields = {field.name: field for field in expected.fields}
+        actual_fields = {field.name: field for field in collection.schema.fields}
+        if set(expected_fields.keys()) != set(actual_fields.keys()):
+            return False
+        for name, expected_field in expected_fields.items():
+            actual_field = actual_fields[name]
+            if expected_field.dtype != actual_field.dtype:
+                return False
+            if expected_field.is_primary != actual_field.is_primary:
+                return False
+            if expected_field.dtype == DataType.FLOAT_VECTOR:
+                expected_dim = self._vector_dim_from_field(expected_field)
+                actual_dim = self._vector_dim_from_field(actual_field)
+                if expected_dim != actual_dim:
+                    return False
+        return True
+
+    @staticmethod
+    def _vector_dim_from_field(field: FieldSchema) -> int | None:
+        """从 FieldSchema 中读取向量维度。"""
+        dim = getattr(field, "dim", None)
+        if dim is None and field.params is not None:
+            dim = field.params.get("dim")
+        return dim
 
     async def save_chunks(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
         if len(chunks) != len(vectors):
