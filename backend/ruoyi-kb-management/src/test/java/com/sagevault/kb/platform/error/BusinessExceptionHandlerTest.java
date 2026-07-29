@@ -26,6 +26,6 @@ class BusinessExceptionHandlerTest {
         R<Void> response = handler.handleMaxUploadSizeExceeded(exception);
 
         assertThat(response.getCode()).isEqualTo(ErrorCode.DOCUMENT_FILE_TOO_LARGE.code());
-        assertThat(response.getMsg()).isEqualTo("上传文件应小于50MB");
+        assertThat(response.getMsg()).isEqualTo("上传文件不得超过50MB");
     }
 }

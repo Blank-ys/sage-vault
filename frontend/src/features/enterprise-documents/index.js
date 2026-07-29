@@ -1,1 +1,1 @@
-export { listDocuments, uploadDocument } from './api/documents'
+export { listDocuments, uploadDocument, uploadDocuments } from './api/documents'

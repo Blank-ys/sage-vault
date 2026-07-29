@@ -40,6 +40,18 @@
         WHERE kb_id = #{kbId} AND normalized_name = #{normalizedName}
     </select>
 
+    <select id="findByKbIdAndNormalizedNames" resultMap="documentResult">
+        SELECT <include refid="columns"/>
+        FROM sv_enterprise_document
+        WHERE kb_id = #{kbId}
+        <if test="normalizedNames != null and normalizedNames.size() > 0">
+            AND normalized_name IN
+            <foreach collection="normalizedNames" item="name" open="(" separator="," close=")">
+                #{name}
+            </foreach>
+        </if>
+    </select>
+
     <select id="findByKbId" resultMap="documentResult">
         SELECT <include refid="columns"/>
         FROM sv_enterprise_document

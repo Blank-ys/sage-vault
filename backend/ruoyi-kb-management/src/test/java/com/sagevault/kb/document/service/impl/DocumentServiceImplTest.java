@@ -1,6 +1,7 @@
 package com.sagevault.kb.document.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.sagevault.kb.document.adapter.MinioDocumentStorage;
@@ -134,6 +136,117 @@ class DocumentServiceImplTest {
 
         assertThat(service.listByKnowledgeBase(7L)).extracting(DocumentResponse::filename)
                 .containsExactly("a.txt", "b.txt");
+    }
+
+    @Test
+    void uploadBatchProcessesEachFileIndependentlyAfterValidation() throws Exception {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
+        MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
+        MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
+        MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
+        DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
+        DocumentEntity secondEntity = processingEntity(7L, 12L, "beta.pdf", "key-b", 4);
+        IndexingTaskEntity firstTask = taskEntity(11L, "task-1");
+        IndexingTaskEntity secondTask = taskEntity(12L, "task-2");
+        when(recordWriter.create(new UploadDocumentRequest(7L, firstFile))).thenReturn(firstEntity);
+        when(recordWriter.create(new UploadDocumentRequest(7L, secondFile))).thenReturn(secondEntity);
+        when(indexingTaskRecordWriter.create(firstEntity)).thenReturn(firstTask);
+        when(indexingTaskRecordWriter.create(secondEntity)).thenReturn(secondTask);
+
+        List<DocumentResponse> responses = service.uploadBatch(7L, List.of(firstFile, secondFile));
+
+        verify(recordWriter).validateBatch(7L, List.of(firstFile, secondFile));
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).filename()).isEqualTo("alpha.txt");
+        assertThat(responses.get(1).filename()).isEqualTo("beta.pdf");
+        verify(dispatcher).dispatch(firstEntity, firstTask);
+        verify(dispatcher).dispatch(secondEntity, secondTask);
+    }
+
+    @Test
+    void uploadBatchRejectsEntireBatchWhenValidationFailsWithoutPersistence() throws Exception {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
+        MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
+        MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
+        MultipartFile secondFile = file("alpha.txt", "alpha".getBytes());
+        doThrow(new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT, "以下文件名在知识库内或本批中已存在：alpha.txt"))
+                .when(recordWriter).validateBatch(eq(7L), any());
+
+        assertThatThrownBy(() -> service.uploadBatch(7L, List.of(firstFile, secondFile)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("alpha.txt");
+
+        verify(recordWriter, never()).create(any());
+        verifyNoInteractions(storage, indexingTaskRecordWriter, dispatcher);
+    }
+
+    @Test
+    void uploadBatchContinuesOtherFilesWhenOneStorageFails() throws Exception {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
+        MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
+        MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
+        MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
+        DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
+        DocumentEntity secondEntity = processingEntity(7L, 12L, "beta.pdf", "key-b", 4);
+        IndexingTaskEntity secondTask = taskEntity(12L, "task-2");
+        when(recordWriter.create(any())).thenReturn(firstEntity, secondEntity);
+        doThrow(new BusinessException(ErrorCode.DOCUMENT_STORAGE_FAILED, "存储服务不可用"))
+                .when(storage).save(eq("key-a"), any(InputStream.class), anyLong(), anyString());
+        when(indexingTaskRecordWriter.create(secondEntity)).thenReturn(secondTask);
+
+        List<DocumentResponse> responses = service.uploadBatch(7L, List.of(firstFile, secondFile));
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).status()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(responses.get(1).status()).isEqualTo(DocumentStatus.PROCESSING);
+        verify(dispatcher, never()).dispatch(eq(firstEntity), any());
+        verify(dispatcher).dispatch(secondEntity, secondTask);
+    }
+
+    @Test
+    void uploadBatchContinuesOtherFilesWhenOneDispatchFails() throws Exception {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        DocumentRecordWriter recordWriter = mock(DocumentRecordWriter.class);
+        IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
+        MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
+                dispatcher);
+        MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
+        MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
+        DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
+        DocumentEntity secondEntity = processingEntity(7L, 12L, "beta.pdf", "key-b", 4);
+        IndexingTaskEntity firstTask = taskEntity(11L, "task-1");
+        IndexingTaskEntity secondTask = taskEntity(12L, "task-2");
+        when(recordWriter.create(any())).thenReturn(firstEntity, secondEntity);
+        when(indexingTaskRecordWriter.create(firstEntity)).thenReturn(firstTask);
+        when(indexingTaskRecordWriter.create(secondEntity)).thenReturn(secondTask);
+        doThrow(new BusinessException(ErrorCode.RAG_UNAVAILABLE, "RAG 服务暂不可用"))
+                .when(dispatcher).dispatch(eq(firstEntity), eq(firstTask));
+
+        List<DocumentResponse> responses = service.uploadBatch(7L, List.of(firstFile, secondFile));
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).status()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(responses.get(0).errorMessage()).contains("RAG 服务暂不可用");
+        assertThat(responses.get(1).status()).isEqualTo(DocumentStatus.PROCESSING);
+        verify(mapper).updateStatus(eq(firstEntity.getId()), eq(DocumentStatus.FAILED.name()), anyString());
+        verify(dispatcher).dispatch(secondEntity, secondTask);
     }
 
     private static DocumentEntity processingEntity(long kbId, long id, String filename, String objectKey, long size) {

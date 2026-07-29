@@ -1,6 +1,7 @@
 package com.sagevault.kb.document.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -104,6 +105,51 @@ class DocumentAuthorizationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(ErrorCode.DOCUMENT_FILENAME_CONFLICT.code()))
                 .andExpect(jsonPath("$.msg").value("该知识库下已存在同名文档"));
+    }
+
+    @Test
+    void generalUserCannotUploadBatch() throws Exception {
+        authenticate(Set.of());
+        MockMultipartFile file = new MockMultipartFile("files", "report.txt", "text/plain", "content".getBytes());
+
+        mockMvc.perform(multipart("/documents/batch").file(file).param("knowledgeBaseId", "7")
+                        .header("Authorization", "Bearer token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void knowledgeAdministratorCanUploadBatch() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION));
+        MockMultipartFile firstFile = new MockMultipartFile("files", "alpha.txt", "text/plain", "a".getBytes());
+        MockMultipartFile secondFile = new MockMultipartFile("files", "beta.pdf", "application/pdf", "b".getBytes());
+        when(service.uploadBatch(anyLong(), any())).thenReturn(List.of(
+                new DocumentResponse(1L, 7L, "alpha.txt", "alpha.txt", DocumentStatus.PROCESSING, 1L, "",
+                        LocalDateTime.now(), LocalDateTime.now()),
+                new DocumentResponse(2L, 7L, "beta.pdf", "beta.pdf", DocumentStatus.PROCESSING, 1L, "",
+                        LocalDateTime.now(), LocalDateTime.now())));
+
+        mockMvc.perform(multipart("/documents/batch").file(firstFile).file(secondFile).param("knowledgeBaseId", "7")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].filename").value("alpha.txt"))
+                .andExpect(jsonPath("$.data[1].filename").value("beta.pdf"));
+    }
+
+    @Test
+    void batchConflictReturnsRegisteredErrorCodeAndAllConflicts() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION));
+        when(service.uploadBatch(anyLong(), any())).thenThrow(new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT,
+                "以下文件名在知识库内或本批中已存在：alpha.txt、beta.pdf"));
+        MockMultipartFile file = new MockMultipartFile("files", "alpha.txt", "text/plain", "content".getBytes());
+
+        mockMvc.perform(multipart("/documents/batch").file(file).param("knowledgeBaseId", "7")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(ErrorCode.DOCUMENT_FILENAME_CONFLICT.code()))
+                .andExpect(jsonPath("$.msg").value("以下文件名在知识库内或本批中已存在：alpha.txt、beta.pdf"));
     }
 
     private void authenticate(Set<String> permissions) {
