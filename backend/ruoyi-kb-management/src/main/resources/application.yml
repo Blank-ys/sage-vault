@@ -7,6 +7,10 @@ spring:
     url: ${SAGE_VAULT_DB_URL}
     username: ${SAGE_VAULT_DB_USERNAME}
     password: ${SAGE_VAULT_DB_PASSWORD}
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
 
 sage-vault:
   rag:

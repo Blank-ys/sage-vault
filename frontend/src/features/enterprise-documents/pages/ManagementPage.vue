@@ -85,6 +85,7 @@ async function load() {
 }
 
 const allowedExtensions = ['.txt', '.pdf', '.docx', '.md']
+const MAX_FILE_SIZE = 50 * 1024 * 1024
 
 async function handleFileChange(file) {
   if (!selectedKnowledgeBaseId.value) {
@@ -94,6 +95,10 @@ async function handleFileChange(file) {
   const lowerName = file.name.toLowerCase()
   if (!allowedExtensions.some(ext => lowerName.endsWith(ext))) {
     ElMessage.warning('仅支持上传 TXT、PDF、DOCX、MD 文件')
+    return
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    ElMessage.warning('上传文件不得超过50MB')
     return
   }
   uploading.value = true
