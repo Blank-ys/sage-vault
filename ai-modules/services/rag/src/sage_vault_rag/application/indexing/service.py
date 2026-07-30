@@ -5,28 +5,33 @@ from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
 from sage_vault_rag.ports.callback import CallbackPort
 from sage_vault_rag.ports.chunker import ChunkerPort
+from sage_vault_rag.ports.document_parser import DocumentParserPort
 from sage_vault_rag.ports.document_storage import DocumentStoragePort
 from sage_vault_rag.ports.embedding import EmbeddingPort
-from sage_vault_rag.ports.text_parser import TextParserPort
 from sage_vault_rag.ports.vector_store import VectorStorePort
 
 logger = logging.getLogger(__name__)
 
 
 class IndexingService:
-    """单文档入库流程编排：下载、解析、切块、嵌入、写入 Milvus、回调。"""
+    """单文档入库流程编排：下载、解析、切块、嵌入、写入 Milvus、回调。
+
+    使用 `DocumentParserPort` 获取结构化文档（自然段列表 + 可选标题/页码元数据），
+    再交给 `ChunkerPort` 切块。任意步骤失败仍走既有清理与回调路径，
+    失败原因记录在 `IndexingResult.diagnostics`，不向 Java 暴露异常细节。
+    """
 
     def __init__(
         self,
         document_storage: DocumentStoragePort,
-        text_parser: TextParserPort,
+        document_parser: DocumentParserPort,
         chunker: ChunkerPort,
         embedder: EmbeddingPort,
         vector_store: VectorStorePort,
         callback: CallbackPort,
     ) -> None:
         self._document_storage = document_storage
-        self._text_parser = text_parser
+        self._document_parser = document_parser
         self._chunker = chunker
         self._embedder = embedder
         self._vector_store = vector_store
@@ -36,9 +41,9 @@ class IndexingService:
         chunks: list[Chunk] = []
         try:
             content = await self._document_storage.download(command.source_url)
-            text = await self._text_parser.parse(content, command.filename)
+            document = await self._document_parser.parse(content, command.filename)
             chunks = self._chunker.split(
-                text,
+                document,
                 command.knowledge_base_id,
                 command.document_id,
                 command.filename,

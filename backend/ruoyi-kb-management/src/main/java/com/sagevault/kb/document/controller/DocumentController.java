@@ -5,6 +5,7 @@ import com.ruoyi.common.security.annotation.RequiresPermissions;
 import com.sagevault.kb.document.domain.DocumentResponse;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.service.DocumentService;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +28,13 @@ public class DocumentController {
     @PostMapping
     public R<DocumentResponse> upload(@RequestParam long knowledgeBaseId, @RequestPart MultipartFile file) {
         return R.ok(service.upload(new UploadDocumentRequest(knowledgeBaseId, file)));
+    }
+
+    @RequiresPermissions("sage:document:manage")
+    @PostMapping("/batch")
+    public R<List<DocumentResponse>> uploadBatch(@RequestParam long knowledgeBaseId,
+            @RequestPart MultipartFile[] files) {
+        return R.ok(service.uploadBatch(knowledgeBaseId, Arrays.asList(files)));
     }
 
     @RequiresPermissions("sage:document:manage")

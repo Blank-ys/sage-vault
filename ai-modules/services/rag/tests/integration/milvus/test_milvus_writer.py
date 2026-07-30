@@ -2,7 +2,14 @@ import os
 import uuid
 
 import pytest
-from pymilvus import MilvusException
+from pymilvus import (
+    Collection,
+    CollectionSchema,
+    DataType,
+    FieldSchema,
+    MilvusException,
+    utility,
+)
 
 from sage_vault_rag.adapters.milvus.store import MilvusVectorStore
 from sage_vault_rag.model.chunk import Chunk
@@ -51,6 +58,42 @@ def _chunks(document_id: str, knowledge_base_id: int, count: int) -> list[Chunk]
     ]
 
 
+def _chunks_with_metadata(document_id: str, knowledge_base_id: int) -> list[Chunk]:
+    """构造带 section_title/page_number 的片段，用于验证元数据 round-trip。"""
+    return [
+        Chunk(
+            chunk_id=f"{document_id}-title",
+            knowledge_base_id=knowledge_base_id,
+            document_id=document_id,
+            filename="regulations.md",
+            sequence=0,
+            text="知识库管理办法总则",
+            section_title="总则",
+            page_number=None,
+        ),
+        Chunk(
+            chunk_id=f"{document_id}-page",
+            knowledge_base_id=knowledge_base_id,
+            document_id=document_id,
+            filename="regulations.pdf",
+            sequence=1,
+            text="第三页的正文内容",
+            section_title=None,
+            page_number=3,
+        ),
+        Chunk(
+            chunk_id=f"{document_id}-both",
+            knowledge_base_id=knowledge_base_id,
+            document_id=document_id,
+            filename="regulations.docx",
+            sequence=2,
+            text="第二章适用范围",
+            section_title="适用范围",
+            page_number=5,
+        ),
+    ]
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
 async def test_save_and_delete_by_document(vector_store: MilvusVectorStore, milvus_available: bool) -> None:
@@ -84,3 +127,79 @@ async def test_documents_are_isolated_by_document_id(vector_store: MilvusVectorS
     await vector_store.delete_by_document("doc-a")
     assert await vector_store.count_by_document("doc-a") == 0
     assert await vector_store.count_by_document("doc-b") == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
+async def test_search_returns_section_title_and_page_number(vector_store: MilvusVectorStore, milvus_available: bool) -> None:
+    """写入带元数据的片段后，search 应在召回结果中回显 section_title 与 page_number。"""
+    if not milvus_available:
+        pytest.skip("Milvus 不可达")
+    chunks = _chunks_with_metadata("doc-meta", 42)
+    vectors = [
+        [0.9, 0.1, 0.0, 0.0],
+        [0.1, 0.9, 0.0, 0.0],
+        [0.5, 0.5, 0.0, 0.0],
+    ]
+
+    await vector_store.save_chunks(chunks, vectors)
+
+    results = await vector_store.search(knowledge_base_id=42, vector=[0.9, 0.1, 0.0, 0.0], top_k=3)
+    assert len(results) == 3
+    by_chunk_id = {chunk.chunk_id: chunk for chunk in chunks}
+    for result in results:
+        original = by_chunk_id[result.chunk_id]
+        assert result.section_title == original.section_title
+        assert result.page_number == original.page_number
+        assert result.filename == original.filename
+        assert result.sequence == original.sequence
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
+async def test_search_returns_none_metadata_for_chunks_without_section_title_or_page(
+    vector_store: MilvusVectorStore, milvus_available: bool
+) -> None:
+    """TXT 等无元数据片段入库后，search 召回时 section_title/page_number 应为 None。"""
+    if not milvus_available:
+        pytest.skip("Milvus 不可达")
+    chunks = _chunks("doc-plain", 7, 2)
+    vectors = [[0.1, 0.2, 0.3, 0.4], [0.2, 0.3, 0.4, 0.5]]
+
+    await vector_store.save_chunks(chunks, vectors)
+
+    results = await vector_store.search(knowledge_base_id=7, vector=[0.1, 0.2, 0.3, 0.4], top_k=2)
+    assert len(results) == 2
+    for result in results:
+        assert result.section_title is None
+        assert result.page_number is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not os.environ.get("SAGE_VAULT_RAG_RUN_MILVUS_TESTS"), reason="需要显式启用 Milvus 集成测试")
+async def test_save_chunks_succeeds_after_schema_mismatch(vector_store: MilvusVectorStore, milvus_available: bool) -> None:
+    """先创建旧版 7 字段 collection，再使用 MilvusVectorStore，验证自动重建后可正常写入。"""
+    if not milvus_available:
+        pytest.skip("Milvus 不可达")
+    vector_store._connect()
+    old_fields = [
+        FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
+        FieldSchema(name="knowledge_base_id", dtype=DataType.INT64),
+        FieldSchema(name="document_id", dtype=DataType.VARCHAR, max_length=64),
+        FieldSchema(name="filename", dtype=DataType.VARCHAR, max_length=512),
+        FieldSchema(name="sequence", dtype=DataType.INT64),
+        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=4),
+    ]
+    old_schema = CollectionSchema(old_fields, description="Legacy Sage Vault document chunks")
+    collection = Collection(name=vector_store._collection_name, schema=old_schema, using=vector_store._alias)
+    index_params = {"index_type": "FLAT", "metric_type": "L2", "params": {}}
+    collection.create_index(field_name="vector", index_params=index_params)
+
+    chunks = _chunks("doc-mismatch", 3, 2)
+    vectors = [[0.1, 0.2, 0.3, 0.4], [0.2, 0.3, 0.4, 0.5]]
+
+    await vector_store.save_chunks(chunks, vectors)
+
+    assert await vector_store.count_by_document("doc-mismatch") == 2
+    utility.drop_collection(vector_store._collection_name, using=vector_store._alias)

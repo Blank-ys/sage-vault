@@ -1,6 +1,7 @@
 package com.sagevault.kb.document.mapper;
 
 import com.sagevault.kb.document.domain.DocumentEntity;
+import java.util.Collection;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
@@ -14,6 +15,9 @@ public interface DocumentMapper {
 
     DocumentEntity findByKbIdAndNormalizedName(@Param("kbId") long kbId,
             @Param("normalizedName") String normalizedName);
+
+    List<DocumentEntity> findByKbIdAndNormalizedNames(@Param("kbId") long kbId,
+            @Param("normalizedNames") Collection<String> normalizedNames);
 
     List<DocumentEntity> findByKbId(long kbId);
 }

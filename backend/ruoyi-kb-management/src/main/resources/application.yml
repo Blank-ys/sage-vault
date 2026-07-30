@@ -1,13 +1,3 @@
-mybatis:
-  mapper-locations: classpath*:mapper/**/*.xml
-
-spring:
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${SAGE_VAULT_DB_URL}
-    username: ${SAGE_VAULT_DB_USERNAME}
-    password: ${SAGE_VAULT_DB_PASSWORD}
-
 sage-vault:
   rag:
     service-id: sage-vault-rag

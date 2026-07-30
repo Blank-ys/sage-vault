@@ -11,3 +11,5 @@ class Chunk:
     filename: str
     sequence: int
     text: str
+    section_title: str | None = None
+    page_number: int | None = None

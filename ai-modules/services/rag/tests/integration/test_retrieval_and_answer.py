@@ -83,7 +83,7 @@ async def _index(
 ) -> None:
     service = IndexingService(
         document_storage=InMemoryDocumentStorage(content),
-        text_parser=TxtParser(),
+        document_parser=TxtParser(),
         chunker=chunker,
         embedder=embedder,
         vector_store=milvus_store,

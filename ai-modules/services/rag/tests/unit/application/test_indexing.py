@@ -3,12 +3,16 @@ from dataclasses import dataclass
 import pytest
 
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
+from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
+from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
+from sage_vault_rag.adapters.pdf_parser.parser import PdfParser
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.model.chunk import Chunk
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
 from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
+from tests._pdf_fixtures import make_encrypted_pdf
 
 
 class InMemoryDocumentStorage:
@@ -89,7 +93,7 @@ def fixture() -> IndexingServiceFixture:
     callback = InMemoryCallback()
     service = IndexingService(
         document_storage=InMemoryDocumentStorage(content),
-        text_parser=TxtParser(),
+        document_parser=TxtParser(),
         chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
         embedder=FakeEmbedder(),
         vector_store=vector_store,
@@ -125,12 +129,45 @@ async def test_index_success(command: IndexingCommand, fixture: IndexingServiceF
 
 
 @pytest.mark.asyncio
+async def test_index_propagates_section_title_from_markdown_to_chunks() -> None:
+    """03e：MD 文档入库后，保存到向量库的 Chunk 应携带 section_title 元数据。"""
+    content = "# 总则\n\n第一条 为规范公司知识管理，制定本办法。".encode()
+    vector_store = InMemoryVectorStore()
+    callback = InMemoryCallback()
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(content),
+        document_parser=FormatDispatchingDocumentParser({"md": MarkdownParser()}),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    md_command = IndexingCommand(
+        task_id="task-md-meta",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-md-meta",
+        filename="regulations.md",
+        source_url="http://minio/regulations.md",
+        request_id="req-md-meta",
+    )
+
+    result = await service.index(md_command)
+
+    assert result.success is True
+    assert len(vector_store.saved) >= 1
+    for chunk, _ in vector_store.saved:
+        assert chunk.section_title == "总则"
+        assert chunk.page_number is None
+
+
+@pytest.mark.asyncio
 async def test_index_failure_triggers_cleanup(command: IndexingCommand) -> None:
     content = "第一段。\n\n第二段。".encode()
     callback = InMemoryCallback()
     failing_service = IndexingService(
         document_storage=InMemoryDocumentStorage(content),
-        text_parser=TxtParser(),
+        document_parser=TxtParser(),
         chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
         embedder=FakeEmbedder(),
         vector_store=FailingVectorStore(),
@@ -140,4 +177,84 @@ async def test_index_failure_triggers_cleanup(command: IndexingCommand) -> None:
     result = await failing_service.index(command)
 
     assert result.success is False
+    assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_index_md_failure_triggers_cleanup_and_callback(command: IndexingCommand) -> None:
+    """MD 空文档应使 IndexingService 走失败路径：清理 + 回调 success=False。
+
+    走 FormatDispatchingDocumentParser（与生产装配一致），验证扩展名分发后
+    MarkdownParser 抛出的 ValueError 经 IndexingService 映射为失败结果。
+    """
+    callback = InMemoryCallback()
+    vector_store = InMemoryVectorStore()
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(b""),
+        document_parser=FormatDispatchingDocumentParser({"md": MarkdownParser()}),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    md_command = IndexingCommand(
+        task_id="task-md",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-md",
+        filename="empty.md",
+        source_url="http://minio/empty.md",
+        request_id="req-md",
+    )
+
+    result = await service.index(md_command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "ValueError"
+    assert result.diagnostics["filename"] == "empty.md"
+    assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-md"]
+    assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_index_pdf_failure_triggers_cleanup_and_callback() -> None:
+    """加密 PDF 应使 IndexingService 走失败路径：清理 + 回调 success=False。
+
+    走 FormatDispatchingDocumentParser（与生产装配一致），验证扩展名分发后
+    PdfParser 抛出的 ValueError 经 IndexingService 映射为失败结果，
+    不向 Milvus 写入任何片段。
+    """
+    callback = InMemoryCallback()
+    vector_store = InMemoryVectorStore()
+    encrypted_content = make_encrypted_pdf("机密内容")
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(encrypted_content),
+        document_parser=FormatDispatchingDocumentParser({"pdf": PdfParser()}),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    pdf_command = IndexingCommand(
+        task_id="task-pdf",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-pdf",
+        filename="secret.pdf",
+        source_url="http://minio/secret.pdf",
+        request_id="req-pdf",
+    )
+
+    result = await service.index(pdf_command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "ValueError"
+    assert result.diagnostics["filename"] == "secret.pdf"
+    assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-pdf"]
     assert callback.results == [result]

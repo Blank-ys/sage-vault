@@ -8,10 +8,16 @@ import com.sagevault.kb.document.mapper.DocumentMapper;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Component
 public class DocumentRecordWriterImpl implements DocumentRecordWriter {
@@ -38,6 +44,38 @@ public class DocumentRecordWriterImpl implements DocumentRecordWriter {
             throw filenameConflict();
         }
         return entity;
+    }
+
+    @Override
+    public void validateBatch(long knowledgeBaseId, List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "至少选择一个文件");
+        }
+        knowledgeBases.requireAvailable(knowledgeBaseId);
+
+        Map<String, List<String>> normalizedToOriginals = new LinkedHashMap<>();
+        for (MultipartFile file : files) {
+            DocumentFilename filename = DocumentFilename.of(file.getOriginalFilename());
+            normalizedToOriginals.computeIfAbsent(filename.normalizedValue(), key -> new ArrayList<>())
+                    .add(filename.value());
+        }
+
+        LinkedHashSet<String> conflicts = new LinkedHashSet<>();
+        for (Map.Entry<String, List<String>> entry : normalizedToOriginals.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                conflicts.addAll(entry.getValue());
+            }
+        }
+        List<DocumentEntity> existing = mapper.findByKbIdAndNormalizedNames(knowledgeBaseId,
+                normalizedToOriginals.keySet());
+        for (DocumentEntity entity : existing) {
+            conflicts.addAll(normalizedToOriginals.get(entity.getNormalizedName()));
+        }
+
+        if (!conflicts.isEmpty()) {
+            throw new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT,
+                    "以下文件名在知识库内或本批中已存在：" + String.join("、", conflicts));
+        }
     }
 
     private void ensureUnique(long knowledgeBaseId, String normalizedName) {

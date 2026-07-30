@@ -13,11 +13,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sage_vault_rag.adapters.bge_m3.embedder import BgeM3Embedder
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
+from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
 from sage_vault_rag.adapters.document_storage.http_client import HttpDocumentStorage
+from sage_vault_rag.adapters.docx_parser.parser import DocxParser
 from sage_vault_rag.adapters.fake_generation.generator import FakeGenerationAdapter
 from sage_vault_rag.adapters.java_callback.callback import JavaCallbackClient
+from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
 from sage_vault_rag.adapters.milvus.store import MilvusVectorStore
 from sage_vault_rag.adapters.nacos.registration import NacosRegistration
+from sage_vault_rag.adapters.pdf_parser.parser import PdfParser
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.application.indexing.service import IndexingService
@@ -143,7 +147,14 @@ async def _run_indexing(runner: IndexingRunner, command: IndexingCommand) -> Non
 def build_indexing_service(settings: Settings) -> IndexingService:
     return IndexingService(
         document_storage=HttpDocumentStorage(),
-        text_parser=TxtParser(),
+        document_parser=FormatDispatchingDocumentParser(
+            {
+                "txt": TxtParser(),
+                "md": MarkdownParser(),
+                "pdf": PdfParser(),
+                "docx": DocxParser(),
+            }
+        ),
         chunker=ParagraphChunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
         embedder=_build_embedder(settings),
         vector_store=_build_vector_store(settings),

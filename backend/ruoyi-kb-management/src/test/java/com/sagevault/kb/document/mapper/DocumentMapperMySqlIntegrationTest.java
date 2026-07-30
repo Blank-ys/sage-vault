@@ -8,6 +8,8 @@ import com.sagevault.kb.document.domain.DocumentStatus;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
 import com.sagevault.kb.knowledgebase.mapper.KnowledgeBaseMapper;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.AfterEach;
@@ -110,10 +112,41 @@ class DocumentMapperMySqlIntegrationTest {
         assertThat(updated.getErrorMessage()).isEqualTo("parse failed");
     }
 
+    @Test
+    void findByKbIdAndNormalizedNamesReturnsMatchingRecordsAcrossStatuses() {
+        DocumentEntity processing = entity("Proc.txt", DocumentStatus.PROCESSING);
+        mapper.insert(processing);
+        DocumentEntity available = entity("Avail.pdf", DocumentStatus.AVAILABLE);
+        mapper.insert(available);
+        DocumentEntity failed = entity("Failed.md", DocumentStatus.FAILED);
+        mapper.insert(failed);
+        DocumentEntity unrelated = entity("Other.txt", DocumentStatus.PROCESSING);
+        mapper.insert(unrelated);
+
+        List<DocumentEntity> matches = mapper.findByKbIdAndNormalizedNames(knowledgeBaseId, List.of(
+                (prefix + "Proc.txt").toLowerCase(Locale.ROOT),
+                (prefix + "Avail.pdf").toLowerCase(Locale.ROOT),
+                (prefix + "Failed.md").toLowerCase(Locale.ROOT)));
+
+        assertThat(matches).extracting(DocumentEntity::getId)
+                .containsExactlyInAnyOrder(processing.getId(), available.getId(), failed.getId());
+    }
+
+    @Test
+    void findByKbIdAndNormalizedNamesReturnsEmptyForOtherKnowledgeBase() {
+        DocumentEntity entity = entity("Isolated.txt", DocumentStatus.PROCESSING);
+        mapper.insert(entity);
+
+        List<DocumentEntity> matches = mapper.findByKbIdAndNormalizedNames(knowledgeBaseId + 1, List.of(
+                entity.getNormalizedName()));
+
+        assertThat(matches).isEmpty();
+    }
+
     private long createKnowledgeBase() {
         KnowledgeBaseEntity knowledgeBase = new KnowledgeBaseEntity();
         knowledgeBase.setName(prefix + "KB");
-        knowledgeBase.setNormalizedName((prefix + "KB").toLowerCase(java.util.Locale.ROOT));
+        knowledgeBase.setNormalizedName((prefix + "KB").toLowerCase(Locale.ROOT));
         knowledgeBase.setDescription("test");
         knowledgeBase.setStatus(KnowledgeBaseStatus.AVAILABLE);
         knowledgeBaseMapper.insert(knowledgeBase);
@@ -124,7 +157,7 @@ class DocumentMapperMySqlIntegrationTest {
         DocumentEntity entity = new DocumentEntity();
         entity.setKbId(knowledgeBaseId);
         entity.setFilename(prefix + filename);
-        entity.setNormalizedName((prefix + filename).toLowerCase(java.util.Locale.ROOT));
+        entity.setNormalizedName((prefix + filename).toLowerCase(Locale.ROOT));
         entity.setStatus(status);
         entity.setObjectKey("documents/" + knowledgeBaseId + "/" + UUID.randomUUID() + "/" + filename);
         entity.setSize((long) filename.length());

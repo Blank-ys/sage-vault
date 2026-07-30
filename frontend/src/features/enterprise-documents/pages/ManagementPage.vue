@@ -7,6 +7,14 @@
         </div>
       </template>
 
+      <el-alert
+        class="bailian-notice"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="提示：用户问题和检索到的文档片段将发送到阿里云百炼进行回答生成。本提示不构成敏感分类或审批，请自行判断上传文档的敏感性。"
+      />
+
       <el-form :inline="true" class="search-form">
         <el-form-item label="知识库">
           <el-select v-model="selectedKnowledgeBaseId" placeholder="请选择知识库" clearable @change="load">
@@ -23,12 +31,22 @@
             ref="uploadRef"
             action=""
             :auto-upload="false"
-            :show-file-list="false"
+            :show-file-list="true"
             :on-change="handleFileChange"
-            accept=".txt"
+            :on-remove="handleFileRemove"
+            accept=".txt,.pdf,.docx,.md"
+            multiple
           >
-            <el-button type="primary" :loading="uploading" :disabled="!selectedKnowledgeBaseId">上传 TXT</el-button>
+            <el-button type="primary" :disabled="!selectedKnowledgeBaseId">选择文件</el-button>
           </el-upload>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="success"
+            :loading="uploading"
+            :disabled="!pendingFiles.length || !selectedKnowledgeBaseId"
+            @click="startBatchUpload"
+          >开始上传</el-button>
         </el-form-item>
       </el-form>
 
@@ -52,7 +70,7 @@
 <script setup>
 import { ElMessage } from 'element-plus'
 import { listKnowledgeBases } from '@/features/knowledge-bases'
-import { listDocuments, uploadDocument } from '../api/documents'
+import { listDocuments, uploadDocuments } from '../api/documents'
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -60,6 +78,7 @@ const selectedKnowledgeBaseId = ref(null)
 const knowledgeBases = ref([])
 const items = ref([])
 const uploadRef = ref(null)
+const pendingFiles = ref([])
 
 async function loadKnowledgeBases() {
   try {
@@ -84,25 +103,50 @@ async function load() {
   }
 }
 
-async function handleFileChange(file) {
+const allowedExtensions = ['.txt', '.pdf', '.docx', '.md']
+const MAX_FILE_SIZE = 50 * 1024 * 1024
+
+function handleFileChange(file, fileList) {
+  pendingFiles.value = fileList
+}
+
+function handleFileRemove(file, fileList) {
+  pendingFiles.value = fileList
+}
+
+async function startBatchUpload() {
   if (!selectedKnowledgeBaseId.value) {
     ElMessage.warning('请先选择知识库')
     return
   }
-  if (!file.name.toLowerCase().endsWith('.txt')) {
-    ElMessage.warning('仅支持上传 TXT 文件')
+  const validFiles = []
+  for (const entry of pendingFiles.value) {
+    const lowerName = entry.name.toLowerCase()
+    if (!allowedExtensions.some(ext => lowerName.endsWith(ext))) {
+      ElMessage.warning(`文件 ${entry.name} 不支持，仅支持 TXT、PDF、DOCX、MD`)
+      return
+    }
+    if (entry.size > MAX_FILE_SIZE) {
+      ElMessage.warning(`文件 ${entry.name} 超过50MB`)
+      return
+    }
+    validFiles.push(entry.raw)
+  }
+  if (!validFiles.length) {
+    ElMessage.warning('请至少选择一个文件')
     return
   }
   uploading.value = true
   try {
-    await uploadDocument(selectedKnowledgeBaseId.value, file.raw)
+    await uploadDocuments(selectedKnowledgeBaseId.value, validFiles)
     ElMessage.success('上传成功，文档处理中')
-    await load()
-  } finally {
-    uploading.value = false
+    pendingFiles.value = []
     if (uploadRef.value) {
       uploadRef.value.clearFiles()
     }
+    await load()
+  } finally {
+    uploading.value = false
   }
 }
 
@@ -130,4 +174,5 @@ loadKnowledgeBases()
 <style scoped>
 .header { display: flex; align-items: center; justify-content: space-between; }
 .search-form { margin-bottom: 16px; }
+.bailian-notice { margin-bottom: 16px; }
 </style>
