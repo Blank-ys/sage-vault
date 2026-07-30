@@ -14,21 +14,21 @@ spring:
     nacos:
       discovery:
         # 服务注册地址
-        server-addr: 192.168.150.100:8848
+        server-addr: ${NACOS_SERVER:192.168.150.100:8848}
       config:
         # 配置中心地址
-        server-addr: 192.168.150.100:8848
+        server-addr: ${NACOS_SERVER:192.168.150.100:8848}
     sentinel:
       # 取消控制台懒加载
       eager: true
       transport:
         # 控制台地址
-        dashboard: 192.168.150.100:8858
+        dashboard: ${SENTINEL_DASHBOARD:192.168.150.100:8858}
       # nacos配置持久化
       datasource:
         ds1:
           nacos:
-            server-addr: 192.168.150.100:8848
+            server-addr: ${NACOS_SERVER:192.168.150.100:8848}
             dataId: sentinel-ruoyi-gateway
             groupId: DEFAULT_GROUP
             data-type: json
