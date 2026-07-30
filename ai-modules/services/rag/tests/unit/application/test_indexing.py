@@ -11,6 +11,7 @@ from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.model.chunk import Chunk
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
+from sage_vault_rag.model.parsed_document import ParsedDocument
 from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
 from tests._pdf_fixtures import make_encrypted_pdf
 
@@ -77,6 +78,29 @@ class FailingVectorStore:
         top_k: int,
     ) -> list[RetrievedChunk]:
         return []
+
+
+class FailingChunker:
+    """切块阶段抛出异常，用于验证切块失败仍触发清理与失败回调。"""
+
+    def split(
+        self,
+        document: ParsedDocument,
+        knowledge_base_id: int,
+        document_id: str,
+        filename: str,
+    ) -> list[Chunk]:
+        raise RuntimeError("切块失败")
+
+
+class FailingEmbedder:
+    """嵌入阶段抛出异常，用于验证嵌入失败仍触发清理与失败回调。"""
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("嵌入失败")
+
+    async def ready(self) -> bool:
+        return True
 
 
 @dataclass
@@ -309,3 +333,64 @@ async def test_index_clears_stale_vectors_before_retry() -> None:
     fresh = [c for c, _ in vector_store.saved if c.document_id == "doc-retry"]
     assert len(fresh) == 1
     assert fresh[0].filename == "test.txt"
+
+
+@pytest.mark.asyncio
+async def test_index_chunk_failure_triggers_cleanup_and_callback(command: IndexingCommand) -> None:
+    """切块阶段失败应触发清理与失败回调，不写入任何片段。
+
+    验证 05 各阶段失败覆盖：切块失败时 IndexingService 走失败路径，
+    先删除残留向量（入库前 + 清理时各一次），回调 success=False，
+    diagnostics 包含异常类型与文件名。
+    """
+    callback = InMemoryCallback()
+    vector_store = InMemoryVectorStore()
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage("第一段。".encode()),
+        document_parser=TxtParser(),
+        chunker=FailingChunker(),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+
+    result = await service.index(command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "RuntimeError"
+    assert result.diagnostics["filename"] == "test.txt"
+    assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-1", "doc-1"]
+    assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_index_embed_failure_triggers_cleanup_and_callback(command: IndexingCommand) -> None:
+    """嵌入阶段失败应触发清理与失败回调，不写入任何片段。
+
+    验证 05 各阶段失败覆盖：嵌入失败时 IndexingService 走失败路径，
+    先删除残留向量（入库前 + 清理时各一次），回调 success=False。
+    """
+    callback = InMemoryCallback()
+    vector_store = InMemoryVectorStore()
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage("第一段。".encode()),
+        document_parser=TxtParser(),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FailingEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+
+    result = await service.index(command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "RuntimeError"
+    assert result.diagnostics["filename"] == "test.txt"
+    assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-1", "doc-1"]
+    assert callback.results == [result]

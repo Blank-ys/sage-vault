@@ -30,12 +30,8 @@ def build_multipart(fields: dict[str, str], files: dict[str, tuple[str, bytes, s
     return body, f"multipart/form-data; boundary={boundary}"
 
 
-class RetryAndAtomicPublicationSystemTest(unittest.TestCase):
-    """05 系统验收：注入解析失败，证明失败/重试期间没有部分内容被检索。
-
-    黑盒路径：浏览器 -> Gateway -> Java kb-management -> Python RAG -> Milvus。
-    不直连 Python、MinIO 或数据库，只通过 Gateway 观察 HTTP 行为。
-    """
+class _KnowledgeQaSystemTestBase(unittest.TestCase):
+    """系统验收公共基类：提供 Gateway HTTP 请求与轮询辅助。"""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -140,6 +136,41 @@ class RetryAndAtomicPublicationSystemTest(unittest.TestCase):
                         break
             time.sleep(3)
         return last_seen
+
+    def create_knowledge_base(self, unique: str) -> int:
+        """创建知识库并返回 ID。"""
+        _, body = self.request_json(
+            "POST",
+            "/ruoyi-kb-management/knowledge-bases",
+            self.admin_token,
+            {"name": unique, "description": "05 system test"},
+        )
+        result = json.loads(body)
+        assert result["code"] == 200, f"创建知识库应成功: {body}"
+        return result["data"]["id"]
+
+    def ask_question(self, conversation_id: int, question: str, request_id: str) -> str:
+        """发起问答并返回完整 SSE 流文本。"""
+        _, stream = self.request_stream(
+            "POST",
+            f"/ruoyi-kb-management/conversations/{conversation_id}/questions",
+            self.user_token,
+            {"question": question, "requestId": request_id},
+        )
+        return stream
+
+    def assert_refused(self, stream: str) -> None:
+        """断言流中包含拒答事件且包含空知识库提示。"""
+        assert "event:refused" in stream, f"应拒答: {stream}"
+        assert "该知识库暂无可用文档" in stream, f"应提示无可用文档: {stream}"
+
+
+class RetryAndAtomicPublicationSystemTest(_KnowledgeQaSystemTestBase):
+    """05 系统验收：注入解析失败，证明失败/重试期间没有部分内容被检索。
+
+    黑盒路径：浏览器 -> Gateway -> Java kb-management -> Python RAG -> Milvus。
+    不直连 Python、MinIO 或数据库，只通过 Gateway 观察 HTTP 行为。
+    """
 
     def test_failure_retry_and_atomic_publication(self) -> None:
         unique = f"sys05-{int(time.time())}"
@@ -308,6 +339,161 @@ class RetryAndAtomicPublicationSystemTest(unittest.TestCase):
             conflict["code"],
             "对 AVAILABLE 文档重试应返回 DOCUMENT_STATE_CONFLICT",
         )
+
+
+class StageFailureInjectionSystemTest(_KnowledgeQaSystemTestBase):
+    """05 系统验收：注入各阶段失败，证明失败期间没有部分内容被检索，
+    成功重试后可检索到完整内容。
+
+    需要 Python RAG 服务以环境变量 ``SAGE_VAULT_RAG_TEST_FAILURE_FLAG_FILE``
+    指向 flag 文件；测试通过 ``SAGE_VAULT_TEST_FAILURE_FLAG_FILE`` 指向同一文件。
+    未设置时跳过本测试。flag 文件内容为 ``chunk``/``embed``/``vector`` 时
+    对应阶段的适配器包装器注入失败；清空后重试可正常成功。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.flag_file = os.environ.get("SAGE_VAULT_TEST_FAILURE_FLAG_FILE", "")
+        if not cls.flag_file:
+            raise unittest.SkipTest(
+                "需要 SAGE_VAULT_TEST_FAILURE_FLAG_FILE 环境变量指向故障注入 flag 文件"
+            )
+
+    def setUp(self) -> None:
+        self._write_flag("")
+
+    def tearDown(self) -> None:
+        self._write_flag("")
+
+    def _write_flag(self, stage: str) -> None:
+        with open(self.flag_file, "w", encoding="utf-8") as handle:
+            handle.write(stage)
+
+    def test_stage_failures_and_successful_retry(self) -> None:
+        unique = f"sys05s-{int(time.time())}"
+        knowledge_base_id = self.create_knowledge_base(unique)
+
+        try:
+            failed_doc_ids = self._assert_each_stage_failure_not_retrievable(
+                knowledge_base_id, unique
+            )
+            self._assert_successful_retry_is_retrievable(
+                knowledge_base_id, unique, failed_doc_ids[0]
+            )
+        finally:
+            self._write_flag("")
+
+    def _assert_each_stage_failure_not_retrievable(
+        self, knowledge_base_id: int, unique: str
+    ) -> list[int]:
+        """对 chunk/embed/vector 三个阶段分别注入失败，验证失败期间无部分内容可检索。"""
+        _, conv_body = self.request_json(
+            "POST",
+            "/ruoyi-kb-management/conversations",
+            self.user_token,
+            {"knowledgeBaseId": knowledge_base_id},
+        )
+        conv = json.loads(conv_body)
+        self.assertEqual(200, conv["code"])
+        conversation_id = conv["data"]["id"]
+
+        failed_doc_ids: list[int] = []
+        for stage in ("chunk", "embed", "vector"):
+            with self.subTest(stage=stage):
+                self._write_flag(stage)
+                distinctive = f"阶段失败标记 {unique} {stage}"
+                content = f"{distinctive}\n\n用于验证原子发布的有效文档内容。".encode()
+                filename = f"fail-{stage}-{unique}.txt"
+
+                _, upload_body = self.request_multipart(
+                    "POST",
+                    "/ruoyi-kb-management/documents",
+                    self.admin_token,
+                    {"knowledgeBaseId": str(knowledge_base_id)},
+                    {"file": (filename, content, "text/plain")},
+                )
+                upload = json.loads(upload_body)
+                self.assertEqual(200, upload["code"], f"{stage} 阶段上传应返回 200")
+                document_id = upload["data"]["id"]
+                self.assertEqual("PROCESSING", upload["data"]["status"])
+
+                failed_doc = self.wait_for_status(knowledge_base_id, filename, "FAILED", timeout=180)
+                self.assertIsNotNone(failed_doc, f"{stage} 阶段注入失败应在超时前进入 FAILED")
+                self.assertEqual("FAILED", failed_doc["status"])
+                self.assertIn(
+                    "RAG 入库失败",
+                    failed_doc["errorMessage"],
+                    f"{stage} 阶段失败原因应保留可诊断信息",
+                )
+
+                stream = self.ask_question(
+                    conversation_id,
+                    f"{stage} 阶段有什么内容？",
+                    f"sys05s-{stage}-{unique}",
+                )
+                self.assert_refused(stream)
+
+                failed_doc_ids.append(document_id)
+
+        self._write_flag("")
+        return failed_doc_ids
+
+    def _assert_successful_retry_is_retrievable(
+        self, knowledge_base_id: int, unique: str, document_id: int
+    ) -> None:
+        """清空 flag 后重试失败文档，验证重试成功且内容可检索。
+
+        重试前 flag 已清空，原文件内容有效，重试应成功进入 AVAILABLE。
+        通过问答能检索到该文档唯一标记，证明成功重试后内容完整可检索。
+        原子性（仅存在一套片段）由单元测试 ``test_index_clears_stale_vectors_before_retry``
+        在应用层验证入库前 ``delete_by_document`` 清理残留向量。
+        """
+        _, list_body = self.request_json(
+            "GET",
+            f"/ruoyi-kb-management/documents?knowledgeBaseId={knowledge_base_id}",
+            self.admin_token,
+        )
+        docs = json.loads(list_body)
+        target = next(d for d in docs["data"] if d["id"] == document_id)
+        filename = target["filename"]
+        self.assertEqual("FAILED", target["status"], "重试前文档应为 FAILED")
+
+        _, retry_body = self.request_json(
+            "POST",
+            f"/ruoyi-kb-management/documents/{document_id}/retry",
+            self.admin_token,
+        )
+        retry = json.loads(retry_body)
+        self.assertEqual(200, retry["code"], "清空 flag 后重试应成功发起")
+        self.assertEqual("PROCESSING", retry["data"]["status"])
+        self.assertEqual(document_id, retry["data"]["id"], "重试保留文档身份")
+        self.assertEqual(filename, retry["data"]["filename"], "重试保留文件名")
+
+        available = self.wait_for_status(knowledge_base_id, filename, "AVAILABLE", timeout=180)
+        self.assertIsNotNone(available, "重试后应进入 AVAILABLE")
+        self.assertEqual("AVAILABLE", available["status"])
+
+        _, conv_body = self.request_json(
+            "POST",
+            "/ruoyi-kb-management/conversations",
+            self.user_token,
+            {"knowledgeBaseId": knowledge_base_id},
+        )
+        conv = json.loads(conv_body)
+        self.assertEqual(200, conv["code"])
+        conversation_id = conv["data"]["id"]
+
+        distinctive = f"阶段失败标记 {unique}"
+        stream = self.ask_question(
+            conversation_id,
+            distinctive,
+            f"sys05s-retry-{unique}",
+        )
+        self.assertIn("event:started", stream)
+        self.assertIn("event:completed", stream, "成功重试后应能完成回答")
+        self.assertNotIn("event:refused", stream, "成功重试后不应拒答")
+        self.assertIn(distinctive, stream, "应检索到重试成功文档的唯一内容")
 
 
 if __name__ == "__main__":

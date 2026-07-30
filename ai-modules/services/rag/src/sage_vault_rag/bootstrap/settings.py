@@ -37,4 +37,7 @@ class Settings(BaseSettings):
     retrieval_refusal_threshold: float = 1.0
     answer_delta_length: int = 5
 
+    # 测试模式故障注入（仅供系统验收测试使用，生产环境留空）
+    test_failure_flag_file: str = ""
+
     model_config = SettingsConfigDict(env_prefix="SAGE_VAULT_RAG_", env_file=".env")
