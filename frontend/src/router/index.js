@@ -89,19 +89,6 @@ export const constantRoutes = [
     ]
   },
   {
-    path: '/sage/enterprise-documents',
-    component: Layout,
-    permissions: ['sage:document:manage'],
-    children: [
-      {
-        path: '',
-        component: () => import('@/features/enterprise-documents/pages/ManagementPage.vue'),
-        name: 'EnterpriseDocuments',
-        meta: { title: '企业文档', icon: 'documentation' }
-      }
-    ]
-  },
-  {
     path: '/user',
     component: Layout,
     hidden: true,
