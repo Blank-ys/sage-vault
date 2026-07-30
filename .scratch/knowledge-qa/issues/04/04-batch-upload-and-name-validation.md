@@ -41,3 +41,8 @@
 - `DocumentAuthorizationTest`：覆盖 `/documents/batch` 的权限与基本参数校验。
 - `DocumentMapperMySqlIntegrationTest`：覆盖 `findByKbIdAndNormalizedNames` 在 MySQL 下的真实查询行为。
 - `BusinessExceptionHandlerTest`：补充 `MaxUploadSizeExceededException` 用例。
+
+## 边界说明
+
+- **空 `.txt` 文件**：前端扩展名校验通过，后端按 0 字节文件正常创建 `PROCESSING` 记录。RAG 解析阶段 `TxtParser` 对空内容返回 `ParsedDocument(paragraphs=[])`，`ParagraphChunker` 生成 0 个 chunk，`IndexingService` 最终返回 `success=true, chunks_count=0`，文档状态变为 `COMPLETED`。**空 TXT 不算解析失败**，也不影响同批其他文件的处理。
+- 如需在页面上验证"单篇失败不回滚其他文件"，应使用损坏的 PDF、空 `.md`/`.docx` 或其他无法提取文本/段落的文件作为失败样本。
