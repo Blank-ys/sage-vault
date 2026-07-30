@@ -10,6 +10,7 @@ import com.sagevault.kb.document.service.IndexingCallbackHandler;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,7 +46,7 @@ public class IndexingCallbackHandlerImpl implements IndexingCallbackHandler {
         }
         IndexingTaskStatus taskStatus = request.success() ? IndexingTaskStatus.COMPLETED : IndexingTaskStatus.FAILED;
         DocumentStatus documentStatus = request.success() ? DocumentStatus.AVAILABLE : DocumentStatus.FAILED;
-        String errorMessage = request.success() ? "" : "RAG 入库失败";
+        String errorMessage = request.success() ? "" : buildFailureMessage(request.diagnostics());
         LocalDateTime callbackReceivedAt = LocalDateTime.now();
         int updated = taskMapper.updateTerminalState(request.taskId(), request.attempt(), taskStatus.name(),
                 errorMessage, callbackReceivedAt);
@@ -58,5 +59,21 @@ public class IndexingCallbackHandlerImpl implements IndexingCallbackHandler {
 
     private static boolean isTerminal(IndexingTaskStatus status) {
         return status == IndexingTaskStatus.COMPLETED || status == IndexingTaskStatus.FAILED;
+    }
+
+    private static String buildFailureMessage(Map<String, Object> diagnostics) {
+        if (diagnostics == null || diagnostics.isEmpty()) {
+            return "RAG 入库失败";
+        }
+        Object error = diagnostics.get("error");
+        Object filename = diagnostics.get("filename");
+        StringBuilder message = new StringBuilder("RAG 入库失败");
+        if (filename != null && !filename.toString().isBlank()) {
+            message.append("（").append(filename).append("）");
+        }
+        if (error != null && !error.toString().isBlank()) {
+            message.append("：").append(error);
+        }
+        return message.toString();
     }
 }

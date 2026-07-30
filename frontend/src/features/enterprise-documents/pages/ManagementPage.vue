@@ -62,6 +62,17 @@
         <el-table-column prop="errorMessage" label="错误信息" show-overflow-tooltip />
         <el-table-column prop="createdAt" label="创建时间" width="180" />
         <el-table-column prop="updatedAt" label="更新时间" width="180" />
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="scope">
+            <el-button
+              v-if="scope.row.status === 'FAILED'"
+              type="primary"
+              size="small"
+              :loading="retryingId === scope.row.id"
+              @click="handleRetry(scope.row)"
+            >重试</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
   </div>
@@ -70,10 +81,11 @@
 <script setup>
 import { ElMessage } from 'element-plus'
 import { listKnowledgeBases } from '@/features/knowledge-bases'
-import { listDocuments, uploadDocuments } from '../api/documents'
+import { listDocuments, retryDocument, uploadDocuments } from '../api/documents'
 
 const loading = ref(false)
 const uploading = ref(false)
+const retryingId = ref(null)
 const selectedKnowledgeBaseId = ref(null)
 const knowledgeBases = ref([])
 const items = ref([])
@@ -154,7 +166,8 @@ function statusLabel(status) {
   const labels = {
     PROCESSING: '处理中',
     AVAILABLE: '可用',
-    FAILED: '失败'
+    FAILED: '失败',
+    DELETING: '删除中'
   }
   return labels[status] || status
 }
@@ -163,9 +176,23 @@ function statusType(status) {
   const types = {
     PROCESSING: 'warning',
     AVAILABLE: 'success',
-    FAILED: 'danger'
+    FAILED: 'danger',
+    DELETING: 'info'
   }
   return types[status] || 'info'
+}
+
+async function handleRetry(row) {
+  retryingId.value = row.id
+  try {
+    await retryDocument(row.id)
+    ElMessage.success('重试已发起，文档处理中')
+    await load()
+  } catch {
+    ElMessage.error('重试失败')
+  } finally {
+    retryingId.value = null
+  }
 }
 
 loadKnowledgeBases()

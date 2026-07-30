@@ -11,6 +11,9 @@ public interface DocumentMapper {
     int updateStatus(@Param("id") long id, @Param("status") String status,
             @Param("errorMessage") String errorMessage);
 
+    int updateStatusIfCurrentStatus(@Param("id") long id, @Param("newStatus") String newStatus,
+            @Param("errorMessage") String errorMessage, @Param("currentStatus") String currentStatus);
+
     DocumentEntity findById(long id);
 
     DocumentEntity findByKbIdAndNormalizedName(@Param("kbId") long kbId,

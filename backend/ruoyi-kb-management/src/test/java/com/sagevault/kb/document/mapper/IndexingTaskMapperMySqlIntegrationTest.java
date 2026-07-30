@@ -87,10 +87,11 @@ class IndexingTaskMapperMySqlIntegrationTest {
     @Test
     void insertsAndFindsTaskByTaskId() {
         DocumentEntity document = createDocument("Task.txt");
-        IndexingTaskEntity task = taskEntity(document.getId(), "task-1", IndexingTaskStatus.PROCESSING);
+        String taskId = prefix + "task-1";
+        IndexingTaskEntity task = taskEntity(document.getId(), taskId, IndexingTaskStatus.PROCESSING);
 
         indexingTaskMapper.insert(task);
-        IndexingTaskEntity found = indexingTaskMapper.findByTaskId("task-1");
+        IndexingTaskEntity found = indexingTaskMapper.findByTaskId(taskId);
 
         assertThat(found).isNotNull();
         assertThat(found.getDocumentId()).isEqualTo(document.getId());
@@ -101,35 +102,55 @@ class IndexingTaskMapperMySqlIntegrationTest {
     @Test
     void updateTerminalStateOnlyWhenAttemptIsHigher() {
         DocumentEntity document = createDocument("Attempt.txt");
-        IndexingTaskEntity task = taskEntity(document.getId(), "task-1", IndexingTaskStatus.PROCESSING);
+        String taskId = prefix + "task-idem";
+        IndexingTaskEntity task = taskEntity(document.getId(), taskId, IndexingTaskStatus.PROCESSING);
         indexingTaskMapper.insert(task);
 
-        int first = indexingTaskMapper.updateTerminalState("task-1", 1, IndexingTaskStatus.COMPLETED.name(), "",
+        int first = indexingTaskMapper.updateTerminalState(taskId, 1, IndexingTaskStatus.COMPLETED.name(), "",
                 LocalDateTime.now());
-        int second = indexingTaskMapper.updateTerminalState("task-1", 1, IndexingTaskStatus.COMPLETED.name(), "",
+        int second = indexingTaskMapper.updateTerminalState(taskId, 1, IndexingTaskStatus.COMPLETED.name(), "",
                 LocalDateTime.now());
 
         assertThat(first).isEqualTo(1);
         assertThat(second).isZero();
-        assertThat(indexingTaskMapper.findByTaskId("task-1").getStatus()).isEqualTo(IndexingTaskStatus.COMPLETED);
+        assertThat(indexingTaskMapper.findByTaskId(taskId).getStatus()).isEqualTo(IndexingTaskStatus.COMPLETED);
     }
 
     @Test
     void updateTerminalStateAdvancesAttempt() {
         DocumentEntity document = createDocument("Advance.txt");
-        IndexingTaskEntity task = taskEntity(document.getId(), "task-1", IndexingTaskStatus.PROCESSING);
+        String taskId = prefix + "task-adv";
+        IndexingTaskEntity task = taskEntity(document.getId(), taskId, IndexingTaskStatus.PROCESSING);
         indexingTaskMapper.insert(task);
 
-        int first = indexingTaskMapper.updateTerminalState("task-1", 1, IndexingTaskStatus.FAILED.name(), "error",
+        int first = indexingTaskMapper.updateTerminalState(taskId, 1, IndexingTaskStatus.FAILED.name(), "error",
                 LocalDateTime.now());
-        int second = indexingTaskMapper.updateTerminalState("task-1", 2, IndexingTaskStatus.COMPLETED.name(), "",
+        int second = indexingTaskMapper.updateTerminalState(taskId, 2, IndexingTaskStatus.COMPLETED.name(), "",
                 LocalDateTime.now());
 
         assertThat(first).isEqualTo(1);
         assertThat(second).isEqualTo(1);
-        IndexingTaskEntity updated = indexingTaskMapper.findByTaskId("task-1");
+        IndexingTaskEntity updated = indexingTaskMapper.findByTaskId(taskId);
         assertThat(updated.getAttempt()).isEqualTo(2);
         assertThat(updated.getStatus()).isEqualTo(IndexingTaskStatus.COMPLETED);
+    }
+
+    @Test
+    void findLatestByDocumentIdReturnsHighestAttempt() {
+        DocumentEntity document = createDocument("Latest.txt");
+        String firstTaskId = prefix + "task-latest-1";
+        String secondTaskId = prefix + "task-latest-2";
+        IndexingTaskEntity firstTask = taskEntity(document.getId(), firstTaskId, IndexingTaskStatus.PROCESSING);
+        indexingTaskMapper.insert(firstTask);
+        IndexingTaskEntity secondTask = taskEntity(document.getId(), secondTaskId, IndexingTaskStatus.PROCESSING);
+        secondTask.setAttempt(2);
+        indexingTaskMapper.insert(secondTask);
+
+        IndexingTaskEntity latest = indexingTaskMapper.findLatestByDocumentId(document.getId());
+
+        assertThat(latest).isNotNull();
+        assertThat(latest.getTaskId()).isEqualTo(secondTaskId);
+        assertThat(latest.getAttempt()).isEqualTo(2);
     }
 
     private long createKnowledgeBase() {

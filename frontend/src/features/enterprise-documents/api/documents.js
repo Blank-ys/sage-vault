@@ -31,3 +31,10 @@ export function listDocuments(knowledgeBaseId) {
     params: { knowledgeBaseId }
   }).then(res => res.data)
 }
+
+export function retryDocument(documentId) {
+  return request({
+    url: `/ruoyi-kb-management/documents/${documentId}/retry`,
+    method: 'post'
+  }).then(res => res.data)
+}

@@ -28,6 +28,14 @@
         SELECT <include refid="columns"/> FROM sv_document_indexing_task WHERE task_id = #{taskId}
     </select>
 
+    <select id="findLatestByDocumentId" resultMap="indexingTaskResult">
+        SELECT <include refid="columns"/>
+        FROM sv_document_indexing_task
+        WHERE document_id = #{documentId}
+        ORDER BY attempt DESC, id DESC
+        LIMIT 1
+    </select>
+
     <update id="updateTerminalState">
         UPDATE sv_document_indexing_task
         SET attempt = #{attempt},

@@ -29,6 +29,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,8 +42,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
         byte[] content = "hello world".getBytes();
         MultipartFile file = file("notes.txt", content);
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", content.length);
@@ -68,8 +69,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
 
         uploadAndVerifyContentType(recordWriter, indexingTaskRecordWriter, storage, service,
                 "spec.pdf", "application/pdf");
@@ -103,8 +104,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
         byte[] content = "content".getBytes();
         MultipartFile file = file("notes.txt", content);
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", content.length);
@@ -131,8 +132,8 @@ class DocumentServiceImplTest {
         when(mapper.findByKbId(7L)).thenReturn(List.of(first, second));
 
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
-                mock(IndexingTaskRecordWriter.class), mock(MinioDocumentStorage.class),
-                mock(IndexingCommandDispatcher.class));
+                mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
+                mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class));
 
         assertThat(service.listByKnowledgeBase(7L)).extracting(DocumentResponse::filename)
                 .containsExactly("a.txt", "b.txt");
@@ -145,8 +146,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
         DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
@@ -175,8 +176,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("alpha.txt", "alpha".getBytes());
         doThrow(new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT, "以下文件名在知识库内或本批中已存在：alpha.txt"))
@@ -197,8 +198,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
         DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
@@ -225,8 +226,8 @@ class DocumentServiceImplTest {
         IndexingTaskRecordWriter indexingTaskRecordWriter = mock(IndexingTaskRecordWriter.class);
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
-        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter, storage,
-                dispatcher);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
+                mock(RetryRecordWriter.class), storage, dispatcher);
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
         DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
@@ -278,5 +279,93 @@ class DocumentServiceImplTest {
         when(file.getSize()).thenReturn((long) content.length);
         when(file.getInputStream()).thenReturn(new ByteArrayInputStream(content));
         return file;
+    }
+
+    @Test
+    void retryDispatchesNewTaskAndReturnsProcessingDocument() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+        DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", 5);
+        entity.setStatus(DocumentStatus.PROCESSING);
+        entity.setErrorMessage("");
+        IndexingTaskEntity retryTask = taskEntity(11L, "task-retry-2");
+        retryTask.setAttempt(2);
+        when(retryRecordWriter.beginRetry(11L)).thenReturn(retryTask);
+        when(mapper.findById(11L)).thenReturn(entity);
+
+        DocumentResponse response = service.retry(11L);
+
+        assertThat(response.status()).isEqualTo(DocumentStatus.PROCESSING);
+        verify(retryRecordWriter).beginRetry(11L);
+        verify(dispatcher).dispatch(entity, retryTask);
+        verify(mapper, never()).updateStatus(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void retryMarksFailedWhenDispatchThrows() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+        DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", 5);
+        entity.setStatus(DocumentStatus.PROCESSING);
+        IndexingTaskEntity retryTask = taskEntity(11L, "task-retry-2");
+        retryTask.setAttempt(2);
+        when(retryRecordWriter.beginRetry(11L)).thenReturn(retryTask);
+        when(mapper.findById(11L)).thenReturn(entity);
+        doThrow(new BusinessException(ErrorCode.RAG_UNAVAILABLE, "RAG 服务暂不可用"))
+                .when(dispatcher).dispatch(eq(entity), eq(retryTask));
+
+        DocumentResponse response = service.retry(11L);
+
+        assertThat(response.status()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(response.errorMessage()).contains("RAG 服务暂不可用");
+        verify(mapper).updateStatus(eq(11L), eq(DocumentStatus.FAILED.name()), anyString());
+        verify(retryRecordWriter).failTask(eq(retryTask), anyString());
+    }
+
+    @Test
+    void retryPropagatesStateConflictFromRecordWriter() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+        when(retryRecordWriter.beginRetry(11L)).thenThrow(
+                new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT, "仅处理失败的文档可以重试"));
+
+        assertThatThrownBy(() -> service.retry(11L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getCode())
+                        .isEqualTo(ErrorCode.DOCUMENT_STATE_CONFLICT.code()));
+
+        verify(dispatcher, never()).dispatch(any(), any());
+        verify(mapper, never()).updateStatus(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void retryPreservesDocumentIdentityAndFilename() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
+        IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+        DocumentEntity entity = processingEntity(7L, 11L, "report.txt", "documents/11/uuid/report.txt", 10);
+        entity.setStatus(DocumentStatus.PROCESSING);
+        IndexingTaskEntity retryTask = taskEntity(11L, "task-retry-2");
+        retryTask.setAttempt(2);
+        when(retryRecordWriter.beginRetry(11L)).thenReturn(retryTask);
+        when(mapper.findById(11L)).thenReturn(entity);
+
+        DocumentResponse response = service.retry(11L);
+
+        assertThat(response.id()).isEqualTo(11L);
+        assertThat(response.filename()).isEqualTo("report.txt");
+        assertThat(response.knowledgeBaseId()).isEqualTo(7L);
+        verify(mapper, never()).insert(any());
     }
 }

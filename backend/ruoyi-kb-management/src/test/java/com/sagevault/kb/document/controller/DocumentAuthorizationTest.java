@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -150,6 +151,38 @@ class DocumentAuthorizationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(ErrorCode.DOCUMENT_FILENAME_CONFLICT.code()))
                 .andExpect(jsonPath("$.msg").value("以下文件名在知识库内或本批中已存在：alpha.txt、beta.pdf"));
+    }
+
+    @Test
+    void generalUserCannotRetryFailedDocument() throws Exception {
+        authenticate(Set.of());
+        mockMvc.perform(post("/documents/11/retry").header("Authorization", "Bearer token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void knowledgeAdministratorCanRetryFailedDocument() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION));
+        when(service.retry(11L)).thenReturn(new DocumentResponse(11L, 7L, "report.txt", "report.txt",
+                DocumentStatus.PROCESSING, 10L, "", LocalDateTime.now(), LocalDateTime.now()));
+
+        mockMvc.perform(post("/documents/11/retry").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+    }
+
+    @Test
+    void retryStateConflictReturnsRegisteredErrorCode() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION));
+        when(service.retry(11L)).thenThrow(new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
+                "仅处理失败的文档可以重试"));
+
+        mockMvc.perform(post("/documents/11/retry").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(ErrorCode.DOCUMENT_STATE_CONFLICT.code()))
+                .andExpect(jsonPath("$.msg").value("仅处理失败的文档可以重试"));
     }
 
     private void authenticate(Set<String> permissions) {

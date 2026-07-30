@@ -27,15 +27,17 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentMapper mapper;
     private final DocumentRecordWriter recordWriter;
     private final IndexingTaskRecordWriter indexingTaskRecordWriter;
+    private final RetryRecordWriter retryRecordWriter;
     private final MinioDocumentStorage storage;
     private final IndexingCommandDispatcher dispatcher;
 
     public DocumentServiceImpl(DocumentMapper mapper, DocumentRecordWriter recordWriter,
-            IndexingTaskRecordWriter indexingTaskRecordWriter, MinioDocumentStorage storage,
-            IndexingCommandDispatcher dispatcher) {
+            IndexingTaskRecordWriter indexingTaskRecordWriter, RetryRecordWriter retryRecordWriter,
+            MinioDocumentStorage storage, IndexingCommandDispatcher dispatcher) {
         this.mapper = mapper;
         this.recordWriter = recordWriter;
         this.indexingTaskRecordWriter = indexingTaskRecordWriter;
+        this.retryRecordWriter = retryRecordWriter;
         this.storage = storage;
         this.dispatcher = dispatcher;
     }
@@ -83,6 +85,21 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     public List<DocumentResponse> listByKnowledgeBase(long knowledgeBaseId) {
         return mapper.findByKbId(knowledgeBaseId).stream().map(this::response).toList();
+    }
+
+    @Override
+    public DocumentResponse retry(long documentId) {
+        IndexingTaskEntity task = retryRecordWriter.beginRetry(documentId);
+        DocumentEntity entity = mapper.findById(documentId);
+        try {
+            dispatcher.dispatch(entity, task);
+        } catch (RuntimeException exception) {
+            log.error("Failed to dispatch retry indexing task for document {}", documentId, exception);
+            String message = "重试派发失败：" + exception.getMessage();
+            retryRecordWriter.failTask(task, message);
+            markFailed(entity, message);
+        }
+        return response(entity);
     }
 
     private boolean storeOriginal(DocumentEntity entity, MultipartFile file) {

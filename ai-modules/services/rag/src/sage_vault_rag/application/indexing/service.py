@@ -40,6 +40,7 @@ class IndexingService:
     async def index(self, command: IndexingCommand) -> IndexingResult:
         chunks: list[Chunk] = []
         try:
+            await self._vector_store.delete_by_document(command.document_id)
             content = await self._document_storage.download(command.source_url)
             document = await self._document_parser.parse(content, command.filename)
             chunks = self._chunker.split(

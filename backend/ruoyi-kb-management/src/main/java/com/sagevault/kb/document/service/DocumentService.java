@@ -11,4 +11,6 @@ public interface DocumentService {
     List<DocumentResponse> uploadBatch(long knowledgeBaseId, List<MultipartFile> files);
 
     List<DocumentResponse> listByKnowledgeBase(long knowledgeBaseId);
+
+    DocumentResponse retry(long documentId);
 }

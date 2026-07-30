@@ -215,7 +215,7 @@ async def test_index_md_failure_triggers_cleanup_and_callback(command: IndexingC
     assert result.diagnostics["error"] == "ValueError"
     assert result.diagnostics["filename"] == "empty.md"
     assert vector_store.saved == []
-    assert vector_store.deleted == ["doc-md"]
+    assert vector_store.deleted == ["doc-md", "doc-md"]
     assert callback.results == [result]
 
 
@@ -256,5 +256,56 @@ async def test_index_pdf_failure_triggers_cleanup_and_callback() -> None:
     assert result.diagnostics["error"] == "ValueError"
     assert result.diagnostics["filename"] == "secret.pdf"
     assert vector_store.saved == []
-    assert vector_store.deleted == ["doc-pdf"]
+    assert vector_store.deleted == ["doc-pdf", "doc-pdf"]
     assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_index_clears_stale_vectors_before_retry() -> None:
+    """重试入库前先清理上次尝试残留的向量，确保原子发布。
+
+    模拟前次失败尝试遗留的向量仍存在于向量库，重试时应先删除再写入，
+    最终只保留本次成功写入的一套完整片段。
+    """
+    content = "第一段。\n\n第二段。".encode()
+    vector_store = InMemoryVectorStore()
+    callback = InMemoryCallback()
+
+    stale_chunk = Chunk(
+        chunk_id="stale-chunk-1",
+        knowledge_base_id=1,
+        document_id="doc-retry",
+        filename="old.txt",
+        sequence=0,
+        text="过期内容",
+    )
+    await vector_store.save_chunks([stale_chunk], [[0.5] * 4])
+
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage(content),
+        document_parser=TxtParser(),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+    retry_command = IndexingCommand(
+        task_id="task-retry",
+        attempt=2,
+        knowledge_base_id=1,
+        document_id="doc-retry",
+        filename="test.txt",
+        source_url="http://minio/test.txt",
+        request_id="req-retry",
+    )
+
+    result = await service.index(retry_command)
+
+    assert result.success is True
+    assert result.attempt == 2
+    assert vector_store.deleted == ["doc-retry"]
+    remaining_stale = [c for c, _ in vector_store.saved if c.chunk_id == "stale-chunk-1"]
+    assert remaining_stale == []
+    fresh = [c for c, _ in vector_store.saved if c.document_id == "doc-retry"]
+    assert len(fresh) == 1
+    assert fresh[0].filename == "test.txt"
