@@ -25,8 +25,10 @@ from sage_vault_rag.adapters.nacos.registration import NacosRegistration
 from sage_vault_rag.adapters.pdf_parser.parser import PdfParser
 from sage_vault_rag.adapters.txt_parser.parser import TxtParser
 from sage_vault_rag.application.answering.service import AnsweringService
+from sage_vault_rag.application.cleanup.service import CleanupService
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.bootstrap.settings import Settings
+from sage_vault_rag.model.cleanup_command import CleanupCommand
 from sage_vault_rag.model.events import Completed, Delta, Refused, Started
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.ports.chunker import ChunkerPort
@@ -56,6 +58,14 @@ class IndexingRequest(BaseModel):
     request_id: str = Field(alias="requestId", min_length=1)
 
 
+class CleanupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_id: str = Field(alias="taskId", min_length=1)
+    knowledge_base_id: int = Field(alias="knowledgeBaseId", gt=0)
+    document_id: str = Field(alias="documentId", min_length=1)
+    request_id: str = Field(alias="requestId", min_length=1)
+
+
 class ServiceRegistration(Protocol):
     async def register(self) -> None: ...
 
@@ -66,6 +76,10 @@ class IndexingRunner(Protocol):
     async def run(self, command: IndexingCommand) -> None: ...
 
 
+class CleanupRunner(Protocol):
+    async def run(self, command: CleanupCommand) -> None: ...
+
+
 class _IndexingServiceAdapter:
     def __init__(self, service: IndexingService) -> None:
         self._service = service
@@ -74,10 +88,19 @@ class _IndexingServiceAdapter:
         await self._service.index(command)
 
 
+class _CleanupServiceAdapter:
+    def __init__(self, service: CleanupService) -> None:
+        self._service = service
+
+    async def run(self, command: CleanupCommand) -> None:
+        await self._service.cleanup(command)
+
+
 def create_app(
     settings: Settings,
     answering: AnsweringService | None = None,
     indexing: IndexingRunner | None = None,
+    cleanup: CleanupRunner | None = None,
     registration: ServiceRegistration | None = None,
 ) -> FastAPI:
     service_registration = registration or NacosRegistration(settings)
@@ -93,8 +116,10 @@ def create_app(
     app = FastAPI(title="Sage Vault RAG", lifespan=lifespan)
     answer_service = answering or build_answering_service(settings)
     indexing_runner = indexing or _IndexingServiceAdapter(build_indexing_service(settings))
+    cleanup_runner = cleanup or _CleanupServiceAdapter(build_cleanup_service(settings))
     seen_requests: dict[str, int] = {}
     seen_indexing_requests: dict[str, int] = {}
+    seen_cleanup_requests: dict[str, int] = {}
 
     @app.post("/internal/v1/answers", response_class=StreamingResponse)
     async def answer(
@@ -139,6 +164,22 @@ def create_app(
         )
         background_tasks.add_task(_run_indexing, indexing_runner, command)
 
+    @app.post("/internal/v1/cleanup", status_code=202)
+    async def cleanup_document(
+        request: CleanupRequest,
+        background_tasks: BackgroundTasks,
+        x_sage_timestamp: str = Header(),
+        x_sage_signature: str = Header(),
+    ) -> None:
+        verify_cleanup_signature(request, x_sage_timestamp, x_sage_signature, settings, seen_cleanup_requests)
+        command = CleanupCommand(
+            task_id=request.task_id,
+            knowledge_base_id=request.knowledge_base_id,
+            document_id=request.document_id,
+            request_id=request.request_id,
+        )
+        background_tasks.add_task(_run_cleanup, cleanup_runner, command)
+
     return app
 
 
@@ -147,6 +188,13 @@ async def _run_indexing(runner: IndexingRunner, command: IndexingCommand) -> Non
         await runner.run(command)
     except Exception:
         logger.exception("Indexing task failed: task_id=%s attempt=%s", command.task_id, command.attempt)
+
+
+async def _run_cleanup(runner: CleanupRunner, command: CleanupCommand) -> None:
+    try:
+        await runner.run(command)
+    except Exception:
+        logger.exception("Cleanup task failed: task_id=%s document_id=%s", command.task_id, command.document_id)
 
 
 def build_indexing_service(settings: Settings) -> IndexingService:
@@ -185,6 +233,18 @@ def build_answering_service(settings: Settings) -> AnsweringService:
         generator=FakeGenerationAdapter(delta_length=settings.answer_delta_length),
         top_k=settings.retrieval_top_k,
         refusal_threshold=settings.retrieval_refusal_threshold,
+    )
+
+
+def build_cleanup_service(settings: Settings) -> CleanupService:
+    return CleanupService(
+        vector_store=_build_vector_store(settings),
+        callback=JavaCallbackClient(
+            callback_url=settings.java_callback_url,
+            signing_key=settings.java_callback_signing_key,
+            timeout_seconds=60.0,
+            cleanup_callback_url=settings.java_cleanup_callback_url,
+        ),
     )
 
 
@@ -231,6 +291,36 @@ def verify_signature(
     question_hash = hashlib.sha256(request.question.encode()).hexdigest()
     value = (
         f"{request.knowledge_base_id}:{request.request_id}:{request.generation_id}:{timestamp}:{question_hash}"
+    ).encode()
+    expected = hmac.new(settings.signing_key.encode(), value, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=401, detail="invalid deployment signature")
+    seen_requests[replay_key] = now + settings.replay_window_seconds
+
+
+def verify_cleanup_signature(
+    request: CleanupRequest,
+    timestamp: str,
+    signature: str,
+    settings: Settings,
+    seen_requests: dict[str, int],
+) -> None:
+    try:
+        issued_at = int(timestamp)
+    except ValueError as exception:
+        raise HTTPException(status_code=401, detail="invalid deployment signature") from exception
+    if abs(int(time.time()) - issued_at) > settings.replay_window_seconds:
+        raise HTTPException(status_code=401, detail="invalid deployment signature")
+    now = int(time.time())
+    expired = [key for key, expires_at in seen_requests.items() if expires_at < now]
+    for key in expired:
+        del seen_requests[key]
+    replay_key = f"{request.request_id}:{request.task_id}"
+    if replay_key in seen_requests:
+        raise HTTPException(status_code=401, detail="invalid deployment signature")
+    value = (
+        f"{request.knowledge_base_id}:{request.document_id}:{request.task_id}:"
+        f"{request.request_id}:{timestamp}"
     ).encode()
     expected = hmac.new(settings.signing_key.encode(), value, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):

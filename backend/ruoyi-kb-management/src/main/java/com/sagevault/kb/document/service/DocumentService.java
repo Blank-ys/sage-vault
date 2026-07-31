@@ -13,4 +13,6 @@ public interface DocumentService {
     List<DocumentResponse> listByKnowledgeBase(long knowledgeBaseId);
 
     DocumentResponse retry(long documentId);
+
+    void delete(long documentId);
 }

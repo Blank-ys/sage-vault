@@ -7,4 +7,6 @@ public interface DocumentStorage {
     void save(String objectKey, InputStream content, long size, String contentType);
 
     String presignedUrl(String objectKey, Duration expiry);
+
+    void deleteByPrefix(String prefix);
 }

@@ -9,8 +9,10 @@ import com.sagevault.kb.document.domain.IndexingTaskEntity;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
 import com.sagevault.kb.document.service.DocumentService;
+import com.sagevault.kb.document.service.port.CleanupCommandDispatcher;
 import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
+import com.sagevault.kb.platform.error.ErrorCode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -30,16 +32,19 @@ public class DocumentServiceImpl implements DocumentService {
     private final RetryRecordWriter retryRecordWriter;
     private final MinioDocumentStorage storage;
     private final IndexingCommandDispatcher dispatcher;
+    private final CleanupCommandDispatcher cleanupDispatcher;
 
     public DocumentServiceImpl(DocumentMapper mapper, DocumentRecordWriter recordWriter,
             IndexingTaskRecordWriter indexingTaskRecordWriter, RetryRecordWriter retryRecordWriter,
-            MinioDocumentStorage storage, IndexingCommandDispatcher dispatcher) {
+            MinioDocumentStorage storage, IndexingCommandDispatcher dispatcher,
+            CleanupCommandDispatcher cleanupDispatcher) {
         this.mapper = mapper;
         this.recordWriter = recordWriter;
         this.indexingTaskRecordWriter = indexingTaskRecordWriter;
         this.retryRecordWriter = retryRecordWriter;
         this.storage = storage;
         this.dispatcher = dispatcher;
+        this.cleanupDispatcher = cleanupDispatcher;
     }
 
     @Override
@@ -100,6 +105,28 @@ public class DocumentServiceImpl implements DocumentService {
             markFailed(entity, message);
         }
         return response(entity);
+    }
+
+    @Override
+    public void delete(long documentId) {
+        DocumentEntity entity = mapper.findById(documentId);
+        if (entity == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
+        }
+        int updated = mapper.updateStatusIfCurrentStatus(documentId,
+                DocumentStatus.DELETING.name(), "", DocumentStatus.AVAILABLE.name());
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT, "文档当前状态不允许删除");
+        }
+        entity.setStatus(DocumentStatus.DELETING);
+        try {
+            cleanupDispatcher.dispatch(entity);
+        } catch (RuntimeException exception) {
+            log.error("Failed to dispatch cleanup for document {}", documentId, exception);
+            mapper.updateStatusIfCurrentStatus(documentId,
+                    DocumentStatus.AVAILABLE.name(), "", DocumentStatus.DELETING.name());
+            throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, "清理命令派发失败，请稍后重试");
+        }
     }
 
     private boolean storeOriginal(DocumentEntity entity, MultipartFile file) {

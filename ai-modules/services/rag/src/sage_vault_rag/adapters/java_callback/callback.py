@@ -7,20 +7,23 @@ from typing import Any
 
 import httpx
 
+from sage_vault_rag.model.cleanup_result import CleanupResult
 from sage_vault_rag.model.indexing_result import IndexingResult
 
 logger = logging.getLogger(__name__)
 
 
 class JavaCallbackClient:
-    """向 Java 报告入库结果，携带部署签名与重放保护。"""
+    """向 Java 报告入库/清理结果，携带部署签名与重放保护。"""
 
     def __init__(self, callback_url: str, signing_key: str, timeout_seconds: float = 60.0,
-            client: httpx.AsyncClient | None = None) -> None:
+            client: httpx.AsyncClient | None = None,
+            cleanup_callback_url: str = "") -> None:
         self._callback_url = callback_url
         self._signing_key = signing_key
         self._timeout = timeout_seconds
         self._client = client
+        self._cleanup_callback_url = cleanup_callback_url
 
     async def report(self, result: IndexingResult) -> None:
         if not self._callback_url:
@@ -55,5 +58,39 @@ class JavaCallbackClient:
         value = (
             f"{payload['taskId']}:{payload['attempt']}:{payload['documentId']}:"
             f"{success}:{payload['chunksCount']}:{payload['requestId']}:{timestamp}"
+        ).encode()
+        return hmac.new(self._signing_key.encode(), value, hashlib.sha256).hexdigest()
+
+    async def report_cleanup(self, result: CleanupResult) -> None:
+        if not self._cleanup_callback_url:
+            logger.warning("Java cleanup callback URL is not configured; skipping report for task %s", result.task_id)
+            return
+        timestamp = str(int(time.time()))
+        request_id = uuid.uuid4().hex
+        payload = {
+            "taskId": result.task_id,
+            "documentId": result.document_id,
+            "success": result.success,
+            "requestId": request_id,
+            "diagnostics": result.diagnostics,
+        }
+        signature = self._sign_cleanup(payload, timestamp)
+        headers = {
+            "X-Sage-Timestamp": timestamp,
+            "X-Sage-Signature": signature,
+        }
+        if self._client is not None:
+            response = await self._client.post(self._cleanup_callback_url, json=payload, headers=headers)
+            response.raise_for_status()
+            return
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.post(self._cleanup_callback_url, json=payload, headers=headers)
+            response.raise_for_status()
+
+    def _sign_cleanup(self, payload: dict[str, Any], timestamp: str) -> str:
+        success = str(payload["success"]).lower()
+        value = (
+            f"{payload['taskId']}:{payload['documentId']}:"
+            f"{success}:{payload['requestId']}:{timestamp}"
         ).encode()
         return hmac.new(self._signing_key.encode(), value, hashlib.sha256).hexdigest()

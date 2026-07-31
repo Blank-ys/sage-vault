@@ -64,4 +64,8 @@
         WHERE kb_id = #{kbId}
         ORDER BY created_at DESC, id DESC
     </select>
+
+    <delete id="deleteById">
+        DELETE FROM sv_enterprise_document WHERE id = #{id}
+    </delete>
 </mapper>

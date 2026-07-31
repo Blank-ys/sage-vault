@@ -23,4 +23,6 @@ public interface DocumentMapper {
             @Param("normalizedNames") Collection<String> normalizedNames);
 
     List<DocumentEntity> findByKbId(long kbId);
+
+    int deleteById(long id);
 }
