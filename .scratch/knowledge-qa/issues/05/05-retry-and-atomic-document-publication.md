@@ -25,3 +25,24 @@
   - 成功重试场景：清空 flag 文件后重试 chunk 阶段失败的文档，验证重试保留文档身份与文件名，进入 AVAILABLE，Q&A 返回 `event:completed` 且能检索到文档唯一内容。
   - 仅存在一套完整片段：系统层通过 Q&A 能检索到成功重试文档的唯一标记证明内容完整可检索（`_assert_successful_retry_is_retrievable`）；应用层由 Python 单元测试 `test_index_clears_stale_vectors_before_retry` 验证入库前 `delete_by_document` 清理残留向量后仅保留一套新片段。
   - Python 单元测试补充：`test_index_chunk_failure_triggers_cleanup_and_callback` 与 `test_index_embed_failure_triggers_cleanup_and_callback` 覆盖切块/嵌入阶段失败的清理与回调。
+
+## 验收执行记录（2026-07-30）
+
+| 验证层 | 结果 |
+|--------|------|
+| Java 单元测试（87 run） | 0 failures |
+| MySQL 集成测试（CAS / updateTerminalState，10 run） | 0 failures |
+| Python RAG 单元测试（71 run） | 0 failures |
+| 系统验收 `RetryAndAtomicPublicationSystemTest` | PASSED (57.5s) |
+| 系统验收 `StageFailureInjectionSystemTest` | 未执行（见下方说明） |
+| 前端 `build:prod` | 成功 |
+
+### `StageFailureInjectionSystemTest` 未执行说明
+
+该测试的故障注入机制依赖**测试进程与 Python RAG 服务共享同一文件系统**：测试通过 `SAGE_VAULT_TEST_FAILURE_FLAG_FILE` 写入 flag 文件，RAG 服务通过 `SAGE_VAULT_RAG_TEST_FAILURE_FLAG_FILE` 读取同一文件以触发对应阶段失败。
+
+当前部署拓扑中 RAG 服务运行在远程服务器（192.168.150.100），测试进程在本地 Windows 工作站，本地写入的 flag 文件对远程 RAG 不可见，因此注入未生效（文档全部正常处理为 AVAILABLE）。
+
+**替代覆盖：** 切块/嵌入/向量写入阶段的失败清理与回调逻辑已由 Python 单元测试（`FailingChunker`/`FailingEmbedder`/`FailingVectorStore`）完整覆盖；故障注入包装器 `FailureInjectingChunker`/`FailureInjectingEmbedder`/`FailureInjectingVectorStore` 的读取-判断-抛出逻辑经 Ruff + mypy 静态检查通过。
+
+**执行前提：** 若需运行此系统测试，须将 RAG 服务与测试进程部署在共享文件系统下（如 NFS 挂载或同机运行），并确保 RAG 启动时设置 `SAGE_VAULT_RAG_TEST_FAILURE_FLAG_FILE` 指向该共享路径。

@@ -121,19 +121,22 @@ class _KnowledgeQaSystemTestBase(unittest.TestCase):
         deadline = time.time() + timeout
         last_seen: dict[str, object] | None = None
         while time.time() < deadline:
-            _, body = self.request_json(
-                "GET",
-                f"/ruoyi-kb-management/documents?knowledgeBaseId={knowledge_base_id}",
-                self.admin_token,
-            )
-            result = json.loads(body)
-            if result.get("code") == 200:
-                for doc in result["data"]:
-                    if doc["filename"] == filename:
-                        last_seen = doc
-                        if doc["status"] == expected_status:
-                            return doc
-                        break
+            try:
+                _, body = self.request_json(
+                    "GET",
+                    f"/ruoyi-kb-management/documents?knowledgeBaseId={knowledge_base_id}",
+                    self.admin_token,
+                )
+                result = json.loads(body)
+                if result.get("code") == 200:
+                    for doc in result["data"]:
+                        if doc["filename"] == filename:
+                            last_seen = doc
+                            if doc["status"] == expected_status:
+                                return doc
+                            break
+            except (OSError, urllib.error.URLError):
+                pass  # 瞬态网络异常时继续轮询
             time.sleep(3)
         return last_seen
 
@@ -163,6 +166,20 @@ class _KnowledgeQaSystemTestBase(unittest.TestCase):
         """断言流中包含拒答事件且包含空知识库提示。"""
         assert "event:refused" in stream, f"应拒答: {stream}"
         assert "该知识库暂无可用文档" in stream, f"应提示无可用文档: {stream}"
+
+    @staticmethod
+    def extract_answer_text(stream: str) -> str:
+        """从 SSE 流中提取所有 delta 事件的文本并拼接为完整回答。"""
+        parts: list[str] = []
+        for line in stream.splitlines():
+            if line.startswith("data:"):
+                try:
+                    payload = json.loads(line[len("data:"):])
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if "delta" in payload:
+                    parts.append(payload["delta"])
+        return "".join(parts)
 
 
 class RetryAndAtomicPublicationSystemTest(_KnowledgeQaSystemTestBase):
@@ -314,7 +331,8 @@ class RetryAndAtomicPublicationSystemTest(_KnowledgeQaSystemTestBase):
         self.assertIn("event:started", stream)
         self.assertIn("event:completed", stream, "有效文档应完成回答而非拒答")
         self.assertNotIn("event:refused", stream, "AVAILABLE 文档不应触发拒答")
-        self.assertIn(distinctive_content, stream, "回答应包含已索引的唯一内容")
+        answer_text = self.extract_answer_text(stream)
+        self.assertIn(distinctive_content, answer_text, "回答应包含已索引的唯一内容")
 
     def _assert_retry_state_conflict(self, knowledge_base_id: int, unique: str) -> None:
         """对 AVAILABLE 文档发起重试应返回 DOCUMENT_STATE_CONFLICT(410014)。"""
@@ -493,7 +511,8 @@ class StageFailureInjectionSystemTest(_KnowledgeQaSystemTestBase):
         self.assertIn("event:started", stream)
         self.assertIn("event:completed", stream, "成功重试后应能完成回答")
         self.assertNotIn("event:refused", stream, "成功重试后不应拒答")
-        self.assertIn(distinctive, stream, "应检索到重试成功文档的唯一内容")
+        answer_text = self.extract_answer_text(stream)
+        self.assertIn(distinctive, answer_text, "应检索到重试成功文档的唯一内容")
 
 
 if __name__ == "__main__":
