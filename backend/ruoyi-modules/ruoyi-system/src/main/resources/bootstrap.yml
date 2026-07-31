@@ -15,6 +15,7 @@ spring:
       discovery:
         # 服务注册地址
         server-addr: ${NACOS_SERVER:192.168.150.100:8848}
+        ip: ${SERVER_IP:127.0.0.1}
       config:
         # 配置中心地址
         server-addr: ${NACOS_SERVER:192.168.150.100:8848}

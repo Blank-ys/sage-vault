@@ -10,6 +10,7 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER:192.168.150.100:8848}
+        ip: ${SERVER_IP:192.168.150.2}
       config:
         server-addr: ${NACOS_SERVER:192.168.150.100:8848}
         group: DEFAULT_GROUP

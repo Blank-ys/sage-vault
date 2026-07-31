@@ -8,6 +8,7 @@ import com.sagevault.kb.document.service.DocumentService;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,5 +42,11 @@ public class DocumentController {
     @GetMapping
     public R<List<DocumentResponse>> list(@RequestParam long knowledgeBaseId) {
         return R.ok(service.listByKnowledgeBase(knowledgeBaseId));
+    }
+
+    @RequiresPermissions("sage:document:manage")
+    @PostMapping("/{id}/retry")
+    public R<DocumentResponse> retry(@PathVariable long id) {
+        return R.ok(service.retry(id));
     }
 }

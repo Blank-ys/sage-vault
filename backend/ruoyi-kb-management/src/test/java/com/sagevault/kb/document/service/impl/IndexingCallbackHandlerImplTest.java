@@ -20,6 +20,7 @@ import com.sagevault.kb.document.mapper.IndexingTaskMapper;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -100,6 +101,37 @@ class IndexingCallbackHandlerImplTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getCode())
                         .isEqualTo(ErrorCode.INDEXING_TASK_NOT_FOUND.code()));
+    }
+
+    @Test
+    void preservesDiagnosticsErrorTypeInFailureMessage() {
+        IndexingTaskMapper taskMapper = mock(IndexingTaskMapper.class);
+        DocumentMapper documentMapper = mock(DocumentMapper.class);
+        IndexingCallbackHandlerImpl handler = new IndexingCallbackHandlerImpl(taskMapper, documentMapper);
+        IndexingTaskEntity task = taskEntity(11L, "task-1", 1, IndexingTaskStatus.PROCESSING);
+        when(taskMapper.findByTaskId("task-1")).thenReturn(task);
+        when(taskMapper.updateTerminalState(eq("task-1"), eq(1), any(), any(), any())).thenReturn(1);
+
+        handler.handle(new IndexingCallbackRequest("task-1", 1, "doc-1", false, 0, "req-1",
+                Map.of("error", "ValueError", "filename", "empty.md")));
+
+        ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
+        verify(documentMapper).updateStatus(eq(11L), eq(DocumentStatus.FAILED.name()), errorCaptor.capture());
+        assertThat(errorCaptor.getValue()).isEqualTo("RAG 入库失败（empty.md）：ValueError");
+    }
+
+    @Test
+    void usesGenericFailureMessageWhenDiagnosticsAbsent() {
+        IndexingTaskMapper taskMapper = mock(IndexingTaskMapper.class);
+        DocumentMapper documentMapper = mock(DocumentMapper.class);
+        IndexingCallbackHandlerImpl handler = new IndexingCallbackHandlerImpl(taskMapper, documentMapper);
+        IndexingTaskEntity task = taskEntity(11L, "task-1", 1, IndexingTaskStatus.PROCESSING);
+        when(taskMapper.findByTaskId("task-1")).thenReturn(task);
+        when(taskMapper.updateTerminalState(eq("task-1"), eq(1), any(), any(), any())).thenReturn(1);
+
+        handler.handle(new IndexingCallbackRequest("task-1", 1, "doc-1", false, 0, "req-1"));
+
+        verify(documentMapper).updateStatus(eq(11L), eq(DocumentStatus.FAILED.name()), eq("RAG 入库失败"));
     }
 
     private static IndexingTaskEntity taskEntity(long documentId, String taskId, int attempt,

@@ -113,6 +113,23 @@ class DocumentMapperMySqlIntegrationTest {
     }
 
     @Test
+    void updateStatusIfCurrentStatusOnlyTransitionsMatchingState() {
+        DocumentEntity entity = entity("Cas.txt", DocumentStatus.FAILED);
+        mapper.insert(entity);
+
+        int matched = mapper.updateStatusIfCurrentStatus(entity.getId(),
+                DocumentStatus.PROCESSING.name(), "", DocumentStatus.FAILED.name());
+        int mismatched = mapper.updateStatusIfCurrentStatus(entity.getId(),
+                DocumentStatus.AVAILABLE.name(), "", DocumentStatus.FAILED.name());
+
+        assertThat(matched).isEqualTo(1);
+        assertThat(mismatched).isZero();
+        DocumentEntity updated = mapper.findById(entity.getId());
+        assertThat(updated.getStatus()).isEqualTo(DocumentStatus.PROCESSING);
+        assertThat(updated.getErrorMessage()).isEqualTo("");
+    }
+
+    @Test
     void findByKbIdAndNormalizedNamesReturnsMatchingRecordsAcrossStatuses() {
         DocumentEntity processing = entity("Proc.txt", DocumentStatus.PROCESSING);
         mapper.insert(processing);

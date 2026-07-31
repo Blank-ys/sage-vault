@@ -30,6 +30,12 @@
         WHERE id = #{id}
     </update>
 
+    <update id="updateStatusIfCurrentStatus">
+        UPDATE sv_enterprise_document
+        SET status = #{newStatus}, error_message = #{errorMessage}
+        WHERE id = #{id} AND status = #{currentStatus}
+    </update>
+
     <select id="findById" resultMap="documentResult">
         SELECT <include refid="columns"/> FROM sv_enterprise_document WHERE id = #{id}
     </select>

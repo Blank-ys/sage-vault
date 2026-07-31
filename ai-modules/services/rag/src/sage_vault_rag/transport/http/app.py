@@ -16,6 +16,7 @@ from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
 from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
 from sage_vault_rag.adapters.document_storage.http_client import HttpDocumentStorage
 from sage_vault_rag.adapters.docx_parser.parser import DocxParser
+from sage_vault_rag.adapters.failure_injection.wrappers import wrap_with_failure_injection
 from sage_vault_rag.adapters.fake_generation.generator import FakeGenerationAdapter
 from sage_vault_rag.adapters.java_callback.callback import JavaCallbackClient
 from sage_vault_rag.adapters.markdown_parser.parser import MarkdownParser
@@ -28,6 +29,10 @@ from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.bootstrap.settings import Settings
 from sage_vault_rag.model.events import Completed, Delta, Refused, Started
 from sage_vault_rag.model.indexing_command import IndexingCommand
+from sage_vault_rag.ports.chunker import ChunkerPort
+from sage_vault_rag.ports.document_parser import DocumentParserPort
+from sage_vault_rag.ports.embedding import EmbeddingPort
+from sage_vault_rag.ports.vector_store import VectorStorePort
 
 logger = logging.getLogger(__name__)
 
@@ -145,19 +150,26 @@ async def _run_indexing(runner: IndexingRunner, command: IndexingCommand) -> Non
 
 
 def build_indexing_service(settings: Settings) -> IndexingService:
+    parser: DocumentParserPort = FormatDispatchingDocumentParser(
+        {
+            "txt": TxtParser(),
+            "md": MarkdownParser(),
+            "pdf": PdfParser(),
+            "docx": DocxParser(),
+        }
+    )
+    chunker: ChunkerPort = ParagraphChunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap)
+    embedder: EmbeddingPort = _build_embedder(settings)
+    vector_store: VectorStorePort = _build_vector_store(settings)
+    parser, chunker, embedder, vector_store = wrap_with_failure_injection(
+        parser, chunker, embedder, vector_store, settings.test_failure_flag_file
+    )
     return IndexingService(
         document_storage=HttpDocumentStorage(),
-        document_parser=FormatDispatchingDocumentParser(
-            {
-                "txt": TxtParser(),
-                "md": MarkdownParser(),
-                "pdf": PdfParser(),
-                "docx": DocxParser(),
-            }
-        ),
-        chunker=ParagraphChunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
-        embedder=_build_embedder(settings),
-        vector_store=_build_vector_store(settings),
+        document_parser=parser,
+        chunker=chunker,
+        embedder=embedder,
+        vector_store=vector_store,
         callback=JavaCallbackClient(
             callback_url=settings.java_callback_url,
             signing_key=settings.java_callback_signing_key,
