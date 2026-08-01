@@ -77,12 +77,58 @@ class QaRecordMapperMySqlIntegrationTest {
     }
 
     @Test
+    void stopsInProgressRecordWhileKeepingTheAnswerAlreadyStreamed() {
+        QaRecordEntity record = record("stopped");
+        mapper.insert(record);
+        mapper.appendAnswer(record.getGenerationId(), "已经生成的部分");
+
+        assertThat(mapper.updateTerminalStatusKeepingAnswer(record.getGenerationId(), QaRecordStatus.STOPPED))
+                .isEqualTo(1);
+        // 已终态记录不得被二次裁决，未完成兜底也不能覆盖已停止
+        assertThat(mapper.updateTerminalStatusKeepingAnswer(record.getGenerationId(), QaRecordStatus.UNFINISHED))
+                .isZero();
+
+        QaRecordEntity stored = mapper.findByGenerationId(record.getGenerationId());
+        assertThat(stored.getStatus()).isEqualTo(QaRecordStatus.STOPPED);
+        assertThat(stored.getAnswer()).isEqualTo("已经生成的部分");
+        assertThat(mapper.countPendingByConversation(conversationId)).isZero();
+    }
+
+    @Test
     void rejectsUnknownPersistedStatusValues() {
         QaRecordEntity record = record("unknown");
         mapper.insert(record);
         jdbc.update("UPDATE sv_qa_record SET status = 'UNKNOWN' WHERE id = ?", record.getId());
 
         assertThatThrownBy(() -> mapper.findByGenerationId(record.getGenerationId())).isNotNull();
+    }
+
+    @Test
+    void listsCountsAndDeletesRecordsOfOneConversation() {
+        QaRecordEntity first = record("first");
+        QaRecordEntity second = record("second");
+        mapper.insert(first);
+        mapper.insert(second);
+
+        assertThat(mapper.countByConversation(conversationId)).isEqualTo(2);
+        assertThat(mapper.findByConversation(conversationId))
+                .extracting(QaRecordEntity::getId)
+                .containsExactly(first.getId(), second.getId());
+        assertThat(mapper.findByConversation(conversationId).get(0).getCreatedAt()).isNotNull();
+
+        assertThat(mapper.deleteByConversation(conversationId)).isEqualTo(2);
+        assertThat(mapper.countByConversation(conversationId)).isZero();
+    }
+
+    @Test
+    void countsOnlyInProgressRecords() {
+        QaRecordEntity pending = record("pending");
+        mapper.insert(pending);
+        QaRecordEntity done = record("done");
+        mapper.insert(done);
+        mapper.updateTerminalState(done.getGenerationId(), QaRecordStatus.COMPLETED, "answer");
+
+        assertThat(mapper.countPendingByConversation(conversationId)).isEqualTo(1);
     }
 
     private QaRecordEntity record(String suffix) {

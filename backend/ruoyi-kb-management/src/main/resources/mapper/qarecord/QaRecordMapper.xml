@@ -10,9 +10,13 @@
         <result property="question" column="question"/>
         <result property="answer" column="answer"/>
         <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
-    <sql id="columns">id, conversation_id, user_id, request_id, generation_id, question, answer, status</sql>
+    <sql id="columns">
+        id, conversation_id, user_id, request_id, generation_id, question, answer, status, created_at, updated_at
+    </sql>
 
     <insert id="insert" parameterType="com.sagevault.kb.qarecord.domain.QaRecordEntity"
             useGeneratedKeys="true" keyProperty="id">
@@ -32,7 +36,33 @@
         WHERE generation_id = #{generationId} AND status = 'STARTED'
     </update>
 
+    <!-- 中断终态：保留 delta 已累积的残缺正文，只裁决状态 -->
+    <update id="updateTerminalStatusKeepingAnswer">
+        UPDATE sv_qa_record
+        SET status = #{status}
+        WHERE generation_id = #{generationId} AND status = 'STARTED'
+    </update>
+
     <select id="findByGenerationId" resultMap="qaRecordResult">
         SELECT <include refid="columns"/> FROM sv_qa_record WHERE generation_id = #{generationId}
     </select>
+
+    <select id="countPendingByConversation" resultType="int">
+        SELECT COUNT(*) FROM sv_qa_record
+        WHERE conversation_id = #{conversationId} AND status = 'STARTED'
+    </select>
+
+    <select id="findByConversation" resultMap="qaRecordResult">
+        SELECT <include refid="columns"/> FROM sv_qa_record
+        WHERE conversation_id = #{conversationId}
+        ORDER BY created_at ASC, id ASC
+    </select>
+
+    <select id="countByConversation" resultType="int">
+        SELECT COUNT(*) FROM sv_qa_record WHERE conversation_id = #{conversationId}
+    </select>
+
+    <delete id="deleteByConversation">
+        DELETE FROM sv_qa_record WHERE conversation_id = #{conversationId}
+    </delete>
 </mapper>

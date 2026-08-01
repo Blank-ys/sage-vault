@@ -22,6 +22,32 @@ paths:
             text/event-stream:
               schema: {type: string}
         '401': {description: Invalid deployment signature}
+  /internal/v1/answers/{generationId}/cancel:
+    post:
+      operationId: cancelAnswer
+      description: >-
+        Best-effort cancellation of an in-flight generation. Java owns the
+        business decision; Python only stops producing further deltas and ends
+        the stream with a stopped event. The call must be routed back to the
+        instance that owns the generation.
+      parameters:
+        - {name: generationId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: X-Sage-Timestamp, in: header, required: true, schema: {type: string}}
+        - {name: X-Sage-Signature, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAnswerCommand'
+      responses:
+        '202':
+          description: Cancellation accepted; the owning stream will end with a stopped event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelAnswerAck'
+        '401': {description: Invalid deployment signature}
   /internal/v1/indexing:
     post:
       operationId: indexDocument
@@ -97,6 +123,25 @@ components:
         question: {type: string, minLength: 1}
         requestId: {type: string, minLength: 1}
         generationId: {type: string, format: uuid}
+    CancelAnswerCommand:
+      type: object
+      additionalProperties: false
+      required: [generationId, requestId]
+      properties:
+        generationId: {type: string, format: uuid}
+        requestId: {type: string, minLength: 1}
+    CancelAnswerAck:
+      type: object
+      additionalProperties: false
+      required: [generationId, cancelled]
+      properties:
+        generationId: {type: string, format: uuid}
+        cancelled:
+          type: boolean
+          description: >-
+            True when this instance owned the generation and signalled it to
+            stop. False means the generation is unknown here; Java still owns
+            the terminal decision and must not treat it as a failure.
     IndexingCommand:
       type: object
       additionalProperties: false

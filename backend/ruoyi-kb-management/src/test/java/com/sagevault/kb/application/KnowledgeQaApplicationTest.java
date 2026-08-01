@@ -85,7 +85,7 @@ class KnowledgeQaApplicationTest {
         var conversation = conversations.create(7L,
                 new CreateConversationRequest(knowledgeBase.id()));
 
-        List<AnswerEvent> events = conversations.ask(7L, conversation.id(),
+        List<AnswerEvent> events = conversations.askAndStream(7L, conversation.id(),
                 new AskQuestionRequest("这里有什么内容？", "req-1")).collectList().block();
 
         assertThat(events).containsExactly(
@@ -98,7 +98,7 @@ class KnowledgeQaApplicationTest {
         var knowledgeBase = knowledgeBases.create(new CreateKnowledgeBaseRequest("隔离知识", ""));
         var conversation = conversations.create(7L, new CreateConversationRequest(knowledgeBase.id()));
 
-        assertThatThrownBy(() -> conversations.ask(8L, conversation.id(),
+        assertThatThrownBy(() -> conversations.askAndStream(8L, conversation.id(),
                 new AskQuestionRequest("问题", "req-2")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("无权访问");
@@ -110,7 +110,7 @@ class KnowledgeQaApplicationTest {
         var conversation = conversations.create(7L, new CreateConversationRequest(knowledgeBase.id()));
         repositories.setKnowledgeBaseStatus("待删除知识", KnowledgeBaseStatus.DELETING);
 
-        assertThatThrownBy(() -> conversations.ask(7L, conversation.id(),
+        assertThatThrownBy(() -> conversations.askAndStream(7L, conversation.id(),
                 new AskQuestionRequest("问题", "req-3")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("知识库当前不可用");

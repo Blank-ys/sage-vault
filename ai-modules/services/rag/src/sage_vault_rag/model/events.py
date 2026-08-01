@@ -23,4 +23,11 @@ class Refused:
     message: str
 
 
-AnswerEvent = Started | Delta | Completed | Refused
+@dataclass(frozen=True)
+class Stopped:
+    """生成被 Java 显式取消后的终止事件；已产出的 delta 依然有效。"""
+
+    generation_id: str
+
+
+AnswerEvent = Started | Delta | Completed | Refused | Stopped

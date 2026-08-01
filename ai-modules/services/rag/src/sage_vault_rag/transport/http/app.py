@@ -29,7 +29,7 @@ from sage_vault_rag.application.cleanup.service import CleanupService
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.bootstrap.settings import Settings
 from sage_vault_rag.model.cleanup_command import CleanupCommand
-from sage_vault_rag.model.events import Completed, Delta, Refused, Started
+from sage_vault_rag.model.events import Completed, Delta, Refused, Started, Stopped
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.ports.chunker import ChunkerPort
 from sage_vault_rag.ports.document_parser import DocumentParserPort
@@ -45,6 +45,12 @@ class AnswerRequest(BaseModel):
     question: str = Field(min_length=1)
     request_id: str = Field(alias="requestId", min_length=1)
     generation_id: str = Field(alias="generationId", min_length=1)
+
+
+class CancelAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    generation_id: str = Field(alias="generationId", min_length=1)
+    request_id: str = Field(alias="requestId", min_length=1)
 
 
 class IndexingRequest(BaseModel):
@@ -118,6 +124,7 @@ def create_app(
     indexing_runner = indexing or _IndexingServiceAdapter(build_indexing_service(settings))
     cleanup_runner = cleanup or _CleanupServiceAdapter(build_cleanup_service(settings))
     seen_requests: dict[str, int] = {}
+    seen_cancel_requests: dict[str, int] = {}
     seen_indexing_requests: dict[str, int] = {}
     seen_cleanup_requests: dict[str, int] = {}
 
@@ -141,9 +148,30 @@ def create_app(
                     payload = {"type": "completed", "generationId": event.generation_id}
                 elif isinstance(event, Refused):
                     payload = {"type": "refused", "generationId": event.generation_id, "message": event.message}
+                elif isinstance(event, Stopped):
+                    payload = {"type": "stopped", "generationId": event.generation_id}
                 yield f"event: {payload['type']}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream")
+
+    @app.post("/internal/v1/answers/{generationId}/cancel", status_code=202)
+    async def cancel_answer(
+        generationId: str,
+        request: CancelAnswerRequest,
+        x_sage_timestamp: str = Header(),
+        x_sage_signature: str = Header(),
+    ) -> dict[str, object]:
+        if generationId != request.generation_id:
+            raise HTTPException(status_code=401, detail="invalid deployment signature")
+        verify_cancel_signature(request, x_sage_timestamp, x_sage_signature, settings, seen_cancel_requests)
+        cancelled = answer_service.cancellations.cancel(request.generation_id)
+        if not cancelled:
+            logger.info(
+                "Cancel ignored, generation not owned here: generation_id=%s request_id=%s",
+                request.generation_id,
+                request.request_id,
+            )
+        return {"generationId": request.generation_id, "cancelled": cancelled}
 
     @app.post("/internal/v1/indexing", status_code=202)
     async def index(
@@ -230,7 +258,10 @@ def build_answering_service(settings: Settings) -> AnsweringService:
     return AnsweringService(
         embedder=_build_embedder(settings),
         vector_store=_build_vector_store(settings),
-        generator=FakeGenerationAdapter(delta_length=settings.answer_delta_length),
+        generator=FakeGenerationAdapter(
+            delta_length=settings.answer_delta_length,
+            delta_interval_seconds=settings.answer_delta_interval_seconds,
+        ),
         top_k=settings.retrieval_top_k,
         refusal_threshold=settings.retrieval_refusal_threshold,
     )
@@ -292,6 +323,33 @@ def verify_signature(
     value = (
         f"{request.knowledge_base_id}:{request.request_id}:{request.generation_id}:{timestamp}:{question_hash}"
     ).encode()
+    expected = hmac.new(settings.signing_key.encode(), value, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=401, detail="invalid deployment signature")
+    seen_requests[replay_key] = now + settings.replay_window_seconds
+
+
+def verify_cancel_signature(
+    request: CancelAnswerRequest,
+    timestamp: str,
+    signature: str,
+    settings: Settings,
+    seen_requests: dict[str, int],
+) -> None:
+    try:
+        issued_at = int(timestamp)
+    except ValueError as exception:
+        raise HTTPException(status_code=401, detail="invalid deployment signature") from exception
+    if abs(int(time.time()) - issued_at) > settings.replay_window_seconds:
+        raise HTTPException(status_code=401, detail="invalid deployment signature")
+    now = int(time.time())
+    expired = [key for key, expires_at in seen_requests.items() if expires_at < now]
+    for key in expired:
+        del seen_requests[key]
+    replay_key = f"{request.request_id}:{request.generation_id}"
+    if replay_key in seen_requests:
+        raise HTTPException(status_code=401, detail="invalid deployment signature")
+    value = f"cancel:{request.generation_id}:{request.request_id}:{timestamp}".encode()
     expected = hmac.new(settings.signing_key.encode(), value, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="invalid deployment signature")

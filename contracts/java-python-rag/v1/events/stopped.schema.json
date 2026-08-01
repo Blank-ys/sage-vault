@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "generationId"],
+  "properties": {
+    "type": {"const": "stopped"},
+    "generationId": {"type": "string", "format": "uuid"}
+  }
+}

@@ -3,9 +3,12 @@ package com.sagevault.kb.qarecord.service.impl;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
+import com.sagevault.kb.qarecord.domain.QaRecordResponse;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
 import com.sagevault.kb.qarecord.service.QaRecordService;
+import java.util.List;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,13 +64,65 @@ public class QaRecordServiceImpl implements QaRecordService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void markUnfinished(String generationId) {
-        decideTerminalState(generationId, QaRecordStatus.UNFINISHED, "");
+        if (mapper.updateTerminalStatusKeepingAnswer(generationId, QaRecordStatus.UNFINISHED) == 1) {
+            return;
+        }
+        // 兜底裁决与显式停止可能并发：已有终态即视为已裁决，不覆盖也不报错。
+        QaRecordEntity record = mapper.findByGenerationId(generationId);
+        if (record == null) {
+            throw new BusinessException(ErrorCode.QA_RECORD_NOT_FOUND, "问答记录不存在");
+        }
+        if (record.getStatus() == QaRecordStatus.STARTED) {
+            throw new BusinessException(ErrorCode.QA_RECORD_STATE_CONFLICT, "问答记录状态冲突");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markStopped(String generationId) {
+        return mapper.updateTerminalStatusKeepingAnswer(generationId, QaRecordStatus.STOPPED) == 1;
+    }
+
+    @Override
+    public List<QaRecordResponse> listByConversation(long conversationId) {
+        return mapper.findByConversation(conversationId).stream().map(QaRecordServiceImpl::response).toList();
+    }
+
+    @Override
+    public boolean hasRecords(long conversationId) {
+        return mapper.countByConversation(conversationId) > 0;
+    }
+
+    @Override
+    public boolean hasPending(long conversationId) {
+        return mapper.countPendingByConversation(conversationId) > 0;
+    }
+
+    @Override
+    @Nullable
+    public QaRecordEntity findByGenerationId(String generationId) {
+        return mapper.findByGenerationId(generationId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteByConversation(long conversationId) {
+        return mapper.deleteByConversation(conversationId);
+    }
+
+    private static QaRecordResponse response(QaRecordEntity entity) {
+        return new QaRecordResponse(entity.getId(), entity.getConversationId(), entity.getGenerationId(),
+                entity.getQuestion(), entity.getAnswer(), entity.getStatus(), entity.getCreatedAt());
     }
 
     private void decideTerminalState(String generationId, QaRecordStatus target, String answer) {
         if (mapper.updateTerminalState(generationId, target, answer) == 1) {
             return;
         }
+        requireTerminalState(generationId, target);
+    }
+
+    private void requireTerminalState(String generationId, QaRecordStatus target) {
         QaRecordEntity record = mapper.findByGenerationId(generationId);
         if (record == null) {
             throw new BusinessException(ErrorCode.QA_RECORD_NOT_FOUND, "问答记录不存在");

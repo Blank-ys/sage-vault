@@ -5,6 +5,30 @@ export function createConversation(knowledgeBaseId) {
   return request({ url: '/ruoyi-kb-management/conversations', method: 'post', data: { knowledgeBaseId } }).then(res => res.data)
 }
 
+export function listConversations() {
+  return request({ url: '/ruoyi-kb-management/conversations', method: 'get' }).then(res => res.data)
+}
+
+export function listQuestions(conversationId) {
+  return request({ url: `/ruoyi-kb-management/conversations/${conversationId}/questions`, method: 'get' }).then(res => res.data)
+}
+
+export function renameConversation(conversationId, title) {
+  return request({ url: `/ruoyi-kb-management/conversations/${conversationId}/title`, method: 'put', data: { title } }).then(res => res.data)
+}
+
+export function deleteConversation(conversationId) {
+  return request({ url: `/ruoyi-kb-management/conversations/${conversationId}`, method: 'delete' })
+}
+
+// 停止是业务命令：必须走 Java 接口裁决终态，仅在浏览器侧中断连接只会得到"未完成"。
+export function stopAnswer(conversationId, generationId) {
+  return request({
+    url: `/ruoyi-kb-management/conversations/${conversationId}/answers/${generationId}/stop`,
+    method: 'post'
+  }).then(res => res.data)
+}
+
 export async function askQuestion(conversationId, question, onEvent, signal) {
   const response = await fetch(`${import.meta.env.VITE_APP_BASE_API}/ruoyi-kb-management/conversations/${conversationId}/questions`, {
     method: 'POST',

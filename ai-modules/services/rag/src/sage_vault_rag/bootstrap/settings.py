@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     retrieval_refusal_threshold: float = 1.0
     answer_delta_length: int = 5
+    # delta 之间的最小间隔，保证生成期间事件循环可处理取消命令
+    answer_delta_interval_seconds: float = 0.05
 
     # 测试模式故障注入（仅供系统验收测试使用，生产环境留空）
     test_failure_flag_file: str = ""
