@@ -39,4 +39,12 @@ Verifies conversation organization, permanent history, and ownership cascade del
 python -m unittest system-tests/knowledge-qa/test_conversation_history_and_ownership.py -v
 ```
 
+## test_single_user_serialization_and_state_machine.py
+
+Verifies single-user serialization and the answer state machine (issue 07b): different users can each ask concurrently without blocking; the answer-state endpoint `GET /{id}/answers/{generationId}` reports a `REFUSED` terminal correctly (`ready=true`, `status=REFUSED`) and the refused terminal does not count as in-progress (the conversation can be asked again); a second user reading another user's answer state is rejected with `CONVERSATION_FORBIDDEN` (410004). The hard concurrency-conflict assertion (`CONVERSATION_CONCURRENCY_CONFLICT` 410016 on a second in-progress question) requires retrievable documents so a `STARTED` answer persists long enough to race; set `SAGE_VAULT_HAS_RETRIEVABLE_DOCS=1` to enable it. Without retrievable docs every answer is refused synchronously (sub-second terminal), so that window cannot be reproduced at the system level — that path is covered deterministically by the Java unit tests and live MySQL integration tests.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_single_user_serialization_and_state_machine.py -v
+```
+
 All tests send browser-equivalent traffic only through Gateway. They never connect directly to Python or private database tables.

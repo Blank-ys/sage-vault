@@ -4,6 +4,7 @@ import com.ruoyi.common.core.domain.R;
 import com.ruoyi.common.security.annotation.RequiresLogin;
 import com.ruoyi.common.security.utils.SecurityUtils;
 import com.sagevault.kb.conversation.domain.AnswerEvent;
+import com.sagevault.kb.conversation.domain.AnswerStateSnapshot;
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
@@ -72,8 +73,14 @@ public class ConversationController {
     @PostMapping(value = "/{id}/questions", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RequiresLogin
     public Flux<ServerSentEvent<AnswerEvent>> ask(@PathVariable long id, @RequestBody AskQuestionRequest request) {
-        return conversations.ask(SecurityUtils.getUserId(), id, request).map(event -> ServerSentEvent.builder(event)
+        return conversations.askAndStream(SecurityUtils.getUserId(), id, request).map(event -> ServerSentEvent.builder(event)
                 .event(eventName(event)).build());
+    }
+
+    @GetMapping("/{id}/answers/{generationId}")
+    @RequiresLogin
+    public R<AnswerStateSnapshot> answerState(@PathVariable long id, @PathVariable String generationId) {
+        return R.ok(conversations.getAnswerState(SecurityUtils.getUserId(), id, generationId));
     }
 
     private static String eventName(AnswerEvent event) {

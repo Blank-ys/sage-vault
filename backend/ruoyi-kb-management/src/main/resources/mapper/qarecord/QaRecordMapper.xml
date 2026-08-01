@@ -40,6 +40,11 @@
         SELECT <include refid="columns"/> FROM sv_qa_record WHERE generation_id = #{generationId}
     </select>
 
+    <select id="countPendingByConversation" resultType="int">
+        SELECT COUNT(*) FROM sv_qa_record
+        WHERE conversation_id = #{conversationId} AND status = 'STARTED'
+    </select>
+
     <select id="findByConversation" resultMap="qaRecordResult">
         SELECT <include refid="columns"/> FROM sv_qa_record
         WHERE conversation_id = #{conversationId}

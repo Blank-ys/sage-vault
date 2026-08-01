@@ -1,6 +1,7 @@
 package com.sagevault.kb.conversation.service.impl;
 
 import com.sagevault.kb.conversation.domain.AnswerEvent;
+import com.sagevault.kb.conversation.domain.AnswerStateSnapshot;
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationEntity;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
@@ -14,7 +15,9 @@ import com.sagevault.kb.document.service.DocumentService;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
+import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordResponse;
+import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.service.QaRecordService;
 import java.util.List;
 import java.util.UUID;
@@ -94,38 +97,47 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public Flux<AnswerEvent> ask(long userId, long conversationId, AskQuestionRequest request) {
+    public AnswerStateSnapshot getAnswerState(long userId, long conversationId, String generationId) {
+        if (generationId == null || generationId.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "生成标识不能为空");
+        }
+        requireOwned(userId, conversationId);
+        QaRecordEntity record = records.findByGenerationId(generationId);
+        if (record == null || record.getConversationId() != conversationId) {
+            throw new BusinessException(ErrorCode.ANSWER_NOT_READY, "未找到该次回答，或回答尚未完成");
+        }
+        QaRecordStatus status = record.getStatus();
+        if (status == null) {
+            throw new BusinessException(ErrorCode.ANSWER_UNKNOWN_STATUS, "问答记录状态未知");
+        }
+        boolean terminal = status != QaRecordStatus.STARTED;
+        String answer = terminal ? record.getAnswer() : null;
+        return new AnswerStateSnapshot(generationId, terminal, status, answer);
+    }
+
+    @Override
+    public Flux<AnswerEvent> askAndStream(long userId, long conversationId, AskQuestionRequest request) {
         if (request.question() == null || request.question().isBlank()
                 || request.requestId() == null || request.requestId().isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "问题或请求标识不能为空");
         }
-        ConversationEntity conversation = requireOwned(userId, conversationId);
-        knowledgeBases.requireAvailable(conversation.getKnowledgeBaseId());
+        // 短事务：悲观锁 + 并发串行化 + 落库 STARTED 记录。不在此处调用外部服务。
+        BeginAnswer begin = beginAnswer(userId, conversationId, request);
 
-        boolean firstQuestion = !records.hasRecords(conversationId);
-
-        // 检查知识库是否有可用文档（过滤掉DELETING状态）
-        if (!documents.hasAvailableDocuments(conversation.getKnowledgeBaseId())) {
-            String generationId = UUID.randomUUID().toString();
-            records.create(conversationId, userId, request.requestId(), generationId, request.question());
-            records.markRefused(generationId, NO_AVAILABLE_DOCUMENTS_MESSAGE);
-            applyDefaultTitle(conversation, firstQuestion, request.question());
+        // 知识库无可用文档时直接拒答，不进入流式检索。
+        if (!documents.hasAvailableDocuments(begin.knowledgeBaseId())) {
+            records.markRefused(begin.generationId(), NO_AVAILABLE_DOCUMENTS_MESSAGE);
             return Flux.just(
-                new AnswerEvent.Started(generationId),
-                new AnswerEvent.Refused(generationId, NO_AVAILABLE_DOCUMENTS_MESSAGE)
+                new AnswerEvent.Started(begin.generationId()),
+                new AnswerEvent.Refused(begin.generationId(), NO_AVAILABLE_DOCUMENTS_MESSAGE)
             );
         }
 
-        String generationId = UUID.randomUUID().toString();
-        try {
-            records.create(conversationId, userId, request.requestId(), generationId, request.question());
-        } catch (DuplicateKeyException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "请求已处理", exception);
-        }
-        applyDefaultTitle(conversation, firstQuestion, request.question());
+        long knowledgeBaseId = begin.knowledgeBaseId();
+        String generationId = begin.generationId();
         AtomicBoolean terminal = new AtomicBoolean();
         StringBuilder answer = new StringBuilder();
-        return Flux.defer(() -> rag.answer(conversation.getKnowledgeBaseId(), request.question(), request.requestId(), generationId))
+        return Flux.defer(() -> rag.answer(knowledgeBaseId, request.question(), request.requestId(), generationId))
                 .doOnNext(event -> {
                     if (event instanceof AnswerEvent.Delta delta) {
                         records.appendAnswer(generationId, delta.delta());
@@ -141,6 +153,37 @@ public class ConversationServiceImpl implements ConversationService {
                 .doOnComplete(() -> markUnfinishedIfNeeded(generationId, terminal))
                 .doOnError(error -> markUnfinishedIfNeeded(generationId, terminal));
     }
+
+    /**
+     * 在悲观锁（FOR UPDATE）保护下完成：会话归属校验、知识库可用性校验、并发串行化检查，
+     * 以及落库 STARTED 问答记录。事务提交后即释放锁；后续的流式检索在事务之外执行，
+     * 以避免在事务内调用外部服务。返回的 generationId 已持久化，后续并发请求可通过
+     * 进行中记录计数感知到本次回答。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    BeginAnswer beginAnswer(long userId, long conversationId, AskQuestionRequest request) {
+        requireOwned(userId, conversationId);
+        ConversationEntity conversation = mapper.selectForStreaming(conversationId, userId);
+        if (conversation == null) {
+            throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
+        }
+        knowledgeBases.requireAvailable(conversation.getKnowledgeBaseId());
+        if (records.hasPending(conversationId)) {
+            throw new BusinessException(ErrorCode.CONVERSATION_CONCURRENCY_CONFLICT,
+                    "同一会话已有进行中的回答，请等待其完成后再发起");
+        }
+        boolean firstQuestion = !records.hasRecords(conversationId);
+        String generationId = UUID.randomUUID().toString();
+        try {
+            records.create(conversationId, userId, request.requestId(), generationId, request.question());
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "请求已处理", exception);
+        }
+        applyDefaultTitle(conversation, firstQuestion, request.question());
+        return new BeginAnswer(conversationId, conversation.getKnowledgeBaseId(), generationId);
+    }
+
+    private record BeginAnswer(long conversationId, long knowledgeBaseId, String generationId) { }
 
     /**
      * 首个提问生成默认标题；已有标题（含用户改名）不被覆盖。后续提问只推进最近活跃时间。

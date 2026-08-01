@@ -130,8 +130,8 @@ class ConversationHistoryTest {
         RecordingRag rag = new RecordingRag();
         ConversationService service = repositories.conversationsWith(rag);
         ConversationResponse conversation = service.create(OWNER, new CreateConversationRequest(knowledgeBaseId));
-        service.ask(OWNER, conversation.id(), new AskQuestionRequest("第一个问题", "request-1")).collectList().block();
-        service.ask(OWNER, conversation.id(), new AskQuestionRequest("第二个问题", "request-2")).collectList().block();
+        service.askAndStream(OWNER, conversation.id(), new AskQuestionRequest("第一个问题", "request-1")).collectList().block();
+        service.askAndStream(OWNER, conversation.id(), new AskQuestionRequest("第二个问题", "request-2")).collectList().block();
 
         assertThat(rag.knowledgeBaseIds).containsExactly(knowledgeBaseId, knowledgeBaseId);
         assertThat(rag.questions).containsExactly("第一个问题", "第二个问题");
@@ -153,7 +153,7 @@ class ConversationHistoryTest {
     }
 
     private void ask(long conversationId, String question, String requestId) {
-        conversations.ask(OWNER, conversationId, new AskQuestionRequest(question, requestId))
+        conversations.askAndStream(OWNER, conversationId, new AskQuestionRequest(question, requestId))
                 .collectList().block();
     }
 

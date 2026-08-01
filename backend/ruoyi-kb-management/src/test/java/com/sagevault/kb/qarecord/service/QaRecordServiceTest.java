@@ -113,6 +113,13 @@ class QaRecordServiceTest {
         }
 
         @Override
+        public int countPendingByConversation(long conversationId) {
+            return (int) findByConversation(conversationId).stream()
+                    .filter(entity -> entity.getStatus() == QaRecordStatus.STARTED)
+                    .count();
+        }
+
+        @Override
         public int deleteByConversation(long conversationId) {
             List<QaRecordEntity> removed = findByConversation(conversationId);
             removed.forEach(entity -> records.remove(entity.getGenerationId()));

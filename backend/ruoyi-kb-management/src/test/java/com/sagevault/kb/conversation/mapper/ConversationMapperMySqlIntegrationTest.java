@@ -113,6 +113,17 @@ class ConversationMapperMySqlIntegrationTest {
                 conversation.getId())).isZero();
     }
 
+    @Test
+    void selectForStreamingReturnsOwnedRowAndExcludesOthers() {
+        ConversationEntity mine = insert(7L);
+        ConversationEntity theirs = insert(8L);
+
+        assertThat(mapper.selectForStreaming(mine.getId(), 7L)).isNotNull();
+        assertThat(mapper.selectForStreaming(mine.getId(), 7L).getId()).isEqualTo(mine.getId());
+        assertThat(mapper.selectForStreaming(mine.getId(), 8L)).isNull();
+        assertThat(mapper.selectForStreaming(theirs.getId(), 7L)).isNull();
+    }
+
     private ConversationEntity insert(long userId) {
         ConversationEntity conversation = new ConversationEntity();
         conversation.setUserId(userId);

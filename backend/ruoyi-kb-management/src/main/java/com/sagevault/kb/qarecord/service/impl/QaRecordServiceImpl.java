@@ -8,6 +8,7 @@ import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
 import com.sagevault.kb.qarecord.service.QaRecordService;
 import java.util.List;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +75,17 @@ public class QaRecordServiceImpl implements QaRecordService {
     @Override
     public boolean hasRecords(long conversationId) {
         return mapper.countByConversation(conversationId) > 0;
+    }
+
+    @Override
+    public boolean hasPending(long conversationId) {
+        return mapper.countPendingByConversation(conversationId) > 0;
+    }
+
+    @Override
+    @Nullable
+    public QaRecordEntity findByGenerationId(String generationId) {
+        return mapper.findByGenerationId(generationId);
     }
 
     @Override

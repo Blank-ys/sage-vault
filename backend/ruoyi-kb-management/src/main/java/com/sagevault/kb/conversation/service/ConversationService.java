@@ -1,6 +1,7 @@
 package com.sagevault.kb.conversation.service;
 
 import com.sagevault.kb.conversation.domain.AnswerEvent;
+import com.sagevault.kb.conversation.domain.AnswerStateSnapshot;
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
@@ -12,7 +13,14 @@ import reactor.core.publisher.Flux;
 public interface ConversationService {
     ConversationResponse create(long userId, CreateConversationRequest request);
 
-    Flux<AnswerEvent> ask(long userId, long conversationId, AskQuestionRequest request);
+    /**
+     * 发起一次问答并流式返回增量。同一会话在任意时刻只允许一个进行中的回答；
+     * 若已有进行中的回答，抛出并发冲突异常。方法内部已处理串行化、状态机与结果落库。
+     */
+    Flux<AnswerEvent> askAndStream(long userId, long conversationId, AskQuestionRequest request);
+
+    /** 读取某次回答的当前状态与终态结果，供轮询或懒加载使用。 */
+    AnswerStateSnapshot getAnswerState(long userId, long conversationId, String generationId);
 
     /** 按最近活跃时间倒序返回当前用户自己的会话，不包含他人会话。 */
     List<ConversationResponse> list(long userId);

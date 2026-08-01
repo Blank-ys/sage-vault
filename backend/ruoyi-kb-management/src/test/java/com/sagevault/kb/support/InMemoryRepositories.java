@@ -98,6 +98,10 @@ public final class InMemoryRepositories {
             return 1;
         }
         public ConversationEntity findById(long id) { return values.get(id); }
+        public ConversationEntity selectForStreaming(long id, long userId) {
+            ConversationEntity value = values.get(id);
+            return (value != null && value.getUserId() == userId) ? value : null;
+        }
         public List<ConversationEntity> findByUser(long userId) {
             return values.values().stream()
                     .filter(value -> value.getUserId() == userId)
@@ -156,6 +160,11 @@ public final class InMemoryRepositories {
                     .toList();
         }
         public int countByConversation(long conversationId) { return findByConversation(conversationId).size(); }
+        public int countPendingByConversation(long conversationId) {
+            return (int) findByConversation(conversationId).stream()
+                    .filter(value -> value.getStatus() == QaRecordStatus.STARTED)
+                    .count();
+        }
         public int deleteByConversation(long conversationId) {
             List<QaRecordEntity> removed = findByConversation(conversationId);
             removed.forEach(value -> values.remove(value.getGenerationId()));

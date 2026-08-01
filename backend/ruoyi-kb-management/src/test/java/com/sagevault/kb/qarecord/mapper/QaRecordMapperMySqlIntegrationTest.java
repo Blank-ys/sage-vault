@@ -102,6 +102,17 @@ class QaRecordMapperMySqlIntegrationTest {
         assertThat(mapper.countByConversation(conversationId)).isZero();
     }
 
+    @Test
+    void countsOnlyInProgressRecords() {
+        QaRecordEntity pending = record("pending");
+        mapper.insert(pending);
+        QaRecordEntity done = record("done");
+        mapper.insert(done);
+        mapper.updateTerminalState(done.getGenerationId(), QaRecordStatus.COMPLETED, "answer");
+
+        assertThat(mapper.countPendingByConversation(conversationId)).isEqualTo(1);
+    }
+
     private QaRecordEntity record(String suffix) {
         QaRecordEntity record = new QaRecordEntity();
         record.setConversationId(conversationId);
