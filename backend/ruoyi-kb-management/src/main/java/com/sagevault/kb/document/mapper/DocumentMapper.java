@@ -24,5 +24,7 @@ public interface DocumentMapper {
 
     List<DocumentEntity> findByKbId(long kbId);
 
+    int countAvailableByKbId(@Param("kbId") long kbId);
+
     int deleteById(long id);
 }

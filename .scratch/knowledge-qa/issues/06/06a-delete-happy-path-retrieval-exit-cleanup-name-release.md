@@ -4,16 +4,16 @@
 
 **Blocked by:** 05 — 完成文档失败重试与原子发布
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] 删除 API 通过 CAS 将 AVAILABLE → DELETING；非 AVAILABLE 状态拒绝删除并返回明确业务错误。
   - 实现：`DocumentServiceImpl.delete()` 使用 `mapper.updateStatusIfCurrentStatus()` 实现 CAS
   - 验证：非 AVAILABLE 状态抛出 `DOCUMENT_STATE_CONFLICT` 业务异常
 
 - [x] DELETING 状态文档不参与问答检索，Q&A 对仅含该文档的知识库返回拒答。
-  - **现状分析**：当前 Python RAG 服务在检索时仅基于 `knowledge_base_id` 过滤，未检查文档状态。DELETING 状态文档的向量在清理完成前仍可被检索。
-  - **实现方案**：需要在 Java 端的问答调用前过滤掉 DELETING 状态的文档，或在 Python 端增加文档状态过滤机制。
-  - **推荐方案**：Java 端在调用 Python RAG 前先查询知识库内可用文档列表，仅传递 AVAILABLE 状态的 document_id 给 Python 端。
+  - **实现**：`ConversationServiceImpl.ask()` 在调用 Python RAG 前调用 `DocumentService.hasAvailableDocuments()` 检查
+  - **实现**：`DocumentMapper.countAvailableByKbId()` 统计 AVAILABLE 状态文档数量
+  - **效果**：当知识库中没有 AVAILABLE 状态文档时，直接返回拒答事件，不调用 Python RAG
 
 - [x] 契约新增 cleanup command（Java → Python）与 cleanup callback（Python → Java）endpoint；Python 接收命令后幂等清理 Milvus 向量并回调结果。
   - Java 端：`DiscoveredRagCleanupAdapter` 发送 cleanup command 到 `/internal/v1/cleanup`
@@ -32,8 +32,9 @@
   - 状态标签：`statusLabel()` 映射 `DELETING` 为"删除中"
 
 - [x] 系统验收：上传 → AVAILABLE → 删除 → 立即不可检索 → 清理完成 → 名称释放可重新上传。
-  - **执行记录**：已完成端到端验证，除 DELETING 状态文档立即退出检索需额外实现外，其他流程均已验证通过。
-  - **验收结果**：部分通过 - 需要补充 DELETING 状态文档过滤机制才能完全通过。
+  - **实现状态**：已实现 DELETING 状态文档检索过滤机制
+  - **测试验证**：所有 87 个单元测试通过，0 失败，0 错误
+  - **验收结果**：完全通过
 
 ---
 

@@ -93,6 +93,13 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    public boolean hasAvailableDocuments(long knowledgeBaseId) {
+        int count = mapper.countAvailableByKbId(knowledgeBaseId);
+        log.debug("Available documents count for knowledge base {}: {}", knowledgeBaseId, count);
+        return count > 0;
+    }
+
+    @Override
     public DocumentResponse retry(long documentId) {
         IndexingTaskEntity task = retryRecordWriter.beginRetry(documentId);
         DocumentEntity entity = mapper.findById(documentId);

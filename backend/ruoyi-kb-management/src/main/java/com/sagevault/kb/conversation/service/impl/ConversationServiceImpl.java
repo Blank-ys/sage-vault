@@ -8,6 +8,7 @@ import com.sagevault.kb.conversation.domain.CreateConversationRequest;
 import com.sagevault.kb.conversation.mapper.ConversationMapper;
 import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
+import com.sagevault.kb.document.service.DocumentService;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
@@ -22,13 +23,17 @@ import reactor.core.publisher.Flux;
 public class ConversationServiceImpl implements ConversationService {
     private final ConversationMapper mapper;
     private final KnowledgeBaseService knowledgeBases;
+    private final DocumentService documents;
     private final QaRecordService records;
     private final RagAnswerPort rag;
 
+    private static final String NO_AVAILABLE_DOCUMENTS_MESSAGE = "该知识库暂无可用文档";
+
     public ConversationServiceImpl(ConversationMapper mapper, KnowledgeBaseService knowledgeBases,
-            QaRecordService records, RagAnswerPort rag) {
+            DocumentService documents, QaRecordService records, RagAnswerPort rag) {
         this.mapper = mapper;
         this.knowledgeBases = knowledgeBases;
+        this.documents = documents;
         this.records = records;
         this.rag = rag;
     }
@@ -51,6 +56,18 @@ public class ConversationServiceImpl implements ConversationService {
         }
         ConversationEntity conversation = requireOwned(userId, conversationId);
         knowledgeBases.requireAvailable(conversation.getKnowledgeBaseId());
+
+        // 检查知识库是否有可用文档（过滤掉DELETING状态）
+        if (!documents.hasAvailableDocuments(conversation.getKnowledgeBaseId())) {
+            String generationId = UUID.randomUUID().toString();
+            records.create(conversationId, userId, request.requestId(), generationId, request.question());
+            records.markRefused(generationId, NO_AVAILABLE_DOCUMENTS_MESSAGE);
+            return Flux.just(
+                new AnswerEvent.Started(generationId),
+                new AnswerEvent.Refused(generationId, NO_AVAILABLE_DOCUMENTS_MESSAGE)
+            );
+        }
+
         String generationId = UUID.randomUUID().toString();
         try {
             records.create(conversationId, userId, request.requestId(), generationId, request.question());

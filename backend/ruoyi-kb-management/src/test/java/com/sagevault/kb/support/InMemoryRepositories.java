@@ -11,6 +11,7 @@ import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
 import com.sagevault.kb.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.knowledgebase.service.impl.KnowledgeBaseServiceImpl;
+import com.sagevault.kb.document.service.DocumentService;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
 
 public final class InMemoryRepositories {
@@ -36,7 +38,9 @@ public final class InMemoryRepositories {
                 new AnswerEvent.Started(generationId),
                 new AnswerEvent.Refused(generationId, "该知识库暂无可用文档"));
         QaRecordService records = new QaRecordServiceImpl(new QaRecords());
-        conversations = new ConversationServiceImpl(new Conversations(), knowledgeBases, records, emptyRag);
+        DocumentService documents = Mockito.mock(DocumentService.class);
+        Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
+        conversations = new ConversationServiceImpl(new Conversations(), knowledgeBases, documents, records, emptyRag);
     }
 
     public KnowledgeBaseService knowledgeBases() { return knowledgeBases; }
