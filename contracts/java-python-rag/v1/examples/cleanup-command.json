@@ -1,0 +1,12 @@
+{
+  "request": {
+    "taskId": "task-01J3Q8Z9X0ABC123",
+    "knowledgeBaseId": 7,
+    "documentId": "doc-01J3Q8Z9X0DEF456",
+    "requestId": "req-01J3Q8Z9X0GHI789"
+  },
+  "headers": {
+    "X-Sage-Timestamp": "1722049200",
+    "X-Sage-Signature": "abcdef1234567890"
+  }
+}

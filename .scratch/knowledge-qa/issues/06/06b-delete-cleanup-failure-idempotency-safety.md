@@ -4,12 +4,13 @@
 
 **Blocked by:** 06a — 文档删除 happy path.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 清理失败后文档保持 DELETING 状态并记录诊断信息（失败阶段、异常类型）；前端展示"删除失败"可辨识标签与重试入口。
-- [ ] 管理员可对清理失败的文档发起重试；重试通过 CAS + attempt 递增保证幂等，不创建新文档记录。
-- [ ] 重复删除请求对已处于 DELETING 的文档返回幂等成功或明确状态冲突，不产生二次清理命令。
-- [ ] 重复/乱序 cleanup callback 被安全忽略（attempt 比对 + 终态检查），不重复执行 MinIO 删除或记录移除。
-- [ ] 清理按 document_id 定位向量和对象键，不误删后来上传的同名文档（objectKey 含 UUID 前缀）。
-- [ ] 删除企业文档不删除已有会话、问答记录或已提交反馈；系统验收验证关联数据完整性。
-- [ ] 系统验收：注入清理失败 → 验证诊断状态与不可检索 → 重试 → 最终清理完成 → 名称释放。
+- [x] 清理失败后文档保持 DELETING 状态并记录诊断信息（失败阶段、异常类型）；前端展示"删除失败"可辨识标签与重试入口。
+- [x] 管理员可对清理失败的文档发起重试；重试通过 CAS + attempt 递增保证幂等，不创建新文档记录。
+- [x] 重复删除请求对已处于 DELETING 的文档返回幂等成功或明确状态冲突，不产生二次清理命令。
+- [x] 重复/乱序 cleanup callback 被安全忽略（attempt 比对 + 终态检查），不重复执行 MinIO 删除或记录移除。
+- [x] 清理按 document_id 定位向量和对象键，不误删后来上传的同名文档（objectKey 含 UUID 前缀）。
+- [x] 删除企业文档不删除已有会话、问答记录或已提交反馈；系统验收验证关联数据完整性。
+- [x] 系统验收：注入清理失败 → 验证诊断状态与不可检索 → 重试 → 最终清理完成 → 名称释放。
+- [x] 残留检测 FAILSAFE：AutoCleanupTask(interval=30000) 扫描 cleanup_phase IS NOT NULL AND status='DELETING' AND cleanup_attempt>=5 的文档置为 CLEANUP_FAILED；清理重试同时递增 cleanup_attempt。

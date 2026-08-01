@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Java 回调
     java_callback_url: str = ""
     java_callback_signing_key: str = ""
+    java_cleanup_callback_url: str = ""
 
     # Milvus
     milvus_host: str = "127.0.0.1"

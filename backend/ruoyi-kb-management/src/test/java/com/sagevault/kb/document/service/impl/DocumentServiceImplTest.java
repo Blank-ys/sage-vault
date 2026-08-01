@@ -22,6 +22,7 @@ import com.sagevault.kb.document.domain.IndexingTaskEntity;
 import com.sagevault.kb.document.domain.IndexingTaskStatus;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
+import com.sagevault.kb.document.service.port.CleanupCommandDispatcher;
 import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
@@ -43,7 +44,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
         byte[] content = "hello world".getBytes();
         MultipartFile file = file("notes.txt", content);
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", content.length);
@@ -70,7 +71,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
 
         uploadAndVerifyContentType(recordWriter, indexingTaskRecordWriter, storage, service,
                 "spec.pdf", "application/pdf");
@@ -105,7 +106,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
         byte[] content = "content".getBytes();
         MultipartFile file = file("notes.txt", content);
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", content.length);
@@ -133,7 +134,8 @@ class DocumentServiceImplTest {
 
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
                 mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
-                mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class));
+                mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class),
+                mock(CleanupCommandDispatcher.class));
 
         assertThat(service.listByKnowledgeBase(7L)).extracting(DocumentResponse::filename)
                 .containsExactly("a.txt", "b.txt");
@@ -147,7 +149,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
         DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
@@ -177,7 +179,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("alpha.txt", "alpha".getBytes());
         doThrow(new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT, "以下文件名在知识库内或本批中已存在：alpha.txt"))
@@ -199,7 +201,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
         DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
@@ -227,7 +229,7 @@ class DocumentServiceImplTest {
         MinioDocumentStorage storage = mock(MinioDocumentStorage.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, recordWriter, indexingTaskRecordWriter,
-                mock(RetryRecordWriter.class), storage, dispatcher);
+                mock(RetryRecordWriter.class), mock(CleanupRecordWriter.class), storage, dispatcher, mock(CleanupCommandDispatcher.class));
         MultipartFile firstFile = file("alpha.txt", "alpha".getBytes());
         MultipartFile secondFile = file("beta.pdf", "beta".getBytes());
         DocumentEntity firstEntity = processingEntity(7L, 11L, "alpha.txt", "key-a", 5);
@@ -287,7 +289,8 @@ class DocumentServiceImplTest {
         RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
-                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class),
+                dispatcher, mock(CleanupCommandDispatcher.class));
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", 5);
         entity.setStatus(DocumentStatus.PROCESSING);
         entity.setErrorMessage("");
@@ -310,7 +313,8 @@ class DocumentServiceImplTest {
         RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
-                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class),
+                dispatcher, mock(CleanupCommandDispatcher.class));
         DocumentEntity entity = processingEntity(7L, 11L, "notes.txt", "documents/11/uuid/notes.txt", 5);
         entity.setStatus(DocumentStatus.PROCESSING);
         IndexingTaskEntity retryTask = taskEntity(11L, "task-retry-2");
@@ -334,7 +338,8 @@ class DocumentServiceImplTest {
         RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
-                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class),
+                dispatcher, mock(CleanupCommandDispatcher.class));
         when(retryRecordWriter.beginRetry(11L)).thenThrow(
                 new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT, "仅处理失败的文档可以重试"));
 
@@ -353,7 +358,8 @@ class DocumentServiceImplTest {
         RetryRecordWriter retryRecordWriter = mock(RetryRecordWriter.class);
         IndexingCommandDispatcher dispatcher = mock(IndexingCommandDispatcher.class);
         DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
-                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(MinioDocumentStorage.class), dispatcher);
+                mock(IndexingTaskRecordWriter.class), retryRecordWriter, mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class),
+                dispatcher, mock(CleanupCommandDispatcher.class));
         DocumentEntity entity = processingEntity(7L, 11L, "report.txt", "documents/11/uuid/report.txt", 10);
         entity.setStatus(DocumentStatus.PROCESSING);
         IndexingTaskEntity retryTask = taskEntity(11L, "task-retry-2");
@@ -367,5 +373,125 @@ class DocumentServiceImplTest {
         assertThat(response.filename()).isEqualTo("report.txt");
         assertThat(response.knowledgeBaseId()).isEqualTo(7L);
         verify(mapper, never()).insert(any());
+    }
+
+    @Test
+    void deleteIsIdempotentWhenDocumentIsAlreadyDeleting() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        CleanupCommandDispatcher cleanupDispatcher = mock(CleanupCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
+                mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class), cleanupDispatcher);
+        DocumentEntity entity = new DocumentEntity();
+        entity.setId(11L);
+        entity.setKbId(7L);
+        entity.setFilename("report.txt");
+        entity.setSize(100L);
+        entity.setStatus(DocumentStatus.DELETING);
+        when(mapper.findById(11L)).thenReturn(entity);
+
+        service.delete(11L);
+
+        verify(mapper, never()).updateStatusIfCurrentStatus(anyLong(), anyString(), anyString(), anyString());
+        verify(cleanupDispatcher, never()).dispatch(any());
+    }
+
+    @Test
+    void deleteRejectsCleanupFailedDocument() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
+                mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class),
+                mock(CleanupCommandDispatcher.class));
+        DocumentEntity entity = new DocumentEntity();
+        entity.setId(11L);
+        entity.setStatus(DocumentStatus.CLEANUP_FAILED);
+        when(mapper.findById(11L)).thenReturn(entity);
+
+        assertThatThrownBy(() -> service.delete(11L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("清理失败");
+
+        verify(mapper, never()).updateStatusIfCurrentStatus(anyLong(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void deleteReturnsDocumentResponseFollowingDocumentResponseShape() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        CleanupCommandDispatcher cleanupDispatcher = mock(CleanupCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
+                mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class), cleanupDispatcher);
+        DocumentEntity entity = new DocumentEntity();
+        entity.setId(11L);
+        entity.setKbId(7L);
+        entity.setFilename("report.txt");
+        entity.setNormalizedName("report.txt");
+        entity.setStatus(DocumentStatus.AVAILABLE);
+        entity.setSize(100L);
+        when(mapper.findById(11L)).thenReturn(entity);
+        when(mapper.updateStatusIfCurrentStatus(eq(11L), eq(DocumentStatus.DELETING.name()),
+                eq(""), eq(DocumentStatus.AVAILABLE.name()))).thenReturn(1);
+
+        DocumentResponse response = service.delete(11L);
+
+        assertThat(response.id()).isEqualTo(11L);
+        assertThat(response.status()).isEqualTo(DocumentStatus.DELETING);
+        assertThat(response.filename()).isEqualTo("report.txt");
+        verify(cleanupDispatcher).dispatch(entity);
+    }
+
+    @Test
+    void cleanupRetryDispatchesCleanupAndReturnsResponse() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        CleanupRecordWriter cleanupRecordWriter = mock(CleanupRecordWriter.class);
+        CleanupCommandDispatcher cleanupDispatcher = mock(CleanupCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class), cleanupRecordWriter,
+                mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class), cleanupDispatcher);
+        DocumentEntity entity = new DocumentEntity();
+        entity.setId(11L);
+        entity.setStatus(DocumentStatus.DELETING);
+        entity.setFilename("report.txt");
+        entity.setKbId(7L);
+        entity.setSize(100L);
+        IndexingTaskEntity cleanupTask = taskEntity(11L, "cleanup-task-1");
+        cleanupTask.setTaskType("CLEANUP");
+        when(cleanupRecordWriter.beginCleanupRetry(11L)).thenReturn(cleanupTask);
+        when(mapper.findById(11L)).thenReturn(entity);
+
+        DocumentResponse response = service.cleanupRetry(11L);
+
+        assertThat(response.status()).isEqualTo(DocumentStatus.DELETING);
+        assertThat(response.filename()).isEqualTo("report.txt");
+        verify(cleanupRecordWriter).beginCleanupRetry(11L);
+        verify(cleanupDispatcher).dispatch(entity);
+    }
+
+    @Test
+    void cleanupRetryMarksFailedWhenDispatchThrows() {
+        DocumentMapper mapper = mock(DocumentMapper.class);
+        CleanupRecordWriter cleanupRecordWriter = mock(CleanupRecordWriter.class);
+        CleanupCommandDispatcher cleanupDispatcher = mock(CleanupCommandDispatcher.class);
+        DocumentServiceImpl service = new DocumentServiceImpl(mapper, mock(DocumentRecordWriter.class),
+                mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class), cleanupRecordWriter,
+                mock(MinioDocumentStorage.class), mock(IndexingCommandDispatcher.class), cleanupDispatcher);
+        DocumentEntity entity = new DocumentEntity();
+        entity.setId(11L);
+        entity.setStatus(DocumentStatus.DELETING);
+        IndexingTaskEntity cleanupTask = taskEntity(11L, "cleanup-task-1");
+        cleanupTask.setTaskType("CLEANUP");
+        when(cleanupRecordWriter.beginCleanupRetry(11L)).thenReturn(cleanupTask);
+        when(mapper.findById(11L)).thenReturn(entity);
+        doThrow(new BusinessException(ErrorCode.RAG_UNAVAILABLE, "RAG 服务暂不可用"))
+                .when(cleanupDispatcher).dispatch(entity);
+
+        assertThatThrownBy(() -> service.cleanupRetry(11L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("RAG 服务暂不可用");
+
+        verify(cleanupRecordWriter).failTask(eq(cleanupTask), anyString());
+        verify(mapper).updateStatusIfCurrentStatus(eq(11L), eq(DocumentStatus.CLEANUP_FAILED.name()),
+                anyString(), eq(DocumentStatus.DELETING.name()));
     }
 }

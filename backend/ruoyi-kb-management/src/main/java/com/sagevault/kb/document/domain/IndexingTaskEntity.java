@@ -11,6 +11,7 @@ public class IndexingTaskEntity {
     private LocalDateTime issuedAt;
     private LocalDateTime callbackReceivedAt;
     private String errorMessage;
+    private String taskType;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -76,6 +77,14 @@ public class IndexingTaskEntity {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public String getTaskType() {
+        return taskType;
+    }
+
+    public void setTaskType(String taskType) {
+        this.taskType = taskType;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -62,7 +62,7 @@
         <el-table-column prop="errorMessage" label="错误信息" show-overflow-tooltip />
         <el-table-column prop="createdAt" label="创建时间" width="180" />
         <el-table-column prop="updatedAt" label="更新时间" width="180" />
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="scope">
             <el-button
               v-if="scope.row.status === 'FAILED'"
@@ -71,6 +71,20 @@
               :loading="retryingId === scope.row.id"
               @click="handleRetry(scope.row)"
             >重试</el-button>
+            <el-button
+              v-if="scope.row.status === 'CLEANUP_FAILED'"
+              type="warning"
+              size="small"
+              :loading="cleanupRetryingId === scope.row.id"
+              @click="handleCleanupRetry(scope.row)"
+            >重试清理</el-button>
+            <el-button
+              v-if="scope.row.status === 'AVAILABLE'"
+              type="danger"
+              size="small"
+              :loading="deletingId === scope.row.id"
+              @click="handleDelete(scope.row)"
+            >删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -79,13 +93,15 @@
 </template>
 
 <script setup>
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { listKnowledgeBases } from '@/features/knowledge-bases'
-import { listDocuments, retryDocument, uploadDocuments } from '../api/documents'
+import { deleteDocument, listDocuments, retryDocument, uploadDocuments, cleanupRetryDocument } from '../api/documents'
 
 const loading = ref(false)
 const uploading = ref(false)
 const retryingId = ref(null)
+const deletingId = ref(null)
+const cleanupRetryingId = ref(null)
 const selectedKnowledgeBaseId = ref(null)
 const knowledgeBases = ref([])
 const items = ref([])
@@ -167,7 +183,8 @@ function statusLabel(status) {
     PROCESSING: '处理中',
     AVAILABLE: '可用',
     FAILED: '失败',
-    DELETING: '删除中'
+    DELETING: '删除中',
+    CLEANUP_FAILED: '清理失败'
   }
   return labels[status] || status
 }
@@ -177,7 +194,8 @@ function statusType(status) {
     PROCESSING: 'warning',
     AVAILABLE: 'success',
     FAILED: 'danger',
-    DELETING: 'info'
+    DELETING: 'info',
+    CLEANUP_FAILED: 'danger'
   }
   return types[status] || 'info'
 }
@@ -192,6 +210,41 @@ async function handleRetry(row) {
     ElMessage.error('重试失败')
   } finally {
     retryingId.value = null
+  }
+}
+
+async function handleCleanupRetry(row) {
+  cleanupRetryingId.value = row.id
+  try {
+    await cleanupRetryDocument(row.id)
+    ElMessage.success('清理重试已发起，文档清理中')
+    await load()
+  } catch {
+    ElMessage.error('清理重试失败')
+  } finally {
+    cleanupRetryingId.value = null
+  }
+}
+
+async function handleDelete(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除文档「${row.filename}」吗？删除后该文档将立即退出问答检索，原文件与向量将在后台清理。`,
+      '删除确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  deletingId.value = row.id
+  try {
+    await deleteDocument(row.id)
+    ElMessage.success('删除已发起，文档清理中')
+    await load()
+  } catch {
+    ElMessage.error('删除失败')
+  } finally {
+    deletingId.value = null
   }
 }
 

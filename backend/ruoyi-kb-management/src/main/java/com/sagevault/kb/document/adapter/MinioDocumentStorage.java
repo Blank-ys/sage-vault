@@ -6,11 +6,15 @@ import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import io.minio.BucketExistsArgs;
 import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.Result;
 import io.minio.errors.MinioException;
 import io.minio.http.Method;
+import io.minio.messages.Item;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
@@ -68,6 +72,27 @@ public class MinioDocumentStorage implements DocumentStorage {
         } catch (MinioException | IOException | InvalidKeyException | NoSuchAlgorithmException exception) {
             log.error("Failed to generate presigned URL for object {}", objectKey, exception);
             throw new BusinessException(ErrorCode.DOCUMENT_STORAGE_FAILED, "无法生成文档下载地址");
+        }
+    }
+
+    @Override
+    public void deleteByPrefix(String prefix) {
+        try {
+            Iterable<Result<Item>> objects = client.listObjects(ListObjectsArgs.builder()
+                    .bucket(properties.bucket())
+                    .prefix(prefix)
+                    .recursive(true)
+                    .build());
+            for (Result<Item> result : objects) {
+                String objectName = result.get().objectName();
+                client.removeObject(RemoveObjectArgs.builder()
+                        .bucket(properties.bucket())
+                        .object(objectName)
+                        .build());
+            }
+        } catch (MinioException | IOException | InvalidKeyException | NoSuchAlgorithmException exception) {
+            log.error("Failed to delete objects with prefix {}", prefix, exception);
+            throw new BusinessException(ErrorCode.DOCUMENT_STORAGE_FAILED, "文档存储清理失败");
         }
     }
 

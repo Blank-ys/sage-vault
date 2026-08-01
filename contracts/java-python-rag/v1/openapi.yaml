@@ -54,6 +54,38 @@ paths:
         '200':
           description: Callback accepted and idempotently reconciled
         '401': {description: Invalid deployment signature}
+  /internal/v1/cleanup:
+    post:
+      operationId: cleanupDocument
+      parameters:
+        - {name: X-Sage-Timestamp, in: header, required: true, schema: {type: string}}
+        - {name: X-Sage-Signature, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CleanupCommand'
+      responses:
+        '202':
+          description: Command accepted; processing happens asynchronously
+        '401': {description: Invalid deployment signature}
+  /internal/v1/cleanup/callbacks:
+    post:
+      operationId: cleanupCallback
+      parameters:
+        - {name: X-Sage-Timestamp, in: header, required: true, schema: {type: string}}
+        - {name: X-Sage-Signature, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CleanupCallback'
+      responses:
+        '200':
+          description: Callback accepted and idempotently reconciled
+        '401': {description: Invalid deployment signature}
 components:
   schemas:
     AnswerRequest:
@@ -87,6 +119,27 @@ components:
         documentId: {type: string, minLength: 1}
         success: {type: boolean}
         chunksCount: {type: integer, minimum: 0}
+        requestId: {type: string, minLength: 1}
+        diagnostics:
+          type: object
+          additionalProperties: true
+    CleanupCommand:
+      type: object
+      additionalProperties: false
+      required: [taskId, knowledgeBaseId, documentId, requestId]
+      properties:
+        taskId: {type: string, minLength: 1}
+        knowledgeBaseId: {type: integer, format: int64, minimum: 1}
+        documentId: {type: string, minLength: 1}
+        requestId: {type: string, minLength: 1}
+    CleanupCallback:
+      type: object
+      additionalProperties: false
+      required: [taskId, documentId, success, requestId]
+      properties:
+        taskId: {type: string, minLength: 1}
+        documentId: {type: string, minLength: 1}
+        success: {type: boolean}
         requestId: {type: string, minLength: 1}
         diagnostics:
           type: object

@@ -7,6 +7,7 @@ import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.service.DocumentService;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,5 +49,17 @@ public class DocumentController {
     @PostMapping("/{id}/retry")
     public R<DocumentResponse> retry(@PathVariable long id) {
         return R.ok(service.retry(id));
+    }
+
+    @RequiresPermissions("sage:document:manage")
+    @PostMapping("/{id}/cleanup-retry")
+    public R<DocumentResponse> cleanupRetry(@PathVariable long id) {
+        return R.ok(service.cleanupRetry(id));
+    }
+
+    @RequiresPermissions("sage:document:manage")
+    @DeleteMapping("/{id}")
+    public R<DocumentResponse> delete(@PathVariable long id) {
+        return R.ok(service.delete(id));
     }
 }

@@ -1,0 +1,107 @@
+openapi: 3.1.0
+info:
+  title: Sage Vault 管理端文档 REST 契约
+  version: 1.0.0
+  description: |
+    企业知识库文档管理对外 REST 契约（网关前缀 /api/v1）。
+    本契约登记删除幂等与清理失败相关的公开接口，作为跨端验收的权威源。
+servers:
+  - url: /api/v1
+paths:
+  /documents/{id}:
+    delete:
+      operationId: deleteDocument
+      summary: 删除文档（幂等）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: 删除已发起（或已在删除中，幂等返回），包体遵循 DocumentResponse 形状
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, msg, data]
+                properties:
+                  code: { type: integer }
+                  msg: { type: string }
+                  data: { $ref: '#/components/schemas/DocumentResponse' }
+        '404':
+          description: 文档不存在
+        '409':
+          description: 文档处于 CLEANUP_FAILED 终态，必须先调用 cleanup-retry
+  /documents/{id}/cleanup-retry:
+    post:
+      operationId: cleanupRetry
+      summary: 清理重试（幂等）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: 清理重试已发起，包体遵循 DocumentResponse 形状
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, msg, data]
+                properties:
+                  code: { type: integer }
+                  msg: { type: string }
+                  data: { $ref: '#/components/schemas/DocumentResponse' }
+        '404':
+          description: 文档不存在
+        '409':
+          description: 文档不处于 DELETING 或 CLEANUP_FAILED 状态，无法重试清理
+components:
+  schemas:
+    DocumentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kbId
+        - filename
+        - status
+      properties:
+        id:
+          type: string
+          minLength: 1
+        kbId:
+          type: integer
+          format: int64
+          minimum: 1
+        filename:
+          type: string
+          minLength: 1
+        normalizedName:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum:
+            - AVAILABLE
+            - INDEXING
+            - INDEX_FAILED
+            - DELETING
+            - CLEANUP_FAILED
+        errorMessage:
+          type: string
+        cleanupPhase:
+          type: string
+          enum:
+            - MILVUS_CLEANUP
+            - MINIO_CLEANUP
+            - ""
+        cleanupAttempt:
+          type: integer
+          minimum: 0

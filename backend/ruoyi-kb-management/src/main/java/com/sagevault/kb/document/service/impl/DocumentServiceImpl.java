@@ -9,9 +9,12 @@ import com.sagevault.kb.document.domain.IndexingTaskEntity;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
 import com.sagevault.kb.document.service.DocumentService;
+import com.sagevault.kb.document.service.port.CleanupCommandDispatcher;
 import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
+import com.sagevault.kb.platform.error.ErrorCode;
 import java.io.IOException;
+import lombok.RequiredArgsConstructor;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
+@RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
     private static final Logger log = LoggerFactory.getLogger(DocumentServiceImpl.class);
 
@@ -28,19 +32,10 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentRecordWriter recordWriter;
     private final IndexingTaskRecordWriter indexingTaskRecordWriter;
     private final RetryRecordWriter retryRecordWriter;
+    private final CleanupRecordWriter cleanupRecordWriter;
     private final MinioDocumentStorage storage;
     private final IndexingCommandDispatcher dispatcher;
-
-    public DocumentServiceImpl(DocumentMapper mapper, DocumentRecordWriter recordWriter,
-            IndexingTaskRecordWriter indexingTaskRecordWriter, RetryRecordWriter retryRecordWriter,
-            MinioDocumentStorage storage, IndexingCommandDispatcher dispatcher) {
-        this.mapper = mapper;
-        this.recordWriter = recordWriter;
-        this.indexingTaskRecordWriter = indexingTaskRecordWriter;
-        this.retryRecordWriter = retryRecordWriter;
-        this.storage = storage;
-        this.dispatcher = dispatcher;
-    }
+    private final CleanupCommandDispatcher cleanupDispatcher;
 
     @Override
     public DocumentResponse upload(UploadDocumentRequest request) {
@@ -88,6 +83,13 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    public boolean hasAvailableDocuments(long knowledgeBaseId) {
+        int count = mapper.countAvailableByKbId(knowledgeBaseId);
+        log.debug("Available documents count for knowledge base {}: {}", knowledgeBaseId, count);
+        return count > 0;
+    }
+
+    @Override
     public DocumentResponse retry(long documentId) {
         IndexingTaskEntity task = retryRecordWriter.beginRetry(documentId);
         DocumentEntity entity = mapper.findById(documentId);
@@ -98,6 +100,61 @@ public class DocumentServiceImpl implements DocumentService {
             String message = "重试派发失败：" + exception.getMessage();
             retryRecordWriter.failTask(task, message);
             markFailed(entity, message);
+        }
+        return response(entity);
+    }
+
+    @Override
+    public DocumentResponse delete(long documentId) {
+        DocumentEntity entity = mapper.findById(documentId);
+        if (entity == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
+        }
+
+        // 幂等性：已在删除中的文档直接返回当前状态
+        if (entity.getStatus() == DocumentStatus.DELETING) {
+            log.info("Document {} is already in DELETING status, delete is idempotent", documentId);
+            return response(entity);
+        }
+
+        // 幂等性：清理失败的文档不允许直接删除，必须通过重试清理接口
+        if (entity.getStatus() == DocumentStatus.CLEANUP_FAILED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
+                    "文档清理失败，请重试清理操作");
+        }
+
+        // 仅 AVAILABLE 状态可以进入删除流程
+        int updated = mapper.updateStatusIfCurrentStatus(documentId,
+                DocumentStatus.DELETING.name(), "", DocumentStatus.AVAILABLE.name());
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT, "文档当前状态不允许删除");
+        }
+        entity.setStatus(DocumentStatus.DELETING);
+        try {
+            cleanupDispatcher.dispatch(entity);
+        } catch (RuntimeException exception) {
+            log.error("Failed to dispatch cleanup for document {}", documentId, exception);
+            mapper.updateStatusIfCurrentStatus(documentId,
+                    DocumentStatus.AVAILABLE.name(), "", DocumentStatus.DELETING.name());
+            throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, "清理命令派发失败，请稍后重试");
+        }
+        return response(entity);
+    }
+
+    @Override
+    public DocumentResponse cleanupRetry(long documentId) {
+        IndexingTaskEntity task = cleanupRecordWriter.beginCleanupRetry(documentId);
+        DocumentEntity entity = mapper.findById(documentId);
+        try {
+            cleanupDispatcher.dispatch(entity);
+        } catch (RuntimeException exception) {
+            log.error("Failed to dispatch retry cleanup for document {}", documentId, exception);
+            String message = "清理重试派发失败：" + exception.getMessage();
+            cleanupRecordWriter.failTask(task, message);
+            // 回退到 CLEANUP_FAILED
+            mapper.updateStatusIfCurrentStatus(documentId,
+                    DocumentStatus.CLEANUP_FAILED.name(), message, DocumentStatus.DELETING.name());
+            throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, message);
         }
         return response(entity);
     }

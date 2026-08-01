@@ -12,5 +12,11 @@ public interface DocumentService {
 
     List<DocumentResponse> listByKnowledgeBase(long knowledgeBaseId);
 
+    boolean hasAvailableDocuments(long knowledgeBaseId);
+
     DocumentResponse retry(long documentId);
+
+    DocumentResponse delete(long documentId);
+
+    DocumentResponse cleanupRetry(long documentId);
 }

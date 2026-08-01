@@ -130,3 +130,6 @@ Desktop.ini
 .pytest_cache/
 __pycache__/
 *.pyc
+
+# 备份文件
+data_bak/

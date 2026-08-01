@@ -10,12 +10,13 @@
         <result property="issuedAt" column="issued_at"/>
         <result property="callbackReceivedAt" column="callback_received_at"/>
         <result property="errorMessage" column="error_message"/>
+        <result property="taskType" column="task_type"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <sql id="columns">
-        id, document_id, task_id, attempt, status, issued_at, callback_received_at, error_message, created_at, updated_at
+        id, document_id, task_id, attempt, status, issued_at, callback_received_at, error_message, task_type, created_at, updated_at
     </sql>
 
     <insert id="insert" parameterType="com.sagevault.kb.document.domain.IndexingTaskEntity"
@@ -48,4 +49,16 @@
               OR (attempt = #{attempt} AND status NOT IN ('COMPLETED', 'FAILED'))
           )
     </update>
+
+    <delete id="deleteByDocumentId">
+        DELETE FROM sv_document_indexing_task WHERE document_id = #{documentId}
+    </delete>
+
+    <select id="findLatestCleanupByDocumentId" resultMap="indexingTaskResult">
+        SELECT <include refid="columns"/>
+        FROM sv_document_indexing_task
+        WHERE document_id = #{documentId} AND task_type = 'CLEANUP'
+        ORDER BY attempt DESC, id DESC
+        LIMIT 1
+    </select>
 </mapper>

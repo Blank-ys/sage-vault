@@ -34,6 +34,20 @@ class ContractExamplesTest(unittest.TestCase):
         example = json.loads((root / "examples" / "indexing-callback.json").read_text(encoding="utf-8"))
         Draft202012Validator(schemas["IndexingCallback"], format_checker=FormatChecker()).validate(example["request"])
 
+    def test_cleanup_command_example_matches_schema(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        schemas = openapi["components"]["schemas"]
+        example = json.loads((root / "examples" / "cleanup-command.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schemas["CleanupCommand"], format_checker=FormatChecker()).validate(example["request"])
+
+    def test_cleanup_callback_example_matches_schema(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        schemas = openapi["components"]["schemas"]
+        example = json.loads((root / "examples" / "cleanup-callback.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schemas["CleanupCallback"], format_checker=FormatChecker()).validate(example["request"])
+
 
 if __name__ == "__main__":
     unittest.main()

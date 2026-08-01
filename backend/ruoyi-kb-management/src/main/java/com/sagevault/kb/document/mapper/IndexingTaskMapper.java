@@ -14,4 +14,9 @@ public interface IndexingTaskMapper {
     int updateTerminalState(@Param("taskId") String taskId, @Param("attempt") int attempt,
             @Param("status") String status, @Param("errorMessage") String errorMessage,
             @Param("callbackReceivedAt") LocalDateTime callbackReceivedAt);
+
+    int deleteByDocumentId(@Param("documentId") long documentId);
+
+    /** 查找文档最新的清理任务，用于获取当前 attempt */
+    IndexingTaskEntity findLatestCleanupByDocumentId(@Param("documentId") long documentId);
 }

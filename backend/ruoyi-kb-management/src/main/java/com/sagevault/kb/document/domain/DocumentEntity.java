@@ -11,6 +11,8 @@ public class DocumentEntity {
     private String objectKey;
     private Long size;
     private String errorMessage;
+    private String cleanupPhase;
+    private Integer cleanupAttempt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -92,5 +94,21 @@ public class DocumentEntity {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getCleanupPhase() {
+        return cleanupPhase;
+    }
+
+    public void setCleanupPhase(String cleanupPhase) {
+        this.cleanupPhase = cleanupPhase;
+    }
+
+    public Integer getCleanupAttempt() {
+        return cleanupAttempt;
+    }
+
+    public void setCleanupAttempt(Integer cleanupAttempt) {
+        this.cleanupAttempt = cleanupAttempt;
     }
 }

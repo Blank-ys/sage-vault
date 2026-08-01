@@ -1,0 +1,13 @@
+{
+  "request": {
+    "taskId": "task-01J3Q8Z9X0ABC123",
+    "documentId": "doc-01J3Q8Z9X0DEF456",
+    "success": true,
+    "requestId": "req-01J3Q8Z9X0GHI789",
+    "diagnostics": {}
+  },
+  "headers": {
+    "X-Sage-Timestamp": "1722049260",
+    "X-Sage-Signature": "fedcba0987654321"
+  }
+}

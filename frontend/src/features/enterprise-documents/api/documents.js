@@ -38,3 +38,17 @@ export function retryDocument(documentId) {
     method: 'post'
   }).then(res => res.data)
 }
+
+export function cleanupRetryDocument(documentId) {
+  return request({
+    url: `/ruoyi-kb-management/documents/${documentId}/cleanup-retry`,
+    method: 'post'
+  }).then(res => res.data)
+}
+
+export function deleteDocument(documentId) {
+  return request({
+    url: `/ruoyi-kb-management/documents/${documentId}`,
+    method: 'delete'
+  }).then(res => res.data)
+}
