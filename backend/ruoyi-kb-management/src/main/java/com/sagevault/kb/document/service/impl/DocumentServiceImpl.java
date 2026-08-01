@@ -14,6 +14,7 @@ import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.io.IOException;
+import lombok.RequiredArgsConstructor;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
+@RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
     private static final Logger log = LoggerFactory.getLogger(DocumentServiceImpl.class);
 
@@ -30,22 +32,10 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentRecordWriter recordWriter;
     private final IndexingTaskRecordWriter indexingTaskRecordWriter;
     private final RetryRecordWriter retryRecordWriter;
+    private final CleanupRecordWriter cleanupRecordWriter;
     private final MinioDocumentStorage storage;
     private final IndexingCommandDispatcher dispatcher;
     private final CleanupCommandDispatcher cleanupDispatcher;
-
-    public DocumentServiceImpl(DocumentMapper mapper, DocumentRecordWriter recordWriter,
-            IndexingTaskRecordWriter indexingTaskRecordWriter, RetryRecordWriter retryRecordWriter,
-            MinioDocumentStorage storage, IndexingCommandDispatcher dispatcher,
-            CleanupCommandDispatcher cleanupDispatcher) {
-        this.mapper = mapper;
-        this.recordWriter = recordWriter;
-        this.indexingTaskRecordWriter = indexingTaskRecordWriter;
-        this.retryRecordWriter = retryRecordWriter;
-        this.storage = storage;
-        this.dispatcher = dispatcher;
-        this.cleanupDispatcher = cleanupDispatcher;
-    }
 
     @Override
     public DocumentResponse upload(UploadDocumentRequest request) {
@@ -115,11 +105,25 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    public void delete(long documentId) {
+    public DocumentResponse delete(long documentId) {
         DocumentEntity entity = mapper.findById(documentId);
         if (entity == null) {
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
         }
+
+        // 幂等性：已在删除中的文档直接返回当前状态
+        if (entity.getStatus() == DocumentStatus.DELETING) {
+            log.info("Document {} is already in DELETING status, delete is idempotent", documentId);
+            return response(entity);
+        }
+
+        // 幂等性：清理失败的文档不允许直接删除，必须通过重试清理接口
+        if (entity.getStatus() == DocumentStatus.CLEANUP_FAILED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
+                    "文档清理失败，请重试清理操作");
+        }
+
+        // 仅 AVAILABLE 状态可以进入删除流程
         int updated = mapper.updateStatusIfCurrentStatus(documentId,
                 DocumentStatus.DELETING.name(), "", DocumentStatus.AVAILABLE.name());
         if (updated == 0) {
@@ -134,6 +138,25 @@ public class DocumentServiceImpl implements DocumentService {
                     DocumentStatus.AVAILABLE.name(), "", DocumentStatus.DELETING.name());
             throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, "清理命令派发失败，请稍后重试");
         }
+        return response(entity);
+    }
+
+    @Override
+    public DocumentResponse cleanupRetry(long documentId) {
+        IndexingTaskEntity task = cleanupRecordWriter.beginCleanupRetry(documentId);
+        DocumentEntity entity = mapper.findById(documentId);
+        try {
+            cleanupDispatcher.dispatch(entity);
+        } catch (RuntimeException exception) {
+            log.error("Failed to dispatch retry cleanup for document {}", documentId, exception);
+            String message = "清理重试派发失败：" + exception.getMessage();
+            cleanupRecordWriter.failTask(task, message);
+            // 回退到 CLEANUP_FAILED
+            mapper.updateStatusIfCurrentStatus(documentId,
+                    DocumentStatus.CLEANUP_FAILED.name(), message, DocumentStatus.DELETING.name());
+            throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, message);
+        }
+        return response(entity);
     }
 
     private boolean storeOriginal(DocumentEntity entity, MultipartFile file) {

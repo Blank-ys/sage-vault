@@ -16,5 +16,7 @@ public interface DocumentService {
 
     DocumentResponse retry(long documentId);
 
-    void delete(long documentId);
+    DocumentResponse delete(long documentId);
+
+    DocumentResponse cleanupRetry(long documentId);
 }

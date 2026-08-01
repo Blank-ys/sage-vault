@@ -10,12 +10,14 @@
         <result property="objectKey" column="object_key"/>
         <result property="size" column="size"/>
         <result property="errorMessage" column="error_message"/>
+        <result property="cleanupPhase" column="cleanup_phase"/>
+        <result property="cleanupAttempt" column="cleanup_attempt"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <sql id="columns">
-        id, kb_id, filename, normalized_name, status, object_key, size, error_message, created_at, updated_at
+        id, kb_id, filename, normalized_name, status, object_key, size, error_message, cleanup_phase, cleanup_attempt, created_at, updated_at
     </sql>
 
     <insert id="insert" parameterType="com.sagevault.kb.document.domain.DocumentEntity"
@@ -73,4 +75,41 @@
     <delete id="deleteById">
         DELETE FROM sv_enterprise_document WHERE id = #{id}
     </delete>
+
+    <update id="updateStatusIdempotent">
+        UPDATE sv_enterprise_document
+        SET status = #{status}, error_message = #{errorMessage}
+        WHERE id = #{id} AND status = #{status}
+    </update>
+
+    <update id="incrementCleanupAttempt">
+        UPDATE sv_enterprise_document
+        SET status = 'DELETING',
+            error_message = '',
+            cleanup_attempt = #{newAttempt},
+            cleanup_phase = #{phase}
+        WHERE id = #{id} AND status = 'CLEANUP_FAILED'
+    </update>
+
+    <update id="incrementCleanupAttemptWhileDeleting">
+        UPDATE sv_enterprise_document
+        SET cleanup_attempt = #{newAttempt},
+            error_message = ''
+        WHERE id = #{id} AND status = 'DELETING'
+    </update>
+
+    <select id="findStuckCleaningDocuments" resultMap="documentResult">
+        SELECT <include refid="columns"/>
+        FROM sv_enterprise_document
+        WHERE cleanup_phase IS NOT NULL
+          AND status = 'DELETING'
+          AND cleanup_attempt >= #{threshold}
+    </select>
+
+    <update id="markCleanupFailed">
+        UPDATE sv_enterprise_document
+        SET status = 'CLEANUP_FAILED',
+            error_message = #{message}
+        WHERE id = #{id} AND status = 'DELETING'
+    </update>
 </mapper>

@@ -52,9 +52,14 @@ public class DocumentController {
     }
 
     @RequiresPermissions("sage:document:manage")
+    @PostMapping("/{id}/cleanup-retry")
+    public R<DocumentResponse> cleanupRetry(@PathVariable long id) {
+        return R.ok(service.cleanupRetry(id));
+    }
+
+    @RequiresPermissions("sage:document:manage")
     @DeleteMapping("/{id}")
-    public R<Void> delete(@PathVariable long id) {
-        service.delete(id);
-        return R.ok();
+    public R<DocumentResponse> delete(@PathVariable long id) {
+        return R.ok(service.delete(id));
     }
 }
