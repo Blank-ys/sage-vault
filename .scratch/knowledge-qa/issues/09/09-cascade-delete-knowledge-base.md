@@ -11,3 +11,14 @@
 - [ ] 任一清理失败时知识库进入删除失败、展示原因且仅允许查看和重试删除，不恢复为可用。
 - [ ] 删除与重试是幂等的，并阻止并发上传或提问在清理窗口重新产生数据。
 - [ ] 已有会话与问答记录继续可读并标记“知识库已删除”，但不能继续提问；删除知识库不删除历史反馈。
+
+## Comments
+
+### 2026-07-31 Split into tracer-bullet tickets
+
+This ticket has been split into the following sub-tickets to keep each implementation window focused:
+
+- [09a — 知识库级联删除 happy path：关闭闸门、后台清理、历史标记](09a-cascade-delete-happy-path.md)
+- [09b — 级联删除失败诊断、幂等重试与并发安全](09b-cascade-delete-failure-idempotency-safety.md)
+
+Do not implement this ticket directly; pick up the sub-tickets in dependency order.

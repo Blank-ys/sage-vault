@@ -12,3 +12,15 @@
 - [ ] 用户停止生成时 Java 终止流并通知 Python 尽力取消生成，已输出内容永久保存为已停止；系统中途失败时保存残缺内容为未完成。
 - [ ] 完成、拒答、已停止和未完成均持久化正确状态；SSE 至少覆盖 `started`、`delta`、`completed`、`refused`、`error`，且中断结果不计作成功回答。
 - [ ] 用户只能查看和删除自己的问答记录或会话；删除会话级联删除其中问答与反馈正文，但允许保留不含正文的操作审计。
+
+## Comments
+
+### 2026-07-31 Split into tracer-bullet tickets
+
+This ticket has been split into the following sub-tickets to keep each implementation window focused:
+
+- [07a — 会话组织、永久历史与所有权级联删除](07a-conversations-history-and-ownership.md)
+- [07b — 单用户串行化生成与问答状态机、SSE 事件](07b-single-user-serialization-and-answer-state-machine.md)
+- [07c — 流式停止与 Java→Python 尽力取消，已停止/未完成状态](07c-stream-stop-and-best-effort-cancel.md)
+
+Do not implement this ticket directly; pick up the sub-tickets in dependency order.

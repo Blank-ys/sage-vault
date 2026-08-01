@@ -11,3 +11,14 @@
 - [ ] 知识管理员可查看反馈对应的问题、完整或残缺回答、请求 ID、检索片段标识/分数和阶段耗时，但无法读取未反馈问答正文。
 - [ ] 知识管理员可将反馈标记为待处理或已处理并填写内部备注；V1 不提供管理员回复、通知、自动重跑或外部工单流转。
 - [ ] 用户删除问答或会话时对应反馈正文一并删除，仅保留不含内容的审计事实；系统验收覆盖普通用户隔离与管理员同意边界。
+
+## Comments
+
+### 2026-07-31 Split into tracer-bullet tickets
+
+This ticket has been split into the following sub-tickets to keep each implementation window focused:
+
+- [08a — 用户提交问答反馈与同意共享](08a-user-feedback-submission-and-consent.md)
+- [08b — 管理员反馈诊断视图、处理流程与隐私隔离](08b-admin-feedback-diagnostics-and-privacy.md)
+
+Do not implement this ticket directly; pick up the sub-tickets in dependency order.

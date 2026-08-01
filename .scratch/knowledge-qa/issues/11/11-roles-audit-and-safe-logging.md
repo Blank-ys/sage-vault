@@ -12,3 +12,15 @@
 - [ ] 知识库、企业文档和反馈管理操作记录操作者、对象、时间和结果，并可从 RuoYi 现有审计入口核验。
 - [ ] 请求/任务 ID 贯穿 Java、Python、MinIO、Milvus 和模型调用；日志记录实例、阶段、文档/片段 ID、分数、耗时、模型请求 ID、SSE 进度、重试和错误栈。
 - [ ] 自动化隐私测试证明技术日志不含问题正文、片段正文、完整提示词、完整或残缺回答，也不记录百炼凭据。
+
+## Comments
+
+### 2026-07-31 Split into tracer-bullet tickets
+
+本工单打包了三个相互独立、验证入口不同的 seam，已拆分为以下子工单以保持每个实现窗口聚焦：
+
+- [11a — 角色与访问权限边界（RBAC）](11a-roles-access-control.md)
+- [11b — 管理操作审计记录](11b-management-operation-audit.md)
+- [11c — 跨语言诊断日志关联与隐私安全日志](11c-cross-language-diagnostics-and-privacy-logging.md)
+
+Do not implement this ticket directly; pick up the sub-tickets in dependency order.
