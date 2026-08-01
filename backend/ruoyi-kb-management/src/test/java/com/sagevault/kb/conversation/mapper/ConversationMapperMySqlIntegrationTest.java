@@ -54,6 +54,8 @@ class ConversationMapperMySqlIntegrationTest {
     @AfterEach
     void tearDown() {
         if (jdbc != null && prefix != null) {
+            jdbc.update("DELETE r FROM sv_qa_record r JOIN sv_conversation c ON r.conversation_id = c.id "
+                    + "JOIN sv_knowledge_base kb ON c.knowledge_base_id = kb.id WHERE kb.name = ?", prefix);
             jdbc.update("DELETE c FROM sv_conversation c JOIN sv_knowledge_base kb ON c.knowledge_base_id = kb.id WHERE kb.name = ?",
                     prefix);
             jdbc.update("DELETE FROM sv_knowledge_base WHERE name = ?", prefix);
@@ -62,16 +64,61 @@ class ConversationMapperMySqlIntegrationTest {
 
     @Test
     void mapsGeneratedKeysFieldsAndMissingRows() {
-        ConversationEntity conversation = new ConversationEntity();
-        conversation.setUserId(7L);
-        conversation.setKnowledgeBaseId(knowledgeBaseId);
-
-        mapper.insert(conversation);
+        ConversationEntity conversation = insert(7L);
 
         assertThat(conversation.getId()).isPositive();
         assertThat(mapper.findById(conversation.getId()))
-                .extracting(ConversationEntity::getUserId, ConversationEntity::getKnowledgeBaseId)
-                .containsExactly(7L, knowledgeBaseId);
+                .extracting(ConversationEntity::getUserId, ConversationEntity::getKnowledgeBaseId,
+                        ConversationEntity::getTitle)
+                .containsExactly(7L, knowledgeBaseId, "");
+        assertThat(mapper.findById(conversation.getId()).getCreatedAt()).isNotNull();
+        assertThat(mapper.findById(conversation.getId()).getUpdatedAt()).isNotNull();
         assertThat(mapper.findById(Long.MAX_VALUE)).isNull();
+    }
+
+    @Test
+    void findByUserReturnsOnlyOwnRowsMostRecentFirst() {
+        ConversationEntity older = insert(7L);
+        ConversationEntity newer = insert(7L);
+        ConversationEntity foreign = insert(8L);
+
+        assertThat(mapper.findByUser(7L)).extracting(ConversationEntity::getId)
+                .containsExactly(newer.getId(), older.getId())
+                .doesNotContain(foreign.getId());
+    }
+
+    @Test
+    void updateTitleAndDeleteOnlyAffectTheOwner() {
+        ConversationEntity conversation = insert(7L);
+
+        assertThat(mapper.updateTitle(conversation.getId(), 8L, "别人的标题")).isZero();
+        assertThat(mapper.updateTitle(conversation.getId(), 7L, "我的标题")).isOne();
+        assertThat(mapper.findById(conversation.getId()).getTitle()).isEqualTo("我的标题");
+
+        assertThat(mapper.deleteOwned(conversation.getId(), 8L)).isZero();
+        assertThat(mapper.deleteOwned(conversation.getId(), 7L)).isOne();
+        assertThat(mapper.findById(conversation.getId())).isNull();
+    }
+
+    @Test
+    void deletingConversationCascadesItsQaRecords() {
+        ConversationEntity conversation = insert(7L);
+        jdbc.update("INSERT INTO sv_qa_record (conversation_id, user_id, request_id, generation_id, question, answer, status) "
+                        + "VALUES (?, 7, ?, ?, '问题正文', '', 'STARTED')",
+                conversation.getId(), prefix + "-req", prefix + "-gen");
+
+        mapper.deleteOwned(conversation.getId(), 7L);
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sv_qa_record WHERE conversation_id = ?", Integer.class,
+                conversation.getId())).isZero();
+    }
+
+    private ConversationEntity insert(long userId) {
+        ConversationEntity conversation = new ConversationEntity();
+        conversation.setUserId(userId);
+        conversation.setKnowledgeBaseId(knowledgeBaseId);
+        conversation.setTitle("");
+        mapper.insert(conversation);
+        return conversation;
     }
 }

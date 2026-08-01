@@ -14,6 +14,7 @@ import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationEntity;
 import com.sagevault.kb.conversation.mapper.ConversationMapper;
 import com.sagevault.kb.conversation.service.impl.ConversationServiceImpl;
+import com.sagevault.kb.conversation.service.port.ConversationAudit;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
 import com.sagevault.kb.document.service.DocumentService;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
@@ -39,7 +40,8 @@ class ConversationServiceImplTest {
         when(rag.answer(anyLong(), anyString(), anyString(), anyString()))
                 .thenAnswer(invocation -> Flux.just(new AnswerEvent.Started(invocation.getArgument(3))));
         when(documents.hasAvailableDocuments(anyLong())).thenReturn(true);
-        ConversationService service = new ConversationServiceImpl(mapper, knowledgeBases, documents, records, rag);
+        ConversationService service = new ConversationServiceImpl(mapper, knowledgeBases, documents, records, rag,
+                mock(ConversationAudit.class));
 
         service.ask(7L, 3L, new AskQuestionRequest("问题", "request-1")).collectList().block();
 
@@ -49,7 +51,8 @@ class ConversationServiceImplTest {
     @Test
     void rejectsBlankRequestIdBeforeCreatingRecord() {
         ConversationService service = new ConversationServiceImpl(mock(ConversationMapper.class),
-                mock(KnowledgeBaseService.class), mock(DocumentService.class), mock(QaRecordService.class), mock(RagAnswerPort.class));
+                mock(KnowledgeBaseService.class), mock(DocumentService.class), mock(QaRecordService.class),
+                mock(RagAnswerPort.class), mock(ConversationAudit.class));
 
         assertThatThrownBy(() -> service.ask(7L, 3L, new AskQuestionRequest("问题", " ")))
                 .isInstanceOf(BusinessException.class)

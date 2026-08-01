@@ -1,5 +1,7 @@
 package com.sagevault.kb.qarecord.domain;
 
+import java.time.LocalDateTime;
+
 public class QaRecordEntity {
     private Long id;
     private Long conversationId;
@@ -9,6 +11,8 @@ public class QaRecordEntity {
     private String question;
     private String answer;
     private QaRecordStatus status;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -26,4 +30,8 @@ public class QaRecordEntity {
     public void setAnswer(String answer) { this.answer = answer; }
     public QaRecordStatus getStatus() { return status; }
     public void setStatus(QaRecordStatus status) { this.status = status; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

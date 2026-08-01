@@ -85,6 +85,23 @@ class QaRecordMapperMySqlIntegrationTest {
         assertThatThrownBy(() -> mapper.findByGenerationId(record.getGenerationId())).isNotNull();
     }
 
+    @Test
+    void listsCountsAndDeletesRecordsOfOneConversation() {
+        QaRecordEntity first = record("first");
+        QaRecordEntity second = record("second");
+        mapper.insert(first);
+        mapper.insert(second);
+
+        assertThat(mapper.countByConversation(conversationId)).isEqualTo(2);
+        assertThat(mapper.findByConversation(conversationId))
+                .extracting(QaRecordEntity::getId)
+                .containsExactly(first.getId(), second.getId());
+        assertThat(mapper.findByConversation(conversationId).get(0).getCreatedAt()).isNotNull();
+
+        assertThat(mapper.deleteByConversation(conversationId)).isEqualTo(2);
+        assertThat(mapper.countByConversation(conversationId)).isZero();
+    }
+
     private QaRecordEntity record(String suffix) {
         QaRecordEntity record = new QaRecordEntity();
         record.setConversationId(conversationId);

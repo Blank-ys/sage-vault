@@ -5,14 +5,38 @@
         <id property="id" column="id"/>
         <result property="userId" column="user_id"/>
         <result property="knowledgeBaseId" column="knowledge_base_id"/>
+        <result property="title" column="title"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
     </resultMap>
+
+    <sql id="columns">id, user_id, knowledge_base_id, title, created_at, updated_at</sql>
 
     <insert id="insert" parameterType="com.sagevault.kb.conversation.domain.ConversationEntity"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO sv_conversation (user_id, knowledge_base_id) VALUES (#{userId}, #{knowledgeBaseId})
+        INSERT INTO sv_conversation (user_id, knowledge_base_id, title)
+        VALUES (#{userId}, #{knowledgeBaseId}, #{title})
     </insert>
 
     <select id="findById" resultMap="conversationResult">
-        SELECT id, user_id, knowledge_base_id FROM sv_conversation WHERE id = #{id}
+        SELECT <include refid="columns"/> FROM sv_conversation WHERE id = #{id}
     </select>
+
+    <select id="findByUser" resultMap="conversationResult">
+        SELECT <include refid="columns"/> FROM sv_conversation
+        WHERE user_id = #{userId}
+        ORDER BY updated_at DESC, id DESC
+    </select>
+
+    <update id="updateTitle">
+        UPDATE sv_conversation SET title = #{title} WHERE id = #{id} AND user_id = #{userId}
+    </update>
+
+    <update id="touch">
+        UPDATE sv_conversation SET updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
+
+    <delete id="deleteOwned">
+        DELETE FROM sv_conversation WHERE id = #{id} AND user_id = #{userId}
+    </delete>
 </mapper>

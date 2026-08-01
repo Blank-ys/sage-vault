@@ -9,6 +9,7 @@ import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
 import com.sagevault.kb.qarecord.service.impl.QaRecordServiceImpl;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -97,6 +98,25 @@ class QaRecordServiceTest {
         @Override
         public QaRecordEntity findByGenerationId(String generationId) {
             return records.get(generationId);
+        }
+
+        @Override
+        public List<QaRecordEntity> findByConversation(long conversationId) {
+            return records.values().stream()
+                    .filter(entity -> entity.getConversationId() == conversationId)
+                    .toList();
+        }
+
+        @Override
+        public int countByConversation(long conversationId) {
+            return findByConversation(conversationId).size();
+        }
+
+        @Override
+        public int deleteByConversation(long conversationId) {
+            List<QaRecordEntity> removed = findByConversation(conversationId);
+            removed.forEach(entity -> records.remove(entity.getGenerationId()));
+            return removed.size();
         }
     }
 }

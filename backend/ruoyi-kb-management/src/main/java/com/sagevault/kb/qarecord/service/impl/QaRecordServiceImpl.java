@@ -3,9 +3,11 @@ package com.sagevault.kb.qarecord.service.impl;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
+import com.sagevault.kb.qarecord.domain.QaRecordResponse;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
 import com.sagevault.kb.qarecord.service.QaRecordService;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,6 +64,27 @@ public class QaRecordServiceImpl implements QaRecordService {
     @Transactional(rollbackFor = Exception.class)
     public void markUnfinished(String generationId) {
         decideTerminalState(generationId, QaRecordStatus.UNFINISHED, "");
+    }
+
+    @Override
+    public List<QaRecordResponse> listByConversation(long conversationId) {
+        return mapper.findByConversation(conversationId).stream().map(QaRecordServiceImpl::response).toList();
+    }
+
+    @Override
+    public boolean hasRecords(long conversationId) {
+        return mapper.countByConversation(conversationId) > 0;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteByConversation(long conversationId) {
+        return mapper.deleteByConversation(conversationId);
+    }
+
+    private static QaRecordResponse response(QaRecordEntity entity) {
+        return new QaRecordResponse(entity.getId(), entity.getConversationId(), entity.getGenerationId(),
+                entity.getQuestion(), entity.getAnswer(), entity.getStatus(), entity.getCreatedAt());
     }
 
     private void decideTerminalState(String generationId, QaRecordStatus target, String answer) {
