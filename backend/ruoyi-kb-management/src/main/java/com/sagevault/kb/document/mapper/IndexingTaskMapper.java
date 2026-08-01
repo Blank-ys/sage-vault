@@ -14,4 +14,6 @@ public interface IndexingTaskMapper {
     int updateTerminalState(@Param("taskId") String taskId, @Param("attempt") int attempt,
             @Param("status") String status, @Param("errorMessage") String errorMessage,
             @Param("callbackReceivedAt") LocalDateTime callbackReceivedAt);
+
+    int deleteByDocumentId(@Param("documentId") long documentId);
 }

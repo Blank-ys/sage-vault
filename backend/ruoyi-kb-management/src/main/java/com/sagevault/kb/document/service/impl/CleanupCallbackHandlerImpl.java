@@ -4,6 +4,7 @@ import com.sagevault.kb.document.domain.CleanupCallbackRequest;
 import com.sagevault.kb.document.domain.DocumentEntity;
 import com.sagevault.kb.document.domain.DocumentStatus;
 import com.sagevault.kb.document.mapper.DocumentMapper;
+import com.sagevault.kb.document.mapper.IndexingTaskMapper;
 import com.sagevault.kb.document.service.CleanupCallbackHandler;
 import com.sagevault.kb.document.service.port.DocumentStorage;
 import org.slf4j.Logger;
@@ -15,10 +16,13 @@ public class CleanupCallbackHandlerImpl implements CleanupCallbackHandler {
     private static final Logger log = LoggerFactory.getLogger(CleanupCallbackHandlerImpl.class);
 
     private final DocumentMapper documentMapper;
+    private final IndexingTaskMapper indexingTaskMapper;
     private final DocumentStorage storage;
 
-    public CleanupCallbackHandlerImpl(DocumentMapper documentMapper, DocumentStorage storage) {
+    public CleanupCallbackHandlerImpl(DocumentMapper documentMapper,
+            IndexingTaskMapper indexingTaskMapper, DocumentStorage storage) {
         this.documentMapper = documentMapper;
+        this.indexingTaskMapper = indexingTaskMapper;
         this.storage = storage;
     }
 
@@ -40,6 +44,7 @@ public class CleanupCallbackHandlerImpl implements CleanupCallbackHandler {
         }
         String prefix = extractPrefix(entity.getObjectKey());
         storage.deleteByPrefix(prefix);
+        indexingTaskMapper.deleteByDocumentId(documentId);
         documentMapper.deleteById(documentId);
         log.info("Document {} cleaned up and record removed", documentId);
     }

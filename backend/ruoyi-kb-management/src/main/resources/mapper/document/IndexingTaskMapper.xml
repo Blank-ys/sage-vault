@@ -48,4 +48,8 @@
               OR (attempt = #{attempt} AND status NOT IN ('COMPLETED', 'FAILED'))
           )
     </update>
+
+    <delete id="deleteByDocumentId">
+        DELETE FROM sv_document_indexing_task WHERE document_id = #{documentId}
+    </delete>
 </mapper>
