@@ -1,9 +1,12 @@
 package com.sagevault.kb.conversation.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -20,11 +23,13 @@ import com.ruoyi.common.security.aspect.PreAuthorizeAspect;
 import com.ruoyi.common.security.handler.GlobalExceptionHandler;
 import com.ruoyi.common.security.service.TokenService;
 import com.ruoyi.system.api.model.LoginUser;
+import com.sagevault.kb.conversation.domain.AnswerStateSnapshot;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
 import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.BusinessExceptionHandler;
 import com.sagevault.kb.platform.error.ErrorCode;
+import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -139,6 +144,53 @@ class ConversationAuthorizationTest {
         mockMvc.perform(delete("/conversations/99").header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(ErrorCode.CONVERSATION_FORBIDDEN.code()));
+    }
+
+    @Test
+    void anonymousUserCannotStopAnAnswer() throws Exception {
+        mockMvc.perform(post("/conversations/1/answers/gen-1/stop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(500));
+
+        verify(conversations, never()).stopAnswer(anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void stoppingAnotherUsersAnswerIsRefused() throws Exception {
+        authenticate(7L, Set.of());
+        when(conversations.stopAnswer(7L, 99L, "gen-1"))
+                .thenThrow(new BusinessException(ErrorCode.CONVERSATION_FORBIDDEN, "无权访问该会话"));
+
+        mockMvc.perform(post("/conversations/99/answers/gen-1/stop")
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(ErrorCode.CONVERSATION_FORBIDDEN.code()));
+    }
+
+    @Test
+    void stoppingAnAlreadyFinishedAnswerSurfacesTheBusinessError() throws Exception {
+        authenticate(7L, Set.of());
+        when(conversations.stopAnswer(7L, 1L, "gen-1"))
+                .thenThrow(new BusinessException(ErrorCode.ANSWER_NOT_STOPPABLE, "该回答已结束，无法停止"));
+
+        mockMvc.perform(post("/conversations/1/answers/gen-1/stop")
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ANSWER_NOT_STOPPABLE.code()));
+    }
+
+    @Test
+    void stoppingOwnAnswerReturnsTheStoppedSnapshot() throws Exception {
+        authenticate(7L, Set.of());
+        when(conversations.stopAnswer(7L, 1L, "gen-1"))
+                .thenReturn(new AnswerStateSnapshot("gen-1", true, QaRecordStatus.STOPPED, "已经生成的部分"));
+
+        mockMvc.perform(post("/conversations/1/answers/gen-1/stop")
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.status").value("STOPPED"))
+                .andExpect(jsonPath("$.data.answer").value("已经生成的部分"));
     }
 
     private void authenticate(long userId, Set<String> permissions) {

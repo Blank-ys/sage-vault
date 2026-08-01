@@ -20,6 +20,32 @@ class ContractExamplesTest(unittest.TestCase):
             schema = schemas[event["type"]]
             Draft202012Validator(schema, format_checker=FormatChecker()).validate(event)
 
+    def test_stopped_generation_example_matches_schemas(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        schemas = openapi["components"]["schemas"]
+        example = json.loads((root / "examples" / "stopped-generation.json").read_text(encoding="utf-8"))
+        event_schemas = {
+            path.stem.split(".")[0]: json.loads(path.read_text(encoding="utf-8"))
+            for path in (root / "events").glob("*.schema.json")
+        }
+
+        Draft202012Validator(schemas["CancelAnswerCommand"], format_checker=FormatChecker()).validate(
+            example["request"]
+        )
+        Draft202012Validator(schemas["CancelAnswerAck"], format_checker=FormatChecker()).validate(
+            example["response"]
+        )
+
+        self.assertEqual(["started", "delta", "stopped"], [event["type"] for event in example["events"]])
+        for event in example["events"]:
+            Draft202012Validator(event_schemas[event["type"]], format_checker=FormatChecker()).validate(event)
+
+    def test_cancel_endpoint_is_registered(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        self.assertIn("/internal/v1/answers/{generationId}/cancel", openapi["paths"])
+
     def test_indexing_command_example_matches_schema(self) -> None:
         root = Path(__file__).parents[1] / "java-python-rag" / "v1"
         openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))

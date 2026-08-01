@@ -10,6 +10,8 @@ public interface QaRecordMapper {
     int appendAnswer(@Param("generationId") String generationId, @Param("delta") String delta);
     int updateTerminalState(@Param("generationId") String generationId,
             @Param("status") QaRecordStatus status, @Param("answer") String answer);
+    int updateTerminalStatusKeepingAnswer(@Param("generationId") String generationId,
+            @Param("status") QaRecordStatus status);
     QaRecordEntity findByGenerationId(String generationId);
     int countPendingByConversation(@Param("conversationId") long conversationId);
     List<QaRecordEntity> findByConversation(@Param("conversationId") long conversationId);

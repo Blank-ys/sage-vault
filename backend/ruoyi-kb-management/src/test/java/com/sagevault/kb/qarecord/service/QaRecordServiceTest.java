@@ -29,17 +29,71 @@ class QaRecordServiceTest {
     }
 
     @Test
-    void rejectsLateDifferentTerminalStateWithoutOverwritingTheRecord() {
+    void streamEndFallbackNeverOverwritesAnAlreadyDecidedTerminalState() {
         Records records = new Records();
         QaRecordService service = new QaRecordServiceImpl(records);
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.markRefused("generation-1", "no matching document");
 
-        assertThatThrownBy(() -> service.markUnfinished("generation-1"))
-                .isInstanceOf(BusinessException.class);
+        service.markUnfinished("generation-1");
 
-        assertThat(records.findByGenerationId("generation-1").getStatus())
-                .isEqualTo(QaRecordStatus.REFUSED);
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.REFUSED);
+        assertThat(record.getAnswer()).isEqualTo("no matching document");
+    }
+
+    @Test
+    void stopKeepsThePartialAnswerAlreadyStreamedToTheUser() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records);
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.appendAnswer("generation-1", "已经生成的部分");
+
+        assertThat(service.markStopped("generation-1")).isTrue();
+
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.STOPPED);
+        assertThat(record.getAnswer()).isEqualTo("已经生成的部分");
+    }
+
+    @Test
+    void onlyTheFirstStopWinsTheTerminalTransition() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records);
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+
+        assertThat(service.markStopped("generation-1")).isTrue();
+        assertThat(service.markStopped("generation-1")).isFalse();
+        assertThat(service.markStopped("missing-generation")).isFalse();
+    }
+
+    @Test
+    void stopWinsOverTheConcurrentStreamEndFallback() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records);
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.appendAnswer("generation-1", "已经生成的部分");
+
+        service.markStopped("generation-1");
+        service.markUnfinished("generation-1");
+
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.STOPPED);
+        assertThat(record.getAnswer()).isEqualTo("已经生成的部分");
+    }
+
+    @Test
+    void unfinishedKeepsThePartialAnswerAlreadyStreamedToTheUser() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records);
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.appendAnswer("generation-1", "断线前的部分");
+
+        service.markUnfinished("generation-1");
+
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.UNFINISHED);
+        assertThat(record.getAnswer()).isEqualTo("断线前的部分");
     }
 
     @Test
@@ -92,6 +146,16 @@ class QaRecordServiceTest {
             }
             entity.setStatus(status);
             entity.setAnswer(answer);
+            return 1;
+        }
+
+        @Override
+        public int updateTerminalStatusKeepingAnswer(String generationId, QaRecordStatus status) {
+            QaRecordEntity entity = records.get(generationId);
+            if (entity == null || entity.getStatus() != QaRecordStatus.STARTED) {
+                return 0;
+            }
+            entity.setStatus(status);
             return 1;
         }
 

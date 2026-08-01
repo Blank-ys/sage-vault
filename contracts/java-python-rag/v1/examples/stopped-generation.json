@@ -1,0 +1,26 @@
+{
+  "scenario": "User explicitly stops an in-flight answer; Java cancels the owning RAG instance best-effort.",
+  "request": {
+    "generationId": "0f6f6b1e-6d1a-4f5f-9a0f-2b3c4d5e6f70",
+    "requestId": "req-stop-0001"
+  },
+  "response": {
+    "generationId": "0f6f6b1e-6d1a-4f5f-9a0f-2b3c4d5e6f70",
+    "cancelled": true
+  },
+  "events": [
+    {
+      "type": "started",
+      "generationId": "0f6f6b1e-6d1a-4f5f-9a0f-2b3c4d5e6f70"
+    },
+    {
+      "type": "delta",
+      "generationId": "0f6f6b1e-6d1a-4f5f-9a0f-2b3c4d5e6f70",
+      "delta": "Sage Vault 的检索"
+    },
+    {
+      "type": "stopped",
+      "generationId": "0f6f6b1e-6d1a-4f5f-9a0f-2b3c4d5e6f70"
+    }
+  ]
+}

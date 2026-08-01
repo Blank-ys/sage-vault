@@ -64,7 +64,23 @@ public class QaRecordServiceImpl implements QaRecordService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void markUnfinished(String generationId) {
-        decideTerminalState(generationId, QaRecordStatus.UNFINISHED, "");
+        if (mapper.updateTerminalStatusKeepingAnswer(generationId, QaRecordStatus.UNFINISHED) == 1) {
+            return;
+        }
+        // 兜底裁决与显式停止可能并发：已有终态即视为已裁决，不覆盖也不报错。
+        QaRecordEntity record = mapper.findByGenerationId(generationId);
+        if (record == null) {
+            throw new BusinessException(ErrorCode.QA_RECORD_NOT_FOUND, "问答记录不存在");
+        }
+        if (record.getStatus() == QaRecordStatus.STARTED) {
+            throw new BusinessException(ErrorCode.QA_RECORD_STATE_CONFLICT, "问答记录状态冲突");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markStopped(String generationId) {
+        return mapper.updateTerminalStatusKeepingAnswer(generationId, QaRecordStatus.STOPPED) == 1;
     }
 
     @Override
@@ -103,6 +119,10 @@ public class QaRecordServiceImpl implements QaRecordService {
         if (mapper.updateTerminalState(generationId, target, answer) == 1) {
             return;
         }
+        requireTerminalState(generationId, target);
+    }
+
+    private void requireTerminalState(String generationId, QaRecordStatus target) {
         QaRecordEntity record = mapper.findByGenerationId(generationId);
         if (record == null) {
             throw new BusinessException(ErrorCode.QA_RECORD_NOT_FOUND, "问答记录不存在");

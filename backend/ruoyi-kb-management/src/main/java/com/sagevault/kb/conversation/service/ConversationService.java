@@ -22,6 +22,12 @@ public interface ConversationService {
     /** 读取某次回答的当前状态与终态结果，供轮询或懒加载使用。 */
     AnswerStateSnapshot getAnswerState(long userId, long conversationId, String generationId);
 
+    /**
+     * 用户显式停止某次进行中的回答。停止是业务命令：Java 先裁决终态为已停止并保留残缺正文，
+     * 再尽力通知 Python 停止生成；通知失败不改变已裁决的终态。重复停止或对已终态回答调用会失败。
+     */
+    AnswerStateSnapshot stopAnswer(long userId, long conversationId, String generationId);
+
     /** 按最近活跃时间倒序返回当前用户自己的会话，不包含他人会话。 */
     List<ConversationResponse> list(long userId);
 

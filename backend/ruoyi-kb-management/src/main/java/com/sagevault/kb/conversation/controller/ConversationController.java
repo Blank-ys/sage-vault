@@ -83,6 +83,12 @@ public class ConversationController {
         return R.ok(conversations.getAnswerState(SecurityUtils.getUserId(), id, generationId));
     }
 
+    @PostMapping("/{id}/answers/{generationId}/stop")
+    @RequiresLogin
+    public R<AnswerStateSnapshot> stopAnswer(@PathVariable long id, @PathVariable String generationId) {
+        return R.ok(conversations.stopAnswer(SecurityUtils.getUserId(), id, generationId));
+    }
+
     private static String eventName(AnswerEvent event) {
         if (event instanceof AnswerEvent.Started) {
             return "started";
@@ -92,6 +98,9 @@ public class ConversationController {
         }
         if (event instanceof AnswerEvent.Completed) {
             return "completed";
+        }
+        if (event instanceof AnswerEvent.Stopped) {
+            return "stopped";
         }
         return "refused";
     }

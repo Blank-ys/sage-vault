@@ -77,6 +77,24 @@ class QaRecordMapperMySqlIntegrationTest {
     }
 
     @Test
+    void stopsInProgressRecordWhileKeepingTheAnswerAlreadyStreamed() {
+        QaRecordEntity record = record("stopped");
+        mapper.insert(record);
+        mapper.appendAnswer(record.getGenerationId(), "已经生成的部分");
+
+        assertThat(mapper.updateTerminalStatusKeepingAnswer(record.getGenerationId(), QaRecordStatus.STOPPED))
+                .isEqualTo(1);
+        // 已终态记录不得被二次裁决，未完成兜底也不能覆盖已停止
+        assertThat(mapper.updateTerminalStatusKeepingAnswer(record.getGenerationId(), QaRecordStatus.UNFINISHED))
+                .isZero();
+
+        QaRecordEntity stored = mapper.findByGenerationId(record.getGenerationId());
+        assertThat(stored.getStatus()).isEqualTo(QaRecordStatus.STOPPED);
+        assertThat(stored.getAnswer()).isEqualTo("已经生成的部分");
+        assertThat(mapper.countPendingByConversation(conversationId)).isZero();
+    }
+
+    @Test
     void rejectsUnknownPersistedStatusValues() {
         QaRecordEntity record = record("unknown");
         mapper.insert(record);

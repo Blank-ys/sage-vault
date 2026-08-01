@@ -47,4 +47,14 @@ Verifies single-user serialization and the answer state machine (issue 07b): dif
 python -m unittest system-tests/knowledge-qa/test_single_user_serialization_and_state_machine.py -v
 ```
 
+## test_stream_stop_and_best_effort_cancel.py
+
+Verifies stream stop and best-effort cancellation (issue 07c): stopping another user's answer is rejected with `CONVERSATION_FORBIDDEN` (410004) without rewriting the terminal state, and stopping an answer that already reached a terminal state is rejected with `ANSWER_NOT_STOPPABLE` (410020) while the existing `REFUSED` terminal stays intact.
+
+The hard stop assertions — the stream ends with a `stopped` event, the answer is persisted as `STOPPED` with the partial text already streamed, a repeated stop is refused without rewriting that terminal, the conversation gate is released afterwards, and a plain disconnect converges to `UNFINISHED` instead of `STOPPED` — require a knowledge base with retrievable documents so a `STARTED` answer stays in flight long enough to be stopped. Set `SAGE_VAULT_HAS_RETRIEVABLE_DOCS=1` and `SAGE_VAULT_RETRIEVABLE_KB_ID=<id>` to enable them. Without retrievable docs every answer is refused synchronously, so that window cannot be reproduced at the system level; those paths are covered deterministically by the Java unit tests, the live MySQL mapper integration test, and the Python contract tests.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_stream_stop_and_best_effort_cancel.py -v
+```
+
 All tests send browser-equivalent traffic only through Gateway. They never connect directly to Python or private database tables.

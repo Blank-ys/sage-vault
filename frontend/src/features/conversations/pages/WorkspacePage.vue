@@ -34,8 +34,8 @@
         <div v-for="record in history" :key="record.id" class="history-item">
           <p class="history-question">{{ record.question }}</p>
           <el-alert
-            :title="record.answer || '本次回答未完成'"
-            :type="record.status === 'REFUSED' ? 'warning' : record.status === 'COMPLETED' ? 'info' : 'error'"
+            :title="answerTitle(record)"
+            :type="record.status === 'REFUSED' || record.status === 'STOPPED' ? 'warning' : record.status === 'COMPLETED' ? 'info' : 'error'"
             show-icon
             :closable="false"
           />
@@ -46,7 +46,8 @@
         </div>
       </div>
       <el-input v-model="question" type="textarea" :rows="5" maxlength="2000" show-word-limit placeholder="请输入你的问题" />
-      <el-button type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
+      <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
+      <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
     </el-card>
   </div>
 </template>
@@ -60,7 +61,8 @@ import {
   deleteConversation,
   listConversations,
   listQuestions,
-  renameConversation
+  renameConversation,
+  stopAnswer
 } from '../api/conversations'
 
 const knowledgeBases = ref([])
@@ -76,13 +78,22 @@ const refused = ref(false)
 const loading = ref(false)
 const historyLoading = ref(false)
 const asking = ref(false)
+const stopping = ref(false)
+const streamingGenerationId = ref('')
 let controller
 
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
 const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim()) && !asking.value)
+const canStop = computed(() => asking.value && Boolean(streamingGenerationId.value))
 
 function displayTitle(conversation) {
   return conversation.title?.trim() || '未命名会话'
+}
+
+// 已停止与未完成都保留残缺正文，只有完全没有正文时才提示中断原因
+function answerTitle(record) {
+  if (record.answer) return record.answer
+  return record.status === 'STOPPED' ? '本次回答已停止' : '本次回答未完成'
 }
 
 async function load() {
@@ -178,11 +189,28 @@ async function createNewConversation() {
 }
 
 function onAnswerEvent(event) {
-  if (event.type === 'delta') {
+  if (event.type === 'started') {
+    streamingGenerationId.value = event.generationId
+  } else if (event.type === 'delta') {
     streamingAnswer.value = streamingAnswer.value === '正在处理问题…' ? event.delta : streamingAnswer.value + event.delta
   } else if (event.type === 'refused') {
     refused.value = true
     streamingAnswer.value = event.message
+  } else if (event.type === 'stopped') {
+    // 已经收到的内容保持展示，终态由后端裁决后在历史里体现为"已停止"
+    streamingGenerationId.value = ''
+  }
+}
+
+async function stop() {
+  stopping.value = true
+  try {
+    await stopAnswer(activeId.value, streamingGenerationId.value)
+    ElMessage.success('已停止生成')
+  } catch (error) {
+    ElMessage.error(error.message || '停止失败')
+  } finally {
+    stopping.value = false
   }
 }
 
@@ -198,6 +226,7 @@ function resetStreaming() {
   refused.value = false
   streamingQuestion.value = ''
   streamingAnswer.value = ''
+  streamingGenerationId.value = ''
 }
 
 onBeforeUnmount(() => controller?.abort())

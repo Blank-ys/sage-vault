@@ -18,6 +18,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * 会话历史与归属：列表隔离、首问默认标题、改名保留、删除级联与无正文审计。
@@ -167,6 +168,11 @@ class ConversationHistoryTest {
             knowledgeBaseIds.add(knowledgeBaseId);
             questions.add(question);
             return Flux.just(new AnswerEvent.Started(generationId), new AnswerEvent.Completed(generationId));
+        }
+
+        @Override
+        public Mono<Boolean> cancel(String generationId, String requestId) {
+            return Mono.just(false);
         }
     }
 }

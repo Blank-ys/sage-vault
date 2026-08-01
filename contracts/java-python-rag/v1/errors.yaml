@@ -8,6 +8,9 @@ errors:
   - code: 410012
     name: INDEXING_TASK_NOT_FOUND
     retryable: false
+  - code: 410020
+    name: ANSWER_NOT_STOPPABLE
+    retryable: false
   - code: 510001
     name: RAG_UNAVAILABLE
     retryable: true

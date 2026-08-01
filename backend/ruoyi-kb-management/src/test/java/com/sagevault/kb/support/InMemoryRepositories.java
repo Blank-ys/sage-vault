@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class InMemoryRepositories {
     private final KnowledgeBaseService knowledgeBases;
@@ -38,9 +39,19 @@ public final class InMemoryRepositories {
     public InMemoryRepositories() {
         knowledgeBaseMapper = new KnowledgeBases();
         knowledgeBases = new KnowledgeBaseServiceImpl(knowledgeBaseMapper, (operation, id) -> { });
-        RagAnswerPort emptyRag = (knowledgeBaseId, question, requestId, generationId) -> Flux.just(
-                new AnswerEvent.Started(generationId),
-                new AnswerEvent.Refused(generationId, "该知识库暂无可用文档"));
+        RagAnswerPort emptyRag = new RagAnswerPort() {
+            @Override
+            public Flux<AnswerEvent> answer(long knowledgeBaseId, String question, String requestId,
+                    String generationId) {
+                return Flux.just(new AnswerEvent.Started(generationId),
+                        new AnswerEvent.Refused(generationId, "该知识库暂无可用文档"));
+            }
+
+            @Override
+            public Mono<Boolean> cancel(String generationId, String requestId) {
+                return Mono.just(false);
+            }
+        };
         QaRecordService records = new QaRecordServiceImpl(new QaRecords());
         DocumentService documents = Mockito.mock(DocumentService.class);
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
@@ -150,6 +161,12 @@ public final class InMemoryRepositories {
             if (value == null || value.getStatus() != QaRecordStatus.STARTED) { return 0; }
             value.setStatus(status);
             value.setAnswer(answer);
+            return 1;
+        }
+        public int updateTerminalStatusKeepingAnswer(String generationId, QaRecordStatus status) {
+            QaRecordEntity value = values.get(generationId);
+            if (value == null || value.getStatus() != QaRecordStatus.STARTED) { return 0; }
+            value.setStatus(status);
             return 1;
         }
         public QaRecordEntity findByGenerationId(String generationId) { return values.get(generationId); }

@@ -1,8 +1,9 @@
 from collections.abc import AsyncIterator
 
+from sage_vault_rag.application.answering.cancellation import CancellationRegistry
 from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.model.chunk import Chunk
-from sage_vault_rag.model.events import Completed, Delta, Refused, Started
+from sage_vault_rag.model.events import Completed, Delta, Refused, Started, Stopped
 from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
 from sage_vault_rag.ports.embedding import EmbeddingPort
 from sage_vault_rag.ports.generation import GenerationPort
@@ -104,6 +105,45 @@ async def test_sufficient_evidence_streams_deltas_and_completed() -> None:
         Delta("gen-1", "内容"),
         Completed("gen-1"),
     ]
+
+
+async def test_cancel_mid_stream_ends_with_stopped_and_keeps_earlier_deltas() -> None:
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    cancellations = CancellationRegistry()
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=CapturingGenerator(["第一段", "第二段", "第三段"]),
+        top_k=3,
+        refusal_threshold=1.0,
+        cancellations=cancellations,
+    )
+
+    events = []
+    async for event in service.answer(1, "问题", "gen-1"):
+        events.append(event)
+        if isinstance(event, Delta):
+            cancellations.cancel("gen-1")
+
+    assert events == [Started("gen-1"), Delta("gen-1", "第一段"), Stopped("gen-1")]
+
+
+async def test_generation_is_untracked_after_stream_ends() -> None:
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    cancellations = CancellationRegistry()
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=CapturingGenerator(["答案"]),
+        top_k=3,
+        refusal_threshold=1.0,
+        cancellations=cancellations,
+    )
+
+    [event async for event in service.answer(1, "问题", "gen-1")]
+
+    assert not cancellations.is_tracked("gen-1")
+    assert cancellations.cancel("gen-1") is False
 
 
 async def test_retrieval_filters_by_knowledge_base_id() -> None:

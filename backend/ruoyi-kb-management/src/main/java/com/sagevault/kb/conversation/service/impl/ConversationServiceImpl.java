@@ -20,15 +20,23 @@ import com.sagevault.kb.qarecord.domain.QaRecordResponse;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.service.QaRecordService;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 @Service
 public class ConversationServiceImpl implements ConversationService {
+    private static final Logger log = LoggerFactory.getLogger(ConversationServiceImpl.class);
+
     private final ConversationMapper mapper;
     private final KnowledgeBaseService knowledgeBases;
     private final DocumentService documents;
@@ -38,6 +46,9 @@ public class ConversationServiceImpl implements ConversationService {
 
     private static final String NO_AVAILABLE_DOCUMENTS_MESSAGE = "该知识库暂无可用文档";
     private static final int TITLE_MAX_LENGTH = 200;
+
+    /** 本节点持有的在途流；停止命令只能中断本节点的订阅，跨节点由终态裁决兜底。 */
+    private final Map<String, StopSignal> stopSignals = new ConcurrentHashMap<>();
 
     public ConversationServiceImpl(ConversationMapper mapper, KnowledgeBaseService knowledgeBases,
             DocumentService documents, QaRecordService records, RagAnswerPort rag, ConversationAudit audit) {
@@ -116,6 +127,39 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
+    public AnswerStateSnapshot stopAnswer(long userId, long conversationId, String generationId) {
+        if (generationId == null || generationId.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "生成标识不能为空");
+        }
+        requireOwned(userId, conversationId);
+        QaRecordEntity record = records.findByGenerationId(generationId);
+        if (record == null || record.getConversationId() != conversationId) {
+            throw new BusinessException(ErrorCode.ANSWER_NOT_READY, "未找到该次回答，或回答尚未完成");
+        }
+        // 先裁决终态：赢得迁移的调用才是真正的停止者，重复停止或已终态一律拒绝。
+        if (!records.markStopped(generationId)) {
+            throw new BusinessException(ErrorCode.ANSWER_NOT_STOPPABLE, "该回答已结束，无法停止");
+        }
+        // 终态已定，随后的通知都是尽力而为：失败只记录，不回滚业务结论。
+        StopSignal signal = stopSignals.get(generationId);
+        if (signal != null) {
+            signal.trigger();
+        }
+        rag.cancel(generationId, UUID.randomUUID().toString())
+                .onErrorResume(error -> {
+                    log.warn("Best-effort cancel failed after the answer was already stopped: generationId={}",
+                            generationId, error);
+                    return Mono.just(false);
+                })
+                .subscribe(cancelled -> {
+                    if (!cancelled) {
+                        log.info("RAG did not confirm cancellation: generationId={}", generationId);
+                    }
+                });
+        return getAnswerState(userId, conversationId, generationId);
+    }
+
+    @Override
     public Flux<AnswerEvent> askAndStream(long userId, long conversationId, AskQuestionRequest request) {
         if (request.question() == null || request.question().isBlank()
                 || request.requestId() == null || request.requestId().isBlank()) {
@@ -137,6 +181,9 @@ public class ConversationServiceImpl implements ConversationService {
         String generationId = begin.generationId();
         AtomicBoolean terminal = new AtomicBoolean();
         StringBuilder answer = new StringBuilder();
+        // 停止信号由 stopAnswer 触发；订阅结束时必须清理，避免 generationId 累积。
+        StopSignal stopSignal = new StopSignal(generationId);
+        stopSignals.put(generationId, stopSignal);
         return Flux.defer(() -> rag.answer(knowledgeBaseId, request.question(), request.requestId(), generationId))
                 .doOnNext(event -> {
                     if (event instanceof AnswerEvent.Delta delta) {
@@ -148,10 +195,19 @@ public class ConversationServiceImpl implements ConversationService {
                     } else if (event instanceof AnswerEvent.Refused refused) {
                         records.markRefused(generationId, refused.message());
                         terminal.set(true);
+                    } else if (event instanceof AnswerEvent.Stopped) {
+                        // Python 已确认停止；终态已由 stopAnswer 裁决，此处仅停止后续处理。
+                        terminal.set(true);
                     }
                 })
-                .doOnComplete(() -> markUnfinishedIfNeeded(generationId, terminal))
-                .doOnError(error -> markUnfinishedIfNeeded(generationId, terminal));
+                // 停止命令一旦裁决成功就立即结束上游并补发 stopped，不依赖 Python 的响应速度。
+                .takeUntilOther(stopSignal.triggered())
+                .concatWith(stopSignal.trailingEvent())
+                .doOnComplete(() -> markUnfinishedIfNeeded(generationId, terminal, stopSignal))
+                .doOnError(error -> markUnfinishedIfNeeded(generationId, terminal, stopSignal))
+                // 连接断开不是业务取消：只裁决未完成，不向 Python 发送停止命令。
+                .doOnCancel(() -> markUnfinishedIfNeeded(generationId, terminal, stopSignal))
+                .doFinally(signal -> stopSignals.remove(generationId, stopSignal));
     }
 
     /**
@@ -184,6 +240,40 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private record BeginAnswer(long conversationId, long knowledgeBaseId, String generationId) { }
+
+    /**
+     * 单次生成的停止开关。触发前 {@link #triggered()} 保持静默、{@link #trailingEvent()} 为空，
+     * 因此正常结束的流不会被它挂起；触发后前者结束上游、后者补发一条 stopped 事件。
+     */
+    private static final class StopSignal {
+        private final String generationId;
+        private final Sinks.One<AnswerEvent> sink = Sinks.one();
+        private final AtomicBoolean fired = new AtomicBoolean();
+
+        private StopSignal(String generationId) {
+            this.generationId = generationId;
+        }
+
+        private void trigger() {
+            if (fired.compareAndSet(false, true)) {
+                sink.tryEmitValue(new AnswerEvent.Stopped(generationId));
+            }
+        }
+
+        private boolean isFired() {
+            return fired.get();
+        }
+
+        private Mono<AnswerEvent> triggered() {
+            return sink.asMono();
+        }
+
+        private Flux<AnswerEvent> trailingEvent() {
+            return Flux.defer(() -> fired.get()
+                    ? Flux.just(new AnswerEvent.Stopped(generationId))
+                    : Flux.empty());
+        }
+    }
 
     /**
      * 首个提问生成默认标题；已有标题（含用户改名）不被覆盖。后续提问只推进最近活跃时间。
@@ -227,7 +317,14 @@ public class ConversationServiceImpl implements ConversationService {
                 entity.getTitle() == null ? "" : entity.getTitle(), entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
-    private void markUnfinishedIfNeeded(String generationId, AtomicBoolean terminal) {
+    /**
+     * 流结束时的兜底裁决。已停止的回答终态由 {@code stopAnswer} 决定，这里不得再改写；
+     * 其余未产出终态事件的结束（含连接断开、上游异常）一律裁决为未完成。
+     */
+    private void markUnfinishedIfNeeded(String generationId, AtomicBoolean terminal, StopSignal stopSignal) {
+        if (stopSignal.isFired()) {
+            return;
+        }
         if (terminal.compareAndSet(false, true)) {
             records.markUnfinished(generationId);
         }

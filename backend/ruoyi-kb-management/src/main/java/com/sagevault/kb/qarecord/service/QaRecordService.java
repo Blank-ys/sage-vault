@@ -10,7 +10,16 @@ public interface QaRecordService {
     void appendAnswer(String generationId, String delta);
     void markCompleted(String generationId, String answer);
     void markRefused(String generationId, String answer);
+
+    /** 连接断开等非业务原因中断：保留已落库的残缺正文，仅裁决为未完成。 */
     void markUnfinished(String generationId);
+
+    /**
+     * 用户显式停止：保留已落库的残缺正文，裁决为已停止。
+     *
+     * @return true 表示本次调用赢得了从 STARTED 到 STOPPED 的迁移；false 表示该回答已处于其他终态
+     */
+    boolean markStopped(String generationId);
 
     /** 按提问时间正序返回会话内的问答历史。 */
     List<QaRecordResponse> listByConversation(long conversationId);

@@ -36,6 +36,13 @@
         WHERE generation_id = #{generationId} AND status = 'STARTED'
     </update>
 
+    <!-- 中断终态：保留 delta 已累积的残缺正文，只裁决状态 -->
+    <update id="updateTerminalStatusKeepingAnswer">
+        UPDATE sv_qa_record
+        SET status = #{status}
+        WHERE generation_id = #{generationId} AND status = 'STARTED'
+    </update>
+
     <select id="findByGenerationId" resultMap="qaRecordResult">
         SELECT <include refid="columns"/> FROM sv_qa_record WHERE generation_id = #{generationId}
     </select>

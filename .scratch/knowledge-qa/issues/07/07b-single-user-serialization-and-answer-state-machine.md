@@ -4,7 +4,7 @@
 
 **Blocked by:** 07a — 会话组织、永久历史与所有权级联删除.
 
-**Status:** done
+**Status:** resolved
 
 - [x] Java 侧建立 per-user 并发闸门：同一用户同时只允许一个 in-flight 生成，第二次提问返回明确业务错误（提示等待或停止当前回答）。
 - [x] 不同用户的生成互不阻塞，可并发进行。
