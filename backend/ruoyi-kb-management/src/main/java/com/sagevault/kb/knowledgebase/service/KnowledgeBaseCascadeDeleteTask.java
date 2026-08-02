@@ -5,6 +5,7 @@ import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
 import com.sagevault.kb.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner;
 import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner.CleanupProgress;
+import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner.FailureStage;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -48,11 +49,14 @@ public class KnowledgeBaseCascadeDeleteTask {
         CleanupProgress progress = contentCleaner.cleanupContent(id);
 
         if (progress.isFailed()) {
-            markFailed(id, progress.failureMessage());
+            markFailed(id, progress.failureStage(), progress.failureMessage());
             return;
         }
 
         if (progress.finished()) {
+            // 与并发上传的配合：这里只在状态仍为 DELETING 时移除活动记录，
+            // 而上传在插入文档后会复检知识库可用性，读到"已删除"即回滚。
+            // 两侧各守一半，插入与扫描的交错顺序都不会留下孤儿文档。
             int removed = mapper.deleteByIdIfDeleting(id);
             if (removed > 0) {
                 log.info("Knowledge base {} cascade delete completed, activity record removed", id);
@@ -63,16 +67,24 @@ public class KnowledgeBaseCascadeDeleteTask {
         mapper.incrementCleanupAttempt(id);
         int attempt = knowledgeBase.getCleanupAttempt() == null ? 0 : knowledgeBase.getCleanupAttempt();
         if (attempt + 1 >= FAILSAFE_ATTEMPT_THRESHOLD) {
-            markFailed(id, "FAILSAFE：清理在 " + FAILSAFE_ATTEMPT_THRESHOLD + " 轮后仍有 "
+            markFailed(id, FailureStage.UNKNOWN, "FAILSAFE：清理在 " + FAILSAFE_ATTEMPT_THRESHOLD + " 轮后仍有 "
                     + progress.remaining() + " 个文档未清理完成");
         }
     }
 
-    private void markFailed(long id, String message) {
+    /**
+     * 置为 DELETE_FAILED，并把失败阶段与原因一起落库。
+     *
+     * <p>阶段前缀让知识管理员不用翻日志就能判断卡在向量、原文件还是文档记录，
+     * 决定"直接重试"还是"先修外部依赖再重试"。
+     */
+    private void markFailed(long id, FailureStage stage, String message) {
+        FailureStage effective = stage == null ? FailureStage.UNKNOWN : stage;
+        String reason = "[" + effective.getDesc() + "] " + message;
         int updated = mapper.updateStatusIfCurrentStatus(id, KnowledgeBaseStatus.DELETE_FAILED.name(),
-                truncate(message), KnowledgeBaseStatus.DELETING.name());
+                truncate(reason), KnowledgeBaseStatus.DELETING.name());
         if (updated > 0) {
-            log.error("Knowledge base {} cascade delete failed: {}", id, message);
+            log.error("Knowledge base {} cascade delete failed at stage {}: {}", id, effective, message);
         }
     }
 

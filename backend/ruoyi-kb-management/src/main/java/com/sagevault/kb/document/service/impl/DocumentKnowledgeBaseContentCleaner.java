@@ -39,8 +39,10 @@ public class DocumentKnowledgeBaseContentCleaner implements KnowledgeBaseContent
                 .filter(document -> document.getStatus() == DocumentStatus.CLEANUP_FAILED)
                 .toList();
         if (!cleanupFailed.isEmpty()) {
-            // 存在无法自动恢复的清理失败：保留残留并向知识管理员暴露诊断信息
-            return CleanupProgress.failed(buildFailureMessage(cleanupFailed));
+            // 存在无法自动恢复的清理失败：保留残留并向知识管理员暴露失败阶段与诊断信息
+            DocumentEntity first = cleanupFailed.get(0);
+            return CleanupProgress.failed(FailureStage.from(first.getCleanupPhase()),
+                    buildFailureMessage(cleanupFailed));
         }
 
         for (DocumentEntity document : documents) {
@@ -49,6 +51,37 @@ public class DocumentKnowledgeBaseContentCleaner implements KnowledgeBaseContent
             }
         }
         return CleanupProgress.inProgress(documents.size());
+    }
+
+    @Override
+    public int retryFailedContent(long knowledgeBaseId) {
+        // 只把 CLEANUP_FAILED 文档退回待清理：已删除的文档记录早已不存在，天然不会被重复清理
+        List<DocumentEntity> cleanupFailed = documentMapper.findByKbId(knowledgeBaseId).stream()
+                .filter(document -> document.getStatus() == DocumentStatus.CLEANUP_FAILED)
+                .toList();
+        int reset = 0;
+        for (DocumentEntity document : cleanupFailed) {
+            // CAS 回退：若回调已把文档推进到别的状态，跳过而不是覆盖更新的事实
+            int updated = documentMapper.updateStatusIfCurrentStatus(document.getId(),
+                    DocumentStatus.DELETING.name(), "", DocumentStatus.CLEANUP_FAILED.name());
+            if (updated == 0) {
+                continue;
+            }
+            reset++;
+            // 必须在这里重新派发：后续轮次只会跳过已处于 DELETING 的文档，不会替重试补发命令
+            document.setStatus(DocumentStatus.DELETING);
+            try {
+                cleanupDispatcher.dispatch(document);
+            } catch (RuntimeException exception) {
+                log.warn("Retry cleanup dispatch failed for document {}, will retry next round",
+                        document.getId(), exception);
+            }
+        }
+        if (reset > 0) {
+            log.info("Knowledge base {} retry delete: {} failed documents re-entered cleanup",
+                    knowledgeBaseId, reset);
+        }
+        return reset;
     }
 
     /** 把单个文档推进到 DELETING 并派发清理命令；派发失败留待下一轮重试。 */

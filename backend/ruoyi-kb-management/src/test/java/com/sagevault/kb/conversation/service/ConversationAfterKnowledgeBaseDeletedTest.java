@@ -8,6 +8,7 @@ import com.sagevault.kb.conversation.domain.ConversationResponse;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
 import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
+import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner;
 import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner.CleanupProgress;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.support.InMemoryRepositories;
@@ -39,7 +40,10 @@ class ConversationAfterKnowledgeBaseDeletedTest {
     /** 让知识库走完一次成功的级联删除，活动记录被移除。 */
     private void completeCascadeDelete() {
         knowledgeBases.delete(knowledgeBaseId);
-        repositories.cascadeDeleteTask(id -> CleanupProgress.completed()).advanceCascadeDeletes();
+        repositories.cascadeDeleteTask(new KnowledgeBaseContentCleaner() {
+            @Override public CleanupProgress cleanupContent(long id) { return CleanupProgress.completed(); }
+            @Override public int retryFailedContent(long id) { return 0; }
+        }).advanceCascadeDeletes();
     }
 
     @Test

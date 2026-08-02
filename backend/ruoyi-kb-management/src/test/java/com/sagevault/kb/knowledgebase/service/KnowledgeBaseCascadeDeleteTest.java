@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseResponse;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
+import com.sagevault.kb.knowledgebase.domain.UpdateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner;
 import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner.CleanupProgress;
+import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner.FailureStage;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.support.InMemoryRepositories;
 import java.util.ArrayList;
@@ -85,7 +87,8 @@ class KnowledgeBaseCascadeDeleteTest {
     @Test
     void cleanupFailureKeepsResidueVisibleInsteadOfFakingSuccess() {
         knowledgeBases.delete(knowledgeBaseId);
-        repositories.cascadeDeleteTask(new RecordingCleaner(CleanupProgress.failed("Milvus 集合删除失败")))
+        repositories.cascadeDeleteTask(
+                        new RecordingCleaner(CleanupProgress.failed(FailureStage.VECTOR, "Milvus 集合删除失败")))
                 .advanceCascadeDeletes();
 
         KnowledgeBaseResponse failed = knowledgeBases.get(knowledgeBaseId);
@@ -93,10 +96,72 @@ class KnowledgeBaseCascadeDeleteTest {
         assertThat(failed.errorMessage()).contains("Milvus 集合删除失败");
     }
 
+    /** 知识管理员必须能分辨卡在哪一环节，才能判断是直接重试还是先修外部依赖。 */
+    @Test
+    void cleanupFailureReportsWhichStageFailed() {
+        knowledgeBases.delete(knowledgeBaseId);
+        repositories.cascadeDeleteTask(
+                        new RecordingCleaner(CleanupProgress.failed(FailureStage.OBJECT, "MinIO 拒绝删除对象")))
+                .advanceCascadeDeletes();
+
+        assertThat(knowledgeBases.get(knowledgeBaseId).errorMessage())
+                .contains("原文件清理")
+                .contains("MinIO 拒绝删除对象");
+    }
+
+    /** 删除流程中的知识库不得被编辑：改名会让一个正在消失的知识库看起来重新可用。 */
+    @Test
+    void knowledgeBaseInDeleteFlowRejectsEditing() {
+        knowledgeBases.delete(knowledgeBaseId);
+        assertThatThrownBy(() -> knowledgeBases.update(knowledgeBaseId,
+                new UpdateKnowledgeBaseRequest("改名", "删除中不该被编辑")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅支持查看与重试删除");
+
+        repositories.cascadeDeleteTask(
+                        new RecordingCleaner(CleanupProgress.failed(FailureStage.RECORD, "文档记录删除失败")))
+                .advanceCascadeDeletes();
+
+        assertThatThrownBy(() -> knowledgeBases.update(knowledgeBaseId,
+                new UpdateKnowledgeBaseRequest("改名", "失败态也不该被编辑")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅支持查看与重试删除");
+        // 失败态仍可查看，且不会被误判为可用
+        assertThat(knowledgeBases.get(knowledgeBaseId).status()).isEqualTo(KnowledgeBaseStatus.DELETE_FAILED);
+        assertThatThrownBy(() -> knowledgeBases.requireAvailable(knowledgeBaseId))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    /**
+     * FAILSAFE 耗尽后的重试必须拿到全新的清理预算。
+     *
+     * <p>若重试不归零 cleanup_attempt，第一轮就会再次越过阈值，"重试"永远不可能成功。
+     */
+    @Test
+    void retryAfterFailsafeExhaustionGetsFreshCleanupBudget() {
+        knowledgeBases.delete(knowledgeBaseId);
+        // 反复停在"仍有残留"，直到 FAILSAFE 判定失败
+        KnowledgeBaseCascadeDeleteTask stuck =
+                repositories.cascadeDeleteTask(new RecordingCleaner(CleanupProgress.inProgress(1)));
+        for (int i = 0; i < 25; i++) {
+            stuck.advanceCascadeDeletes();
+        }
+        assertThat(knowledgeBases.get(knowledgeBaseId).status()).isEqualTo(KnowledgeBaseStatus.DELETE_FAILED);
+
+        knowledgeBases.delete(knowledgeBaseId);
+        assertThat(repositories.knowledgeBaseMapper().findById(knowledgeBaseId).getCleanupAttempt()).isZero();
+        // 重试必须把上一轮失败的内容重新拉回清理流程
+        assertThat(repositories.retriedContentCleanups()).contains(knowledgeBaseId);
+
+        repositories.cascadeDeleteTask(new RecordingCleaner(CleanupProgress.completed())).advanceCascadeDeletes();
+        assertThatThrownBy(() -> knowledgeBases.get(knowledgeBaseId)).isInstanceOf(BusinessException.class);
+    }
+
     @Test
     void deleteCanBeRetriedAfterCleanupFailure() {
         knowledgeBases.delete(knowledgeBaseId);
-        repositories.cascadeDeleteTask(new RecordingCleaner(CleanupProgress.failed("MinIO 原文件删除失败")))
+        repositories.cascadeDeleteTask(
+                        new RecordingCleaner(CleanupProgress.failed(FailureStage.OBJECT, "MinIO 原文件删除失败")))
                 .advanceCascadeDeletes();
 
         assertThat(knowledgeBases.delete(knowledgeBaseId).status()).isEqualTo(KnowledgeBaseStatus.DELETING);
@@ -118,6 +183,11 @@ class KnowledgeBaseCascadeDeleteTest {
             CleanupProgress progress = script.get(Math.min(calls, script.size() - 1));
             calls++;
             return progress;
+        }
+
+        @Override
+        public int retryFailedContent(long knowledgeBaseId) {
+            return 0;
         }
     }
 }

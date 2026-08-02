@@ -7,6 +7,7 @@ import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
 import com.sagevault.kb.knowledgebase.service.impl.KnowledgeBaseServiceImpl;
+import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner;
 import com.sagevault.kb.platform.error.BusinessException;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -50,6 +51,7 @@ class KnowledgeBaseMapperMySqlIntegrationTest {
         factory.afterPropertiesSet();
         mapper = factory.getObject();
         prefix = "mapper-" + UUID.randomUUID() + "-";
+        jdbc.update("DELETE FROM sv_knowledge_base WHERE name LIKE ?", prefix + "%");
     }
 
     @AfterEach
@@ -99,10 +101,19 @@ class KnowledgeBaseMapperMySqlIntegrationTest {
             @Override public int updateStatusIfCurrentStatus(long id, String newStatus, String errorMessage, String currentStatus) {
                 return mapper.updateStatusIfCurrentStatus(id, newStatus, errorMessage, currentStatus);
             }
+            @Override public int startCleanupIfCurrentStatus(long id, String currentStatus) {
+                return mapper.startCleanupIfCurrentStatus(id, currentStatus);
+            }
             @Override public int incrementCleanupAttempt(long id) { return mapper.incrementCleanupAttempt(id); }
             @Override public int deleteByIdIfDeleting(long id) { return mapper.deleteByIdIfDeleting(id); }
         };
-        KnowledgeBaseServiceImpl service = new KnowledgeBaseServiceImpl(raceMapper, (operation, id) -> { });
+        KnowledgeBaseServiceImpl service = new KnowledgeBaseServiceImpl(raceMapper, (operation, id) -> { },
+                new KnowledgeBaseContentCleaner() {
+                    @Override public CleanupProgress cleanupContent(long knowledgeBaseId) {
+                        return CleanupProgress.inProgress(0);
+                    }
+                    @Override public int retryFailedContent(long knowledgeBaseId) { return 0; }
+                });
 
         assertThatThrownBy(() -> service.create(new CreateKnowledgeBaseRequest(existing.getName(), "duplicate")))
                 .isInstanceOf(BusinessException.class)
@@ -142,6 +153,41 @@ class KnowledgeBaseMapperMySqlIntegrationTest {
         assertThat(mapper.deleteByIdIfDeleting(id)).isEqualTo(1);
         assertThat(mapper.findById(id)).isNull();
         assertThat(mapper.findByIds(java.util.List.of(id))).isEmpty();
+    }
+
+    /**
+     * 重试删除必须在同一条语句里归零 cleanup_attempt。
+     *
+     * <p>上一轮失败时清理预算可能已被 FAILSAFE 耗尽，若重试沿用旧计数，
+     * 后台第一轮就会再次越过阈值并立刻判失败，重试将永远无法成功。
+     */
+    @Test
+    void retryStartResetsCleanupAttemptAtomicallyAgainstRealDatabase() {
+        KnowledgeBaseEntity knowledgeBase = entity("RetryBudget", KnowledgeBaseStatus.AVAILABLE);
+        mapper.insert(knowledgeBase);
+        long id = knowledgeBase.getId();
+        assertThat(id).isPositive();
+        assertThat(mapper.findById(id)).as("inserted knowledge base must be retrievable").isNotNull();
+
+        assertThat(mapper.startCleanupIfCurrentStatus(id, KnowledgeBaseStatus.AVAILABLE.name())).isEqualTo(1);
+        for (int i = 0; i < 20; i++) {
+            mapper.incrementCleanupAttempt(id);
+        }
+        mapper.updateStatusIfCurrentStatus(id, KnowledgeBaseStatus.DELETE_FAILED.name(), "[向量清理] 失败",
+                KnowledgeBaseStatus.DELETING.name());
+        assertThat(mapper.findById(id)).as("knowledge base must survive failure transition").isNotNull();
+        assertThat(mapper.findById(id).getCleanupAttempt()).isEqualTo(20);
+
+        // 状态不匹配时不得启动清理，避免把可用知识库拖进删除流程
+        assertThat(mapper.startCleanupIfCurrentStatus(id, KnowledgeBaseStatus.AVAILABLE.name())).isZero();
+
+        assertThat(mapper.startCleanupIfCurrentStatus(id, KnowledgeBaseStatus.DELETE_FAILED.name())).isEqualTo(1);
+        KnowledgeBaseEntity retried = mapper.findById(id);
+        assertThat(retried.getStatus()).isEqualTo(KnowledgeBaseStatus.DELETING);
+        assertThat(retried.getCleanupAttempt()).isZero();
+        assertThat(retried.getErrorMessage()).isEmpty();
+
+        mapper.deleteByIdIfDeleting(id);
     }
 
     /**

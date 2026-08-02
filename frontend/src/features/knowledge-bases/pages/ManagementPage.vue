@@ -25,7 +25,7 @@
         </el-table-column>
         <el-table-column label="操作" width="180">
           <template #default="scope">
-            <el-button link type="primary" :disabled="isDeleting(scope.row)" @click="openEdit(scope.row)">
+            <el-button link type="primary" :disabled="inDeleteFlow(scope.row)" @click="openEdit(scope.row)">
               编辑
             </el-button>
             <el-button link type="danger" :disabled="isDeleting(scope.row)" @click="confirmDelete(scope.row)">
@@ -73,8 +73,11 @@ function statusTagType(status) {
   return 'info'
 }
 
-// 删除中的知识库正在被后台清理，不接受编辑或再次删除
+// 删除中的知识库正在被后台清理，不接受再次删除
 function isDeleting(item) { return item.status === 'DELETING' }
+
+// 进入删除流程后只允许查看与重试删除：编辑会让一个正在消失的知识库看起来重新可用
+function inDeleteFlow(item) { return item.status === 'DELETING' || item.status === 'DELETE_FAILED' }
 
 async function load() {
   loading.value = true
@@ -98,19 +101,27 @@ function openCreate() { Object.assign(form, { id: null, name: '', description: '
 function openEdit(item) { Object.assign(form, item); visible.value = true }
 
 async function confirmDelete(item) {
+  const retrying = item.status === 'DELETE_FAILED'
+  // 重试面对的是"已知失败的残留"，提示要落在继续清理上，不能沿用首次删除的措辞
+  const message = retrying
+    ? `知识库「${item.name}」上次清理未完成，重试将继续清理剩余的文档、原文件与向量数据。`
+      + '已清理的内容不会被重复删除。确认重试删除？'
+    : `删除知识库「${item.name}」将同时清除其全部文档、原文件与向量数据，且无法恢复。`
+      + '历史问答记录会保留并标记为“知识库已删除”。确认删除？'
   try {
-    await ElMessageBox.confirm(
-      `删除知识库「${item.name}」将同时清除其全部文档、原文件与向量数据，且无法恢复。`
-        + '历史问答记录会保留并标记为“知识库已删除”。确认删除？',
-      '确认删除知识库',
-      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
-    )
+    await ElMessageBox.confirm(message, retrying ? '确认重试删除' : '确认删除知识库',
+      {
+        type: 'warning',
+        confirmButtonText: retrying ? '确认重试' : '确认删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger'
+      })
   } catch {
     // 用户取消删除，知识库保持原状
     return
   }
   await deleteKnowledgeBase(item.id)
-  ElMessage.success('已开始删除，清理完成后知识库将从列表移除')
+  ElMessage.success(retrying ? '已重新开始清理，完成后知识库将从列表移除' : '已开始删除，清理完成后知识库将从列表移除')
   await load()
 }
 

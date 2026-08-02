@@ -49,6 +49,12 @@
         WHERE id = #{id} AND status = #{currentStatus}
     </update>
 
+    <update id="startCleanupIfCurrentStatus">
+        UPDATE sv_knowledge_base
+        SET status = 'DELETING', error_message = '', cleanup_attempt = 0
+        WHERE id = #{id} AND status = #{currentStatus}
+    </update>
+
     <update id="incrementCleanupAttempt">
         UPDATE sv_knowledge_base
         SET cleanup_attempt = cleanup_attempt + 1

@@ -8,6 +8,7 @@ import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
 import com.sagevault.kb.knowledgebase.domain.UpdateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
+import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner;
 import com.sagevault.kb.knowledgebase.service.port.ManagementAudit;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
@@ -26,10 +27,13 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private final KnowledgeBaseMapper mapper;
     private final ManagementAudit audit;
+    private final KnowledgeBaseContentCleaner contentCleaner;
 
-    public KnowledgeBaseServiceImpl(KnowledgeBaseMapper mapper, ManagementAudit audit) {
+    public KnowledgeBaseServiceImpl(KnowledgeBaseMapper mapper, ManagementAudit audit,
+            KnowledgeBaseContentCleaner contentCleaner) {
         this.mapper = mapper;
         this.audit = audit;
+        this.contentCleaner = contentCleaner;
     }
 
     @Override
@@ -59,6 +63,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public KnowledgeBaseResponse update(long id, UpdateKnowledgeBaseRequest request) {
         KnowledgeBaseEntity current = requireEntity(id);
+        // 进入删除流程后知识库只允许查看与重试删除：编辑会让一个正在消失的知识库看起来重新可用
+        if (current.getStatus() == KnowledgeBaseStatus.DELETING
+                || current.getStatus() == KnowledgeBaseStatus.DELETE_FAILED) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_STATE_CONFLICT,
+                    "知识库正在删除流程中，仅支持查看与重试删除");
+        }
         KnowledgeBaseName name = KnowledgeBaseName.of(request.name());
         ensureUnique(name, id);
         KnowledgeBaseEntity entity = entity(id, name.value(), request.description(), current.getStatus());
@@ -110,7 +120,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_STATE_CONFLICT, "知识库当前状态不允许删除");
         }
 
-        int updated = mapper.updateStatusIfCurrentStatus(id, KnowledgeBaseStatus.DELETING.name(), "", from.name());
+        // 重置清理尝试次数：重试删除必须获得完整的清理预算，否则上一轮耗尽的计数会让重试立刻再次失败
+        int updated = mapper.startCleanupIfCurrentStatus(id, from.name());
         if (updated == 0) {
             // 并发删除：另一请求已推进状态，按幂等处理返回最新状态
             log.info("Knowledge base {} status changed concurrently during delete, returning latest state", id);
@@ -118,6 +129,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
         entity.setStatus(KnowledgeBaseStatus.DELETING);
         entity.setErrorMessage("");
+
+        if (from == KnowledgeBaseStatus.DELETE_FAILED) {
+            // 让上一轮判定失败的内容重新进入清理，否则后台第一轮就会重新读到旧残留并再次判失败
+            contentCleaner.retryFailedContent(id);
+        }
+
         audit.record(ManagementAudit.Operation.DELETE, id);
         return response(entity);
     }

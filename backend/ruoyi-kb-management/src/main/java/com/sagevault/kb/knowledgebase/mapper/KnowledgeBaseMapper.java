@@ -20,6 +20,14 @@ public interface KnowledgeBaseMapper {
     int updateStatusIfCurrentStatus(@Param("id") long id, @Param("newStatus") String newStatus,
             @Param("errorMessage") String errorMessage, @Param("currentStatus") String currentStatus);
 
+    /**
+     * CAS 进入 DELETING 并把清理尝试次数重置为 0。
+     *
+     * <p>重试删除必须拿到全新的清理预算：上一轮失败时 cleanup_attempt 可能已经耗尽 FAILSAFE 阈值，
+     * 若不在同一条语句里归零，重试会在第一轮就被判定为再次失败。
+     */
+    int startCleanupIfCurrentStatus(@Param("id") long id, @Param("currentStatus") String currentStatus);
+
     /** 递增级联清理尝试次数，仅在知识库仍处于 DELETING 时生效。 */
     int incrementCleanupAttempt(@Param("id") long id);
 

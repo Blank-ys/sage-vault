@@ -47,10 +47,25 @@ public final class InMemoryRepositories {
     private final FeedbackService feedbacks;
     private final List<String> conversationAuditTrail = new ArrayList<>();
     private final List<String> feedbackAuditTrail = new ArrayList<>();
+    private final List<Long> retriedContentCleanups = new ArrayList<>();
+    private final KnowledgeBaseContentCleaner retryTrackingCleaner = new KnowledgeBaseContentCleaner() {
+        @Override
+        public CleanupProgress cleanupContent(long knowledgeBaseId) {
+            // 服务层不负责推进清理轮次，这里只需满足接口
+            return CleanupProgress.inProgress(0);
+        }
+
+        @Override
+        public int retryFailedContent(long knowledgeBaseId) {
+            retriedContentCleanups.add(knowledgeBaseId);
+            return 0;
+        }
+    };
 
     public InMemoryRepositories() {
         knowledgeBaseMapper = new KnowledgeBases();
-        knowledgeBases = new KnowledgeBaseServiceImpl(knowledgeBaseMapper, (operation, id) -> { });
+        knowledgeBases = new KnowledgeBaseServiceImpl(knowledgeBaseMapper, (operation, id) -> { },
+                retryTrackingCleaner);
         RagAnswerPort emptyRag = new RagAnswerPort() {
             @Override
             public Flux<AnswerEvent> answer(long knowledgeBaseId, String question, String requestId,
@@ -78,6 +93,8 @@ public final class InMemoryRepositories {
     }
 
     public KnowledgeBaseService knowledgeBases() { return knowledgeBases; }
+    /** 暴露底层 mapper，供断言 cleanup_attempt 等清理预算状态。 */
+    public KnowledgeBaseMapper knowledgeBaseMapper() { return knowledgeBaseMapper; }
     public void setKnowledgeBaseStatus(String name, KnowledgeBaseStatus status) {
         knowledgeBaseMapper.setStatus(name, status);
     }
@@ -90,6 +107,8 @@ public final class InMemoryRepositories {
     public FeedbackService feedbacks() { return feedbacks; }
     public List<String> conversationAuditTrail() { return List.copyOf(conversationAuditTrail); }
     public List<String> feedbackAuditTrail() { return List.copyOf(feedbackAuditTrail); }
+    /** 记录服务层触发内容重试清理的知识库，用于断言"重试删除"确实重新驱动了清理。 */
+    public List<Long> retriedContentCleanups() { return List.copyOf(retriedContentCleanups); }
 
     /** 用自定义 RAG 端口构造一套独立的会话服务，便于观察检索入参。 */
     public ConversationService conversationsWith(RagAnswerPort rag) {
@@ -140,6 +159,15 @@ public final class InMemoryRepositories {
             if (value == null || !value.getStatus().name().equals(currentStatus)) { return 0; }
             value.setStatus(KnowledgeBaseStatus.valueOf(newStatus));
             value.setErrorMessage(errorMessage);
+            return 1;
+        }
+        public int startCleanupIfCurrentStatus(long id, String currentStatus) {
+            KnowledgeBaseEntity value = values.get(id);
+            if (value == null || !value.getStatus().name().equals(currentStatus)) { return 0; }
+            value.setStatus(KnowledgeBaseStatus.DELETING);
+            value.setErrorMessage("");
+            // 镜像 SQL：进入 DELETING 的同时归零清理预算，重试才能真正重新开始
+            value.setCleanupAttempt(0);
             return 1;
         }
         public int incrementCleanupAttempt(long id) {

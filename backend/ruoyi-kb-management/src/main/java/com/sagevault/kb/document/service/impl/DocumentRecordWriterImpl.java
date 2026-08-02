@@ -43,6 +43,11 @@ public class DocumentRecordWriterImpl implements DocumentRecordWriter {
         } catch (DuplicateKeyException exception) {
             throw filenameConflict();
         }
+
+        // 插入后复检：级联删除可能在"检查通过"与"插入完成"之间开始清理，
+        // 那一轮扫描不到这条尚未提交的记录，放行就会在知识库删除后留下孤儿文档。
+        // 复检失败时整个事务回滚，宁可让上传报错，也不让残留逃过清理窗口。
+        knowledgeBases.requireAvailable(request.knowledgeBaseId());
         return entity;
     }
 
