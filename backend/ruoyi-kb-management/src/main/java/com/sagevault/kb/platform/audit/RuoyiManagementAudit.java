@@ -21,7 +21,7 @@ public class RuoyiManagementAudit implements ManagementAudit {
     public void record(Operation operation, long knowledgeBaseId) {
         SysOperLog event = new SysOperLog();
         event.setTitle("Sage Vault 知识库管理");
-        event.setBusinessType(operation == Operation.CREATE ? 1 : 2);
+        event.setBusinessType(businessType(operation));
         event.setOperName(SecurityUtils.getUsername());
         event.setMethod(operation.name());
         event.setOperParam("knowledgeBaseId=" + knowledgeBaseId);
@@ -31,5 +31,14 @@ public class RuoyiManagementAudit implements ManagementAudit {
         } catch (Exception exception) {
             throw new BusinessException(ErrorCode.AUDIT_UNAVAILABLE, "管理审计暂不可用", exception);
         }
+    }
+
+    /** 映射到 RuoYi 业务类型：1 新增、2 修改、3 删除。 */
+    private static int businessType(Operation operation) {
+        return switch (operation) {
+            case CREATE -> 1;
+            case UPDATE -> 2;
+            case DELETE -> 3;
+        };
     }
 }

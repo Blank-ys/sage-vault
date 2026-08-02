@@ -77,4 +77,14 @@ Retrieval diagnostics (chunk identifiers, scores, stage durations) are intention
 python -m unittest system-tests/knowledge-qa/test_admin_feedback_diagnostics_and_privacy.py -v
 ```
 
+## test_cascade_delete_failure_and_retry.py
+
+Verifies cascade-delete failure handling, idempotent retry, and concurrency safety (issue 09b): a cleanup failure surfaces as `DELETE_FAILED` carrying a diagnosable reason prefixed with the failing stage (向量清理 / 原文件清理 / 文档记录清理), the failed knowledge base is never treated as available (absent from the available list, rejected for new conversations), a `DELETE_FAILED` knowledge base is read-only except for retry (still listable and viewable, but renaming is refused with `KNOWLEDGE_BASE_STATE_CONFLICT` 410029 and uploads are refused), retry is idempotent (repeated retries only return to `DELETING`), and cleanup never touches a bystander knowledge base (its documents survive, it stays writable and can still start conversations).
+
+Failure injection is environment-owned rather than a switch in business code: make the knowledge base's external storage (MinIO or Milvus) unavailable so the real cleanup chain fails, then set `SAGE_VAULT_CLEANUP_FAILURE_INJECTED=1`. The three failure-path tests skip without it. To additionally prove that a retry runs to completion, restore the storage and re-run with `SAGE_VAULT_CLEANUP_FAILURE_RECOVERED=1`; `test_cascade_delete_never_touches_other_knowledge_bases` needs neither variable and runs against a healthy environment.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_cascade_delete_failure_and_retry.py -v
+```
+
 All tests send browser-equivalent traffic only through Gateway. They never connect directly to Python or private database tables.
