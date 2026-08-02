@@ -165,6 +165,14 @@ class QaRecordServiceTest {
         }
 
         @Override
+        public QaRecordEntity findById(long id) {
+            return records.values().stream()
+                    .filter(entity -> entity.getId() != null && entity.getId() == id)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        @Override
         public List<QaRecordEntity> findByConversation(long conversationId) {
             return records.values().stream()
                     .filter(entity -> entity.getConversationId() == conversationId)

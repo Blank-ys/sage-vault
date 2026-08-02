@@ -13,7 +13,7 @@ The Gateway's environment-owned `ruoyi-gateway-<profile>.yml` Nacos configuratio
     - StripPrefix=1
 ```
 
-Set `SAGE_VAULT_GATEWAY_URL`, `SAGE_VAULT_KNOWLEDGE_ADMIN_TOKEN`, and `SAGE_VAULT_GENERAL_USER_TOKEN`, then run individual tests. `test_conversation_history_and_ownership.py` additionally needs `SAGE_VAULT_SECOND_USER_TOKEN` for a *different* general user, and MySQL must also have `007_schema.sql` applied.
+Set `SAGE_VAULT_GATEWAY_URL`, `SAGE_VAULT_KNOWLEDGE_ADMIN_TOKEN`, and `SAGE_VAULT_GENERAL_USER_TOKEN`, then run individual tests. `test_conversation_history_and_ownership.py` and `test_user_feedback_submission_and_consent.py` additionally need `SAGE_VAULT_SECOND_USER_TOKEN` for a *different* general user, and MySQL must also have `007_schema.sql` applied. `test_user_feedback_submission_and_consent.py` additionally requires `008_schema.sql`.
 
 ## test_empty_knowledge_base.py
 
@@ -55,6 +55,14 @@ The hard stop assertions — the stream ends with a `stopped` event, the answer 
 
 ```powershell
 python -m unittest system-tests/knowledge-qa/test_stream_stop_and_best_effort_cancel.py -v
+```
+
+## test_user_feedback_submission_and_consent.py
+
+Verifies user feedback submission and consent (issue 08a): an anonymous request cannot submit feedback, a submission without explicit `consentToShare` is refused with `FEEDBACK_CONSENT_REQUIRED` (410022) and leaves no trace, a category outside the closed set is refused with `FEEDBACK_CATEGORY_INVALID` (410024), a second general user cannot submit feedback on another user's answer (`FEEDBACK_FORBIDDEN` 410021), the owner's consented submission succeeds without exposing admin-only fields, conversation history reports `feedbackSubmitted=true` afterwards, a repeated submission is refused with `FEEDBACK_ALREADY_SUBMITTED` (410023), and deleting the conversation removes the feedback together with the answer.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_user_feedback_submission_and_consent.py -v
 ```
 
 All tests send browser-equivalent traffic only through Gateway. They never connect directly to Python or private database tables.

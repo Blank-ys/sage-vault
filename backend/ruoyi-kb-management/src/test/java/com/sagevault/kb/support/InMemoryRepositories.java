@@ -13,6 +13,10 @@ import com.sagevault.kb.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.knowledgebase.service.impl.KnowledgeBaseServiceImpl;
 import com.sagevault.kb.document.service.DocumentService;
+import com.sagevault.kb.feedback.domain.FeedbackEntity;
+import com.sagevault.kb.feedback.mapper.FeedbackMapper;
+import com.sagevault.kb.feedback.service.FeedbackService;
+import com.sagevault.kb.feedback.service.impl.FeedbackServiceImpl;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
@@ -34,6 +38,7 @@ public final class InMemoryRepositories {
     private final KnowledgeBaseService knowledgeBases;
     private final KnowledgeBases knowledgeBaseMapper;
     private final ConversationService conversations;
+    private final FeedbackService feedbacks;
     private final List<String> conversationAuditTrail = new ArrayList<>();
 
     public InMemoryRepositories() {
@@ -52,13 +57,16 @@ public final class InMemoryRepositories {
                 return Mono.just(false);
             }
         };
-        QaRecordService records = new QaRecordServiceImpl(new QaRecords());
+        Feedbacks feedbackMapper = new Feedbacks();
+        QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
+        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper);
+        feedbacks = new FeedbackServiceImpl(feedbackMapper, qaRecordMapper);
         DocumentService documents = Mockito.mock(DocumentService.class);
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
         ConversationAudit audit = (conversationId, removedRecordCount) ->
                 conversationAuditTrail.add("deleted:" + conversationId + ":" + removedRecordCount);
         conversations = new ConversationServiceImpl(new Conversations(), knowledgeBases, documents, records, emptyRag,
-                audit);
+                audit, feedbacks);
     }
 
     public KnowledgeBaseService knowledgeBases() { return knowledgeBases; }
@@ -66,15 +74,19 @@ public final class InMemoryRepositories {
         knowledgeBaseMapper.setStatus(name, status);
     }
     public ConversationService conversations() { return conversations; }
+    public FeedbackService feedbacks() { return feedbacks; }
     public List<String> conversationAuditTrail() { return List.copyOf(conversationAuditTrail); }
 
     /** 用自定义 RAG 端口构造一套独立的会话服务，便于观察检索入参。 */
     public ConversationService conversationsWith(RagAnswerPort rag) {
         DocumentService documents = Mockito.mock(DocumentService.class);
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
+        Feedbacks feedbackMapper = new Feedbacks();
+        QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
         return new ConversationServiceImpl(new Conversations(), knowledgeBases, documents,
-                new QaRecordServiceImpl(new QaRecords()), rag,
-                (conversationId, removedRecordCount) -> { });
+                new QaRecordServiceImpl(qaRecordMapper), rag,
+                (conversationId, removedRecordCount) -> { },
+                new FeedbackServiceImpl(feedbackMapper, qaRecordMapper));
     }
 
     private static final class KnowledgeBases implements KnowledgeBaseMapper {
@@ -144,6 +156,8 @@ public final class InMemoryRepositories {
     private static final class QaRecords implements QaRecordMapper {
         private final AtomicLong ids = new AtomicLong();
         private final Map<String, QaRecordEntity> values = new LinkedHashMap<>();
+        private final Feedbacks feedbacks;
+        QaRecords(Feedbacks feedbacks) { this.feedbacks = feedbacks; }
         public int insert(QaRecordEntity value) {
             value.setId(ids.incrementAndGet());
             value.setCreatedAt(LocalDateTime.now());
@@ -170,6 +184,9 @@ public final class InMemoryRepositories {
             return 1;
         }
         public QaRecordEntity findByGenerationId(String generationId) { return values.get(generationId); }
+        public QaRecordEntity findById(long id) {
+            return values.values().stream().filter(value -> value.getId() == id).findFirst().orElse(null);
+        }
         public List<QaRecordEntity> findByConversation(long conversationId) {
             return values.values().stream()
                     .filter(value -> value.getConversationId() == conversationId)
@@ -184,8 +201,33 @@ public final class InMemoryRepositories {
         }
         public int deleteByConversation(long conversationId) {
             List<QaRecordEntity> removed = findByConversation(conversationId);
-            removed.forEach(value -> values.remove(value.getGenerationId()));
+            removed.forEach(value -> {
+                values.remove(value.getGenerationId());
+                // 镜像库层外键 ON DELETE CASCADE：问答删除后反馈正文不得残留。
+                feedbacks.deleteByQaId(value.getId());
+            });
             return removed.size();
         }
+    }
+
+    private static final class Feedbacks implements FeedbackMapper {
+        private final AtomicLong ids = new AtomicLong();
+        private final Map<Long, FeedbackEntity> byQaId = new LinkedHashMap<>();
+        public int insert(FeedbackEntity value) {
+            // 镜像 uk_sv_qa_feedback_qa 唯一键。
+            if (byQaId.containsKey(value.getQaId())) {
+                throw new org.springframework.dao.DuplicateKeyException("duplicate qa_id");
+            }
+            value.setId(ids.incrementAndGet());
+            value.setCreatedAt(LocalDateTime.now());
+            value.setUpdatedAt(LocalDateTime.now());
+            byQaId.put(value.getQaId(), value);
+            return 1;
+        }
+        public FeedbackEntity findByQaId(long qaId) { return byQaId.get(qaId); }
+        public List<FeedbackEntity> findByQaIds(List<Long> qaIds) {
+            return qaIds.stream().map(byQaId::get).filter(java.util.Objects::nonNull).toList();
+        }
+        void deleteByQaId(long qaId) { byQaId.remove(qaId); }
     }
 }

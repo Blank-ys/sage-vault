@@ -112,7 +112,7 @@ public class QaRecordServiceImpl implements QaRecordService {
 
     private static QaRecordResponse response(QaRecordEntity entity) {
         return new QaRecordResponse(entity.getId(), entity.getConversationId(), entity.getGenerationId(),
-                entity.getQuestion(), entity.getAnswer(), entity.getStatus(), entity.getCreatedAt());
+                entity.getQuestion(), entity.getAnswer(), entity.getStatus(), entity.getCreatedAt(), false);
     }
 
     private void decideTerminalState(String generationId, QaRecordStatus target, String answer) {

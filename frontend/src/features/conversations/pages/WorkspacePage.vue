@@ -39,6 +39,11 @@
             show-icon
             :closable="false"
           />
+          <div class="history-feedback">
+            <!-- 已反馈的问答收敛为状态文案，避免重复提交 -->
+            <span v-if="record.feedbackSubmitted" class="feedback-submitted">已反馈，感谢你的帮助</span>
+            <el-button v-else type="primary" link @click="openFeedback(record)">反馈这条回答</el-button>
+          </div>
         </div>
         <div v-if="streaming" class="history-item">
           <p class="history-question">{{ streamingQuestion }}</p>
@@ -49,12 +54,15 @@
       <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
       <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
     </el-card>
+
+    <feedback-dialog v-model="feedbackVisible" :qa-id="feedbackQaId" @submitted="markFeedbackSubmitted" />
   </div>
 </template>
 
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listAvailableKnowledgeBases } from '@/features/knowledge-bases'
+import { FeedbackDialog } from '@/features/feedback'
 import {
   askQuestion,
   createConversation,
@@ -80,6 +88,8 @@ const historyLoading = ref(false)
 const asking = ref(false)
 const stopping = ref(false)
 const streamingGenerationId = ref('')
+const feedbackVisible = ref(false)
+const feedbackQaId = ref()
 let controller
 
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
@@ -221,6 +231,17 @@ async function refreshAfterAnswer(conversationId) {
   resetStreaming()
 }
 
+function openFeedback(record) {
+  feedbackQaId.value = record.id
+  feedbackVisible.value = true
+}
+
+function markFeedbackSubmitted(qaId) {
+  history.value = history.value.map(record =>
+    record.id === qaId ? { ...record, feedbackSubmitted: true } : record
+  )
+}
+
 function resetStreaming() {
   streaming.value = false
   refused.value = false
@@ -251,5 +272,7 @@ load()
 .history { min-height: 120px; margin-bottom: 20px; }
 .history-item { margin-bottom: 16px; }
 .history-question { margin: 0 0 8px; font-weight: 600; }
+.history-feedback { margin-top: 4px; text-align: right; }
+.feedback-submitted { font-size: 12px; color: var(--el-text-color-secondary); }
 .el-textarea, .el-button { width: 100%; margin-bottom: 20px; }
 </style>
