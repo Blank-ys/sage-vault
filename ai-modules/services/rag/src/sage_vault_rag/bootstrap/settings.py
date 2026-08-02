@@ -40,6 +40,16 @@ class Settings(BaseSettings):
     # delta 之间的最小间隔，保证生成期间事件循环可处理取消命令
     answer_delta_interval_seconds: float = 0.05
 
+    # 生成适配器：fake 使用确定性假模型（自动化与本地默认）；bailian 调用阿里云百炼
+    generation_provider: str = "fake"
+    # 百炼凭据与参数，真实值通过 .env / 环境变量注入，不得提交到 Git
+    bailian_api_key: str = ""
+    bailian_model: str = "qwen-plus"
+    bailian_base_url: str = ""
+    bailian_max_tokens: int = 1024
+    bailian_temperature: float = 0.3
+    bailian_timeout_seconds: float = 60.0
+
     # 测试模式故障注入（仅供系统验收测试使用，生产环境留空）
     test_failure_flag_file: str = ""
 

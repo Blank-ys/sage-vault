@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sage_vault_rag.adapters.bge_m3.embedder import BgeM3Embedder
 from sage_vault_rag.adapters.chunker.chunker import ParagraphChunker
+from sage_vault_rag.adapters.dashscope.generator import DashScopeGenerationAdapter
 from sage_vault_rag.adapters.document_parser.dispatcher import FormatDispatchingDocumentParser
 from sage_vault_rag.adapters.document_storage.http_client import HttpDocumentStorage
 from sage_vault_rag.adapters.docx_parser.parser import DocxParser
@@ -34,6 +35,7 @@ from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.ports.chunker import ChunkerPort
 from sage_vault_rag.ports.document_parser import DocumentParserPort
 from sage_vault_rag.ports.embedding import EmbeddingPort
+from sage_vault_rag.ports.generation import GenerationPort
 from sage_vault_rag.ports.vector_store import VectorStorePort
 
 logger = logging.getLogger(__name__)
@@ -258,13 +260,29 @@ def build_answering_service(settings: Settings) -> AnsweringService:
     return AnsweringService(
         embedder=_build_embedder(settings),
         vector_store=_build_vector_store(settings),
-        generator=FakeGenerationAdapter(
-            delta_length=settings.answer_delta_length,
-            delta_interval_seconds=settings.answer_delta_interval_seconds,
-        ),
+        generator=_build_generator(settings),
         top_k=settings.retrieval_top_k,
         refusal_threshold=settings.retrieval_refusal_threshold,
     )
+
+
+def _build_generator(settings: Settings) -> GenerationPort:
+    provider = settings.generation_provider
+    if provider == "fake":
+        return FakeGenerationAdapter(
+            delta_length=settings.answer_delta_length,
+            delta_interval_seconds=settings.answer_delta_interval_seconds,
+        )
+    if provider == "bailian":
+        return DashScopeGenerationAdapter(
+            api_key=settings.bailian_api_key,
+            model=settings.bailian_model,
+            max_tokens=settings.bailian_max_tokens,
+            temperature=settings.bailian_temperature,
+            timeout=settings.bailian_timeout_seconds,
+            base_url=settings.bailian_base_url,
+        )
+    raise ValueError(f"未知的 generation_provider: {provider}")
 
 
 def build_cleanup_service(settings: Settings) -> CleanupService:
