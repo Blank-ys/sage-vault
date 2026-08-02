@@ -65,4 +65,16 @@ Verifies user feedback submission and consent (issue 08a): an anonymous request 
 python -m unittest system-tests/knowledge-qa/test_user_feedback_submission_and_consent.py -v
 ```
 
+## test_admin_feedback_diagnostics_and_privacy.py
+
+Verifies the administrator feedback queue and its privacy boundary (issue 08b): a logged-in general user is refused (403) on the queue, on a feedback detail, and on the resolve endpoint; a new feedback lands in the `PENDING` queue; the detail returns the question and answer the user consented to share plus the request ID; an answer that never received feedback has no administrator entry point at all and never appears in the queue; resolving stores the internal note and moves the item to `RESOLVED`; the internal note is not echoed back into the submitting user's history; a resolved item can be reopened; and deleting the conversation removes the shared content from the administrator side (`FEEDBACK_NOT_FOUND` 410027).
+
+Requires `009_seed.sql` for the `sage:feedback:manage` menu grant, and `SAGE_VAULT_SECOND_USER_TOKEN`.
+
+Retrieval diagnostics (chunk identifiers, scores, stage durations) are intentionally not asserted here: their cross-language collection is owned by issue 11c. The detail response already carries `retrievalDiagnostics` and `stageDurations`, which stay empty until 11c lands.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_admin_feedback_diagnostics_and_privacy.py -v
+```
+
 All tests send browser-equivalent traffic only through Gateway. They never connect directly to Python or private database tables.

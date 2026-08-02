@@ -3,6 +3,7 @@ package com.sagevault.kb.feedback.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.sagevault.kb.feedback.domain.AdminFeedbackQuery;
 import com.sagevault.kb.feedback.domain.FeedbackCategory;
 import com.sagevault.kb.feedback.domain.FeedbackEntity;
 import com.sagevault.kb.feedback.domain.FeedbackStatus;
@@ -125,6 +126,72 @@ class FeedbackMapperMySqlIntegrationTest {
         List<FeedbackEntity> found = mapper.findByQaIds(List.of(withFeedback, withoutFeedback));
 
         assertThat(found).extracting(FeedbackEntity::getQaId).containsExactly(withFeedback);
+    }
+
+    @Test
+    void joinsTheQuestionAndAnswerOnlyForRecordsThatHaveFeedback() {
+        long withFeedback = insertRecord("detail-with");
+        mapper.insert(feedback(withFeedback, FeedbackCategory.WRONG_ANSWER, "答案不对"));
+        long feedbackId = mapper.findByQaId(withFeedback).getId();
+
+        var detail = mapper.findDetailForAdmin(feedbackId);
+
+        assertThat(detail.getQaId()).isEqualTo(withFeedback);
+        assertThat(detail.getQuestion()).isEqualTo("question");
+        assertThat(detail.getAnswer()).isEqualTo("answer");
+        assertThat(detail.getRequestId()).isEqualTo(prefix + "-request-detail-with");
+        assertThat(detail.getAnswerStatus()).isEqualTo(QaRecordStatus.COMPLETED);
+    }
+
+    @Test
+    void returnsNothingForAFeedbackIdThatDoesNotExist() {
+        // 详情查询从反馈表出发，未提交反馈的问答没有对应反馈 ID，正文无从取出
+        assertThat(mapper.findDetailForAdmin(-1L)).isNull();
+    }
+
+    @Test
+    void filtersTheAdminQueueByStatusAndPagesIt() {
+        long pending = insertRecord("queue-pending");
+        long resolved = insertRecord("queue-resolved");
+        mapper.insert(feedback(pending, FeedbackCategory.OTHER, "待处理"));
+        mapper.insert(feedback(resolved, FeedbackCategory.OTHER, "已处理"));
+        long resolvedId = mapper.findByQaId(resolved).getId();
+        mapper.updateStatus(resolvedId, FeedbackStatus.RESOLVED, "已核实并修正文档");
+
+        long resolvedTotal = mapper.countForAdmin(AdminFeedbackQuery.of(FeedbackStatus.RESOLVED, 1, 10));
+        List<FeedbackEntity> resolvedPage =
+                mapper.findForAdmin(AdminFeedbackQuery.of(FeedbackStatus.RESOLVED, 1, 10));
+
+        assertThat(resolvedTotal).isPositive();
+        assertThat(resolvedPage).extracting(FeedbackEntity::getId).contains(resolvedId);
+        assertThat(resolvedPage).extracting(FeedbackEntity::getStatus)
+                .containsOnly(FeedbackStatus.RESOLVED);
+    }
+
+    @Test
+    void limitsTheAdminQueuePageToTheRequestedSize() {
+        mapper.insert(feedback(insertRecord("page-one"), FeedbackCategory.OTHER, "1"));
+        mapper.insert(feedback(insertRecord("page-two"), FeedbackCategory.OTHER, "2"));
+
+        assertThat(mapper.findForAdmin(AdminFeedbackQuery.of(null, 1, 1))).hasSize(1);
+    }
+
+    @Test
+    void storesTheAdminNoteWhenResolving() {
+        long qaId = insertRecord("note");
+        mapper.insert(feedback(qaId, FeedbackCategory.OTHER, "说明"));
+        long feedbackId = mapper.findByQaId(qaId).getId();
+
+        mapper.updateStatus(feedbackId, FeedbackStatus.RESOLVED, "已联系文档负责人");
+
+        var detail = mapper.findDetailForAdmin(feedbackId);
+        assertThat(detail.getStatus()).isEqualTo(FeedbackStatus.RESOLVED);
+        assertThat(detail.getAdminNote()).isEqualTo("已联系文档负责人");
+    }
+
+    @Test
+    void reportsNoUpdateWhenTheFeedbackIsMissing() {
+        assertThat(mapper.updateStatus(-1L, FeedbackStatus.RESOLVED, "")).isZero();
     }
 
     private long insertRecord(String suffix) {

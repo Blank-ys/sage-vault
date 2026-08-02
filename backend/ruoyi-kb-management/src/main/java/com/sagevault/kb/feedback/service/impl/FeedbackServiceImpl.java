@@ -1,12 +1,19 @@
 package com.sagevault.kb.feedback.service.impl;
 
+import com.sagevault.kb.feedback.domain.AdminFeedbackDetail;
+import com.sagevault.kb.feedback.domain.AdminFeedbackDetailRow;
+import com.sagevault.kb.feedback.domain.AdminFeedbackPage;
+import com.sagevault.kb.feedback.domain.AdminFeedbackQuery;
+import com.sagevault.kb.feedback.domain.AdminFeedbackSummary;
 import com.sagevault.kb.feedback.domain.FeedbackCategory;
 import com.sagevault.kb.feedback.domain.FeedbackEntity;
 import com.sagevault.kb.feedback.domain.FeedbackResponse;
 import com.sagevault.kb.feedback.domain.FeedbackStatus;
+import com.sagevault.kb.feedback.domain.ResolveFeedbackRequest;
 import com.sagevault.kb.feedback.domain.SubmitFeedbackRequest;
 import com.sagevault.kb.feedback.mapper.FeedbackMapper;
 import com.sagevault.kb.feedback.service.FeedbackService;
+import com.sagevault.kb.feedback.service.port.FeedbackAudit;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
@@ -24,12 +31,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class FeedbackServiceImpl implements FeedbackService {
     private static final int COMMENT_MAX_LENGTH = 1000;
 
+    private static final int ADMIN_NOTE_MAX_LENGTH = 1000;
+
     private final FeedbackMapper feedbacks;
     private final QaRecordMapper qaRecords;
+    private final FeedbackAudit audit;
 
-    public FeedbackServiceImpl(FeedbackMapper feedbacks, QaRecordMapper qaRecords) {
+    public FeedbackServiceImpl(
+            FeedbackMapper feedbacks, QaRecordMapper qaRecords, FeedbackAudit audit) {
         this.feedbacks = feedbacks;
         this.qaRecords = qaRecords;
+        this.audit = audit;
     }
 
     @Override
@@ -72,6 +84,62 @@ public class FeedbackServiceImpl implements FeedbackService {
             submitted.put(entity.getQaId(), FeedbackResponse.from(entity));
         }
         return submitted;
+    }
+
+    @Override
+    public AdminFeedbackPage listForAdmin(AdminFeedbackQuery query) {
+        AdminFeedbackQuery effective =
+                query == null ? AdminFeedbackQuery.of(null, null, null) : query;
+        long total = feedbacks.countForAdmin(effective);
+        if (total == 0) {
+            return new AdminFeedbackPage(
+                    List.of(), 0, effective.pageNum(), effective.pageSize());
+        }
+        List<AdminFeedbackSummary> items =
+                feedbacks.findForAdmin(effective).stream().map(AdminFeedbackSummary::from).toList();
+        return new AdminFeedbackPage(items, total, effective.pageNum(), effective.pageSize());
+    }
+
+    @Override
+    public AdminFeedbackDetail findDetailForAdmin(long adminUserId, long feedbackId) {
+        AdminFeedbackDetail detail = AdminFeedbackDetail.from(requireDetail(feedbackId));
+        // 审计是远程调用，放在事务外；查看行为本身不改状态，无需事务。
+        audit.recordViewed(detail.id(), detail.qaId());
+        return detail;
+    }
+
+    @Override
+    public AdminFeedbackDetail resolve(
+            long adminUserId, long feedbackId, ResolveFeedbackRequest request) {
+        if (request == null || request.status() == null) {
+            throw new BusinessException(ErrorCode.FEEDBACK_STATUS_INVALID, "处理状态不能为空");
+        }
+        String note = normalizeAdminNote(request.adminNote());
+        // 单条 UPDATE 自带原子性，无需额外事务；审计是远程调用，必须留在事务外。
+        if (feedbacks.updateStatus(feedbackId, request.status(), note) == 0) {
+            throw new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND, "反馈不存在");
+        }
+        audit.recordResolved(feedbackId, request.status().name());
+        return AdminFeedbackDetail.from(requireDetail(feedbackId));
+    }
+
+    private AdminFeedbackDetailRow requireDetail(long feedbackId) {
+        AdminFeedbackDetailRow row = feedbacks.findDetailForAdmin(feedbackId);
+        if (row == null) {
+            throw new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND, "反馈不存在");
+        }
+        return row;
+    }
+
+    private static String normalizeAdminNote(String adminNote) {
+        if (adminNote == null) {
+            return "";
+        }
+        String trimmed = adminNote.trim();
+        if (trimmed.length() > ADMIN_NOTE_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "内部备注长度超过限制");
+        }
+        return trimmed;
     }
 
     /**
