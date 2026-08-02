@@ -23,9 +23,11 @@ import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.service.QaRecordService;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -78,7 +80,7 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public List<ConversationResponse> list(long userId) {
-        return mapper.findByUser(userId).stream().map(ConversationServiceImpl::response).toList();
+        return responses(mapper.findByUser(userId));
     }
 
     @Override
@@ -323,9 +325,27 @@ public class ConversationServiceImpl implements ConversationService {
         return conversation;
     }
 
-    private static ConversationResponse response(ConversationEntity entity) {
+    /**
+     * 会话视图带上知识库存续状态。知识库活动记录被级联删除后历史仍可读，
+     * 前端据 {@code knowledgeBaseDeleted} 标记"知识库已删除"并禁用继续提问。
+     */
+    private ConversationResponse response(ConversationEntity entity) {
+        return response(entity, knowledgeBases.resolveNames(Set.of(entity.getKnowledgeBaseId())));
+    }
+
+    private List<ConversationResponse> responses(List<ConversationEntity> entities) {
+        Set<Long> knowledgeBaseIds = entities.stream()
+                .map(ConversationEntity::getKnowledgeBaseId)
+                .collect(Collectors.toSet());
+        Map<Long, String> names = knowledgeBases.resolveNames(knowledgeBaseIds);
+        return entities.stream().map(entity -> response(entity, names)).toList();
+    }
+
+    private static ConversationResponse response(ConversationEntity entity, Map<Long, String> knowledgeBaseNames) {
+        String name = knowledgeBaseNames.get(entity.getKnowledgeBaseId());
         return new ConversationResponse(entity.getId(), entity.getUserId(), entity.getKnowledgeBaseId(),
-                entity.getTitle() == null ? "" : entity.getTitle(), entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getTitle() == null ? "" : entity.getTitle(), entity.getCreatedAt(), entity.getUpdatedAt(),
+                name == null, name == null ? "" : name);
     }
 
     /**

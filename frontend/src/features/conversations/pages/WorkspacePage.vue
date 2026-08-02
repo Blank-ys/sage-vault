@@ -18,7 +18,13 @@
           :class="['conversation-item', { active: item.id === activeId }]"
           @click="select(item.id)"
         >
-          <span class="conversation-title" :title="displayTitle(item)">{{ displayTitle(item) }}</span>
+          <span class="conversation-title" :title="displayTitle(item)">
+            {{ displayTitle(item) }}
+            <!-- 知识库已被级联删除：历史仍可读，但不能继续提问 -->
+            <el-tag v-if="item.knowledgeBaseDeleted" type="info" size="small" disable-transitions>
+              知识库已删除
+            </el-tag>
+          </span>
           <span class="conversation-actions">
             <el-button type="primary" link @click.stop="rename(item)">改名</el-button>
             <el-button type="danger" link @click.stop="remove(item)">删除</el-button>
@@ -29,6 +35,14 @@
 
     <el-card class="conversation-detail">
       <template #header>{{ activeConversation ? displayTitle(activeConversation) : '知识问答' }}</template>
+      <el-alert
+        v-if="activeKnowledgeBaseDeleted"
+        title="该会话的知识库已删除，历史问答仍可查看，但无法继续提问。"
+        type="info"
+        show-icon
+        :closable="false"
+        class="deleted-notice"
+      />
       <div v-loading="historyLoading" class="history">
         <el-empty v-if="!history.length" description="还没有提问，问一个试试" :image-size="60" />
         <div v-for="record in history" :key="record.id" class="history-item">
@@ -50,7 +64,15 @@
           <el-alert :title="streamingAnswer" :type="refused ? 'warning' : 'info'" show-icon :closable="false" />
         </div>
       </div>
-      <el-input v-model="question" type="textarea" :rows="5" maxlength="2000" show-word-limit placeholder="请输入你的问题" />
+      <el-input
+        v-model="question"
+        type="textarea"
+        :rows="5"
+        maxlength="2000"
+        show-word-limit
+        :disabled="activeKnowledgeBaseDeleted"
+        :placeholder="activeKnowledgeBaseDeleted ? '知识库已删除，无法继续提问' : '请输入你的问题'"
+      />
       <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
       <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
     </el-card>
@@ -93,7 +115,10 @@ const feedbackQaId = ref()
 let controller
 
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
-const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim()) && !asking.value)
+// 知识库活动记录已被级联删除：会话只读，提问入口必须关闭
+const activeKnowledgeBaseDeleted = computed(() => Boolean(activeConversation.value?.knowledgeBaseDeleted))
+const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim())
+  && !asking.value && !activeKnowledgeBaseDeleted.value)
 const canStop = computed(() => asking.value && Boolean(streamingGenerationId.value))
 
 function displayTitle(conversation) {
@@ -123,7 +148,8 @@ async function select(conversationId) {
   activeId.value = conversationId
   resetStreaming()
   const conversation = conversations.value.find(item => item.id === conversationId)
-  if (conversation) knowledgeBaseId.value = conversation.knowledgeBaseId
+  // 知识库已删除的会话不回填选择器，避免把已消失的知识库当作可提问目标
+  if (conversation && !conversation.knowledgeBaseDeleted) knowledgeBaseId.value = conversation.knowledgeBaseId
   historyLoading.value = true
   try {
     history.value = await listQuestions(conversationId)
@@ -269,6 +295,7 @@ load()
 .conversation-item.active { background: var(--el-color-primary-light-9); }
 .conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-actions { flex: none; }
+.deleted-notice { margin-bottom: 16px; }
 .history { min-height: 120px; margin-bottom: 20px; }
 .history-item { margin-bottom: 16px; }
 .history-question { margin: 0 0 8px; font-weight: 600; }

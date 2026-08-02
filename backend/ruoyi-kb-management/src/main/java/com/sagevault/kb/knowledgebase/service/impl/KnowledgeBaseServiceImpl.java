@@ -12,11 +12,18 @@ import com.sagevault.kb.knowledgebase.service.port.ManagementAudit;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 @Service
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseServiceImpl.class);
+
     private final KnowledgeBaseMapper mapper;
     private final ManagementAudit audit;
 
@@ -77,9 +84,42 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     @Override
     public void requireAvailable(long knowledgeBaseId) {
-        if (requireEntity(knowledgeBaseId).getStatus() != KnowledgeBaseStatus.AVAILABLE) {
+        KnowledgeBaseEntity entity = mapper.findById(knowledgeBaseId);
+        if (entity == null) {
+            // 活动记录已被级联删除成功移除：历史仍可读，但不接受任何新写入
+            throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_DELETED, "知识库已删除");
+        }
+        if (entity.getStatus() != KnowledgeBaseStatus.AVAILABLE) {
             throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_AVAILABLE, "知识库当前不可用");
         }
+    }
+
+    @Override
+    public KnowledgeBaseResponse delete(long id) {
+        KnowledgeBaseEntity entity = requireEntity(id);
+
+        // 幂等：已在删除中的知识库重复删除直接返回当前状态，不重复派发清理
+        if (entity.getStatus() == KnowledgeBaseStatus.DELETING) {
+            log.info("Knowledge base {} is already in DELETING status, delete is idempotent", id);
+            return response(entity);
+        }
+
+        // 删除失败的知识库允许重新发起删除，由后台清理重新推进
+        KnowledgeBaseStatus from = entity.getStatus();
+        if (from != KnowledgeBaseStatus.AVAILABLE && from != KnowledgeBaseStatus.DELETE_FAILED) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_STATE_CONFLICT, "知识库当前状态不允许删除");
+        }
+
+        int updated = mapper.updateStatusIfCurrentStatus(id, KnowledgeBaseStatus.DELETING.name(), "", from.name());
+        if (updated == 0) {
+            // 并发删除：另一请求已推进状态，按幂等处理返回最新状态
+            log.info("Knowledge base {} status changed concurrently during delete, returning latest state", id);
+            return response(requireEntity(id));
+        }
+        entity.setStatus(KnowledgeBaseStatus.DELETING);
+        entity.setErrorMessage("");
+        audit.record(ManagementAudit.Operation.DELETE, id);
+        return response(entity);
     }
 
     private KnowledgeBaseEntity requireEntity(long id) {
@@ -107,9 +147,18 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return entity;
     }
 
+    @Override
+    public Map<Long, String> resolveNames(Set<Long> knowledgeBaseIds) {
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return Map.of();
+        }
+        return mapper.findByIds(knowledgeBaseIds).stream()
+                .collect(Collectors.toMap(KnowledgeBaseEntity::getId, KnowledgeBaseEntity::getName));
+    }
+
     private KnowledgeBaseResponse response(KnowledgeBaseEntity entity) {
         return new KnowledgeBaseResponse(entity.getId(), entity.getName(), entity.getDescription(),
-                entity.getStatus());
+                entity.getStatus(), entity.getErrorMessage() == null ? "" : entity.getErrorMessage());
     }
 
     private static BusinessException nameConflict() {

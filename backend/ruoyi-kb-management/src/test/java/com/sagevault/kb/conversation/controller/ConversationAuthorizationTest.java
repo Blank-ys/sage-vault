@@ -53,7 +53,8 @@ class ConversationAuthorizationTest {
         new SpringUtils().postProcessBeanFactory(beanFactory);
         conversations = mock(ConversationService.class);
         when(conversations.create(eq(7L), any()))
-                .thenReturn(new ConversationResponse(1L, 7L, 10L, "", LocalDateTime.now(), LocalDateTime.now()));
+                .thenReturn(new ConversationResponse(1L, 7L, 10L, "", LocalDateTime.now(), LocalDateTime.now(),
+                        false, "知识库"));
         AspectJProxyFactory proxyFactory = new AspectJProxyFactory(new ConversationController(conversations));
         proxyFactory.addAspect(new PreAuthorizeAspect());
         Object controller = proxyFactory.getProxy();
@@ -99,7 +100,8 @@ class ConversationAuthorizationTest {
     void listOnlyReturnsConversationsOfTheCallingUser() throws Exception {
         authenticate(7L, Set.of());
         when(conversations.list(7L)).thenReturn(List.of(
-                new ConversationResponse(1L, 7L, 10L, "我的会话", LocalDateTime.now(), LocalDateTime.now())));
+                new ConversationResponse(1L, 7L, 10L, "我的会话", LocalDateTime.now(), LocalDateTime.now(),
+                        false, "知识库")));
 
         mockMvc.perform(get("/conversations").header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())

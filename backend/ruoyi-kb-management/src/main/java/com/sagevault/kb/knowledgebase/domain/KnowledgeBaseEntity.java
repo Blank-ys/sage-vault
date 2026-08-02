@@ -6,6 +6,8 @@ public class KnowledgeBaseEntity {
     private String normalizedName;
     private String description;
     private KnowledgeBaseStatus status;
+    private String errorMessage;
+    private Integer cleanupAttempt;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -17,4 +19,8 @@ public class KnowledgeBaseEntity {
     public void setDescription(String description) { this.description = description; }
     public KnowledgeBaseStatus getStatus() { return status; }
     public void setStatus(KnowledgeBaseStatus status) { this.status = status; }
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public Integer getCleanupAttempt() { return cleanupAttempt; }
+    public void setCleanupAttempt(Integer cleanupAttempt) { this.cleanupAttempt = cleanupAttempt; }
 }

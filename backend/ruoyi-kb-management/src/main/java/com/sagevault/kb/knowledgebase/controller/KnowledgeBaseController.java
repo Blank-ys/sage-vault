@@ -8,6 +8,7 @@ import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseResponse;
 import com.sagevault.kb.knowledgebase.domain.UpdateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,6 +39,10 @@ public class KnowledgeBaseController {
     @RequiresPermissions("sage:knowledge-base:manage")
     @PutMapping("/{id}")
     public R<KnowledgeBaseResponse> update(@PathVariable long id, @RequestBody UpdateKnowledgeBaseRequest request) { return R.ok(service.update(id, request)); }
+
+    @RequiresPermissions("sage:knowledge-base:manage")
+    @DeleteMapping("/{id}")
+    public R<KnowledgeBaseResponse> delete(@PathVariable long id) { return R.ok(service.delete(id)); }
 
     @RequiresLogin
     @GetMapping("/available")
