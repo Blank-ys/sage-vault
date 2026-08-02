@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.feedback.mapper.FeedbackMapper">
+    <resultMap id="feedbackResult" type="com.sagevault.kb.feedback.domain.FeedbackEntity">
+        <id property="id" column="id"/>
+        <result property="qaId" column="qa_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="category" column="category"/>
+        <result property="comment" column="comment"/>
+        <result property="status" column="status"/>
+        <result property="adminNote" column="admin_note"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, qa_id, user_id, category, comment, status, admin_note, created_at, updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.sagevault.kb.feedback.domain.FeedbackEntity"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_qa_feedback (qa_id, user_id, category, comment, status, admin_note)
+        VALUES (#{qaId}, #{userId}, #{category}, #{comment}, #{status}, #{adminNote})
+    </insert>
+
+    <select id="findByQaId" resultMap="feedbackResult">
+        SELECT <include refid="columns"/> FROM sv_qa_feedback WHERE qa_id = #{qaId}
+    </select>
+
+    <!-- 历史列表批量回显已反馈状态，避免逐条问答查库 -->
+    <select id="findByQaIds" resultMap="feedbackResult">
+        SELECT <include refid="columns"/> FROM sv_qa_feedback
+        WHERE qa_id IN
+        <foreach collection="qaIds" item="qaId" open="(" separator="," close=")">
+            #{qaId}
+        </foreach>
+    </select>
+
+    <sql id="adminFilter">
+        <if test="query.status != null">
+            AND status = #{query.status}
+        </if>
+    </sql>
+
+    <!-- 管理端队列：列表不联查问答表，正文只在详情接口按需返回 -->
+    <select id="findForAdmin" resultMap="feedbackResult">
+        SELECT <include refid="columns"/> FROM sv_qa_feedback
+        <where>
+            <include refid="adminFilter"/>
+        </where>
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{query.pageSize} OFFSET #{query.offset}
+    </select>
+
+    <select id="countForAdmin" resultType="long">
+        SELECT COUNT(*) FROM sv_qa_feedback
+        <where>
+            <include refid="adminFilter"/>
+        </where>
+    </select>
+
+    <resultMap id="adminDetailResult" type="com.sagevault.kb.feedback.domain.AdminFeedbackDetailRow">
+        <id property="id" column="id"/>
+        <result property="qaId" column="qa_id"/>
+        <result property="category" column="category"/>
+        <result property="comment" column="comment"/>
+        <result property="status" column="status"/>
+        <result property="adminNote" column="admin_note"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="requestId" column="request_id"/>
+        <result property="question" column="question"/>
+        <result property="answer" column="answer"/>
+        <result property="answerStatus" column="answer_status"/>
+    </resultMap>
+
+    <!--
+      从反馈表出发 INNER JOIN 问答表：没有反馈行就没有结果行，
+      未授权共享的问答正文无法通过该查询取出。
+    -->
+    <select id="findDetailForAdmin" resultMap="adminDetailResult">
+        SELECT f.id, f.qa_id, f.category, f.comment, f.status, f.admin_note,
+               f.created_at, f.updated_at,
+               q.request_id, q.question, q.answer, q.status AS answer_status
+        FROM sv_qa_feedback f
+        INNER JOIN sv_qa_record q ON q.id = f.qa_id
+        WHERE f.id = #{id}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE sv_qa_feedback
+        SET status = #{status}, admin_note = #{adminNote}
+        WHERE id = #{id}
+    </update>
+</mapper>

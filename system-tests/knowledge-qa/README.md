@@ -13,7 +13,7 @@ The Gateway's environment-owned `ruoyi-gateway-<profile>.yml` Nacos configuratio
     - StripPrefix=1
 ```
 
-Set `SAGE_VAULT_GATEWAY_URL`, `SAGE_VAULT_KNOWLEDGE_ADMIN_TOKEN`, and `SAGE_VAULT_GENERAL_USER_TOKEN`, then run individual tests. `test_conversation_history_and_ownership.py` additionally needs `SAGE_VAULT_SECOND_USER_TOKEN` for a *different* general user, and MySQL must also have `007_schema.sql` applied.
+Set `SAGE_VAULT_GATEWAY_URL`, `SAGE_VAULT_KNOWLEDGE_ADMIN_TOKEN`, and `SAGE_VAULT_GENERAL_USER_TOKEN`, then run individual tests. `test_conversation_history_and_ownership.py` and `test_user_feedback_submission_and_consent.py` additionally need `SAGE_VAULT_SECOND_USER_TOKEN` for a *different* general user, and MySQL must also have `007_schema.sql` applied. `test_user_feedback_submission_and_consent.py` additionally requires `008_schema.sql`.
 
 ## test_empty_knowledge_base.py
 
@@ -55,6 +55,26 @@ The hard stop assertions — the stream ends with a `stopped` event, the answer 
 
 ```powershell
 python -m unittest system-tests/knowledge-qa/test_stream_stop_and_best_effort_cancel.py -v
+```
+
+## test_user_feedback_submission_and_consent.py
+
+Verifies user feedback submission and consent (issue 08a): an anonymous request cannot submit feedback, a submission without explicit `consentToShare` is refused with `FEEDBACK_CONSENT_REQUIRED` (410022) and leaves no trace, a category outside the closed set is refused with `FEEDBACK_CATEGORY_INVALID` (410024), a second general user cannot submit feedback on another user's answer (`FEEDBACK_FORBIDDEN` 410021), the owner's consented submission succeeds without exposing admin-only fields, conversation history reports `feedbackSubmitted=true` afterwards, a repeated submission is refused with `FEEDBACK_ALREADY_SUBMITTED` (410023), and deleting the conversation removes the feedback together with the answer.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_user_feedback_submission_and_consent.py -v
+```
+
+## test_admin_feedback_diagnostics_and_privacy.py
+
+Verifies the administrator feedback queue and its privacy boundary (issue 08b): a logged-in general user is refused (403) on the queue, on a feedback detail, and on the resolve endpoint; a new feedback lands in the `PENDING` queue; the detail returns the question and answer the user consented to share plus the request ID; an answer that never received feedback has no administrator entry point at all and never appears in the queue; resolving stores the internal note and moves the item to `RESOLVED`; the internal note is not echoed back into the submitting user's history; a resolved item can be reopened; and deleting the conversation removes the shared content from the administrator side (`FEEDBACK_NOT_FOUND` 410027).
+
+Requires `009_seed.sql` for the `sage:feedback:manage` menu grant, and `SAGE_VAULT_SECOND_USER_TOKEN`.
+
+Retrieval diagnostics (chunk identifiers, scores, stage durations) are intentionally not asserted here: their cross-language collection is owned by issue 11c. The detail response already carries `retrievalDiagnostics` and `stageDurations`, which stay empty until 11c lands.
+
+```powershell
+python -m unittest system-tests/knowledge-qa/test_admin_feedback_diagnostics_and_privacy.py -v
 ```
 
 All tests send browser-equivalent traffic only through Gateway. They never connect directly to Python or private database tables.

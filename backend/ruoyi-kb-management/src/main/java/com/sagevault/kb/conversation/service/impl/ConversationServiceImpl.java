@@ -12,6 +12,8 @@ import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.conversation.service.port.ConversationAudit;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
 import com.sagevault.kb.document.service.DocumentService;
+import com.sagevault.kb.feedback.domain.FeedbackResponse;
+import com.sagevault.kb.feedback.service.FeedbackService;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
@@ -43,6 +45,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final QaRecordService records;
     private final RagAnswerPort rag;
     private final ConversationAudit audit;
+    private final FeedbackService feedbacks;
 
     private static final String NO_AVAILABLE_DOCUMENTS_MESSAGE = "该知识库暂无可用文档";
     private static final int TITLE_MAX_LENGTH = 200;
@@ -51,13 +54,15 @@ public class ConversationServiceImpl implements ConversationService {
     private final Map<String, StopSignal> stopSignals = new ConcurrentHashMap<>();
 
     public ConversationServiceImpl(ConversationMapper mapper, KnowledgeBaseService knowledgeBases,
-            DocumentService documents, QaRecordService records, RagAnswerPort rag, ConversationAudit audit) {
+            DocumentService documents, QaRecordService records, RagAnswerPort rag, ConversationAudit audit,
+            FeedbackService feedbacks) {
         this.mapper = mapper;
         this.knowledgeBases = knowledgeBases;
         this.documents = documents;
         this.records = records;
         this.rag = rag;
         this.audit = audit;
+        this.feedbacks = feedbacks;
     }
 
     @Override
@@ -84,7 +89,13 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     public List<QaRecordResponse> history(long userId, long conversationId) {
         requireOwned(userId, conversationId);
-        return records.listByConversation(conversationId);
+        List<QaRecordResponse> history = records.listByConversation(conversationId);
+        // 历史里回显是否已反馈，让前端把入口收敛为已提交状态而不是允许重复提交。
+        Map<Long, FeedbackResponse> submitted =
+                feedbacks.findSubmitted(history.stream().map(QaRecordResponse::id).toList());
+        return history.stream()
+                .map(record -> record.withFeedbackSubmitted(submitted.containsKey(record.id())))
+                .toList();
     }
 
     @Override

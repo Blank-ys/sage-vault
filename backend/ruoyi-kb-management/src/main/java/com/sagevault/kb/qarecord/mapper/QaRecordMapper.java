@@ -13,6 +13,7 @@ public interface QaRecordMapper {
     int updateTerminalStatusKeepingAnswer(@Param("generationId") String generationId,
             @Param("status") QaRecordStatus status);
     QaRecordEntity findByGenerationId(String generationId);
+    QaRecordEntity findById(@Param("id") long id);
     int countPendingByConversation(@Param("conversationId") long conversationId);
     List<QaRecordEntity> findByConversation(@Param("conversationId") long conversationId);
     int countByConversation(@Param("conversationId") long conversationId);
