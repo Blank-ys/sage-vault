@@ -2,6 +2,7 @@ package com.sagevault.kb.feedback.controller;
 
 import com.ruoyi.common.core.domain.R;
 import com.ruoyi.common.security.annotation.RequiresPermissions;
+import com.ruoyi.common.security.annotation.RequiresRoles;
 import com.ruoyi.common.security.utils.SecurityUtils;
 import com.sagevault.kb.feedback.domain.AdminFeedbackDetail;
 import com.sagevault.kb.feedback.domain.AdminFeedbackPage;
@@ -36,6 +37,7 @@ public class AdminFeedbackController {
         this.feedbacks = feedbacks;
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions(MANAGE_PERMISSION)
     @GetMapping
     public R<AdminFeedbackPage> list(
@@ -45,12 +47,14 @@ public class AdminFeedbackController {
         return R.ok(feedbacks.listForAdmin(AdminFeedbackQuery.of(status, pageNum, pageSize)));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions(MANAGE_PERMISSION)
     @GetMapping("/{id}")
     public R<AdminFeedbackDetail> detail(@PathVariable long id) {
         return R.ok(feedbacks.findDetailForAdmin(SecurityUtils.getUserId(), id));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions(MANAGE_PERMISSION)
     @PutMapping("/{id}/status")
     public R<AdminFeedbackDetail> resolve(
