@@ -12,6 +12,9 @@
 *.ipr
 *application-local.yml
 
+# codebuddy
+.codebuddy/
+
 # Qoder
 .qoder/
 

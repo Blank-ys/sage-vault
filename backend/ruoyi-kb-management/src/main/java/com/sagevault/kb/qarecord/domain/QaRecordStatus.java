@@ -5,6 +5,7 @@ public enum QaRecordStatus {
     REFUSED("已拒答"),
     COMPLETED("已完成"),
     STOPPED("已停止"),
+    FAILED("生成失败"),
     UNFINISHED("未完成");
 
     private final String desc;

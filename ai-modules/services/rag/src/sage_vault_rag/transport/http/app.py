@@ -30,7 +30,7 @@ from sage_vault_rag.application.cleanup.service import CleanupService
 from sage_vault_rag.application.indexing.service import IndexingService
 from sage_vault_rag.bootstrap.settings import Settings
 from sage_vault_rag.model.cleanup_command import CleanupCommand
-from sage_vault_rag.model.events import Completed, Delta, Refused, Started, Stopped
+from sage_vault_rag.model.events import Completed, Delta, Failed, Refused, Started, Stopped
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.ports.chunker import ChunkerPort
 from sage_vault_rag.ports.document_parser import DocumentParserPort
@@ -147,9 +147,25 @@ def create_app(
                 elif isinstance(event, Delta):
                     payload = {"type": "delta", "generationId": event.generation_id, "delta": event.delta}
                 elif isinstance(event, Completed):
-                    payload = {"type": "completed", "generationId": event.generation_id}
+                    payload = {
+                        "type": "completed",
+                        "generationId": event.generation_id,
+                        "retrievalDiagnostics": [
+                            {
+                                "documentId": diag.document_id,
+                                "chunkId": diag.chunk_id,
+                                "score": diag.score,
+                            }
+                            for diag in event.retrieval_diagnostics
+                        ],
+                        "stageDurations": event.stage_durations,
+                        "modelRequestId": event.model_request_id,
+                    }
                 elif isinstance(event, Refused):
                     payload = {"type": "refused", "generationId": event.generation_id, "message": event.message}
+                elif isinstance(event, Failed):
+                    # detail 已是脱敏后的受控失败类别，不含原始异常/密钥/知识库 id。
+                    payload = {"type": "failed", "generationId": event.generation_id, "detail": event.detail}
                 elif isinstance(event, Stopped):
                     payload = {"type": "stopped", "generationId": event.generation_id}
                 yield f"event: {payload['type']}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"

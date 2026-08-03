@@ -4,10 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sagevault.kb.platform.error.BusinessException;
+import com.sagevault.kb.feedback.domain.RetrievedChunkDiagnostic;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
+import com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
+import com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper;
 import com.sagevault.kb.qarecord.service.impl.QaRecordServiceImpl;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +21,7 @@ class QaRecordServiceTest {
     @Test
     void createsAStartedRecordAndDecidesRefusalOnce() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
 
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.markRefused("generation-1", "no matching document");
@@ -29,9 +33,37 @@ class QaRecordServiceTest {
     }
 
     @Test
+    void failedKeepsPartialAnswerAndRecordsMaskedDetailAsTerminal() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.appendAnswer("generation-1", "已经生成的部分");
+
+        service.markFailed("generation-1", "retrieval_or_generation_failed");
+
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.FAILED);
+        // 残缺正文保留，文案为脱敏后的受控失败类别。
+        assertThat(record.getAnswer()).isEqualTo("retrieval_or_generation_failed");
+    }
+
+    @Test
+    void failedDoesNotOverwriteAnAlreadyDecidedTerminalRefusal() {
+        Records records = new Records();
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.markRefused("generation-1", "no matching document");
+
+        assertThat(service.markFailed("generation-1", "unexpected_failure")).isFalse();
+
+        QaRecordEntity record = records.findByGenerationId("generation-1");
+        assertThat(record.getStatus()).isEqualTo(QaRecordStatus.REFUSED);
+    }
+
+    @Test
     void streamEndFallbackNeverOverwritesAnAlreadyDecidedTerminalState() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.markRefused("generation-1", "no matching document");
 
@@ -45,7 +77,7 @@ class QaRecordServiceTest {
     @Test
     void stopKeepsThePartialAnswerAlreadyStreamedToTheUser() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.appendAnswer("generation-1", "已经生成的部分");
 
@@ -59,7 +91,7 @@ class QaRecordServiceTest {
     @Test
     void onlyTheFirstStopWinsTheTerminalTransition() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
         service.create(10L, 20L, "request-1", "generation-1", "question");
 
         assertThat(service.markStopped("generation-1")).isTrue();
@@ -70,7 +102,7 @@ class QaRecordServiceTest {
     @Test
     void stopWinsOverTheConcurrentStreamEndFallback() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.appendAnswer("generation-1", "已经生成的部分");
 
@@ -85,7 +117,7 @@ class QaRecordServiceTest {
     @Test
     void unfinishedKeepsThePartialAnswerAlreadyStreamedToTheUser() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.appendAnswer("generation-1", "断线前的部分");
 
@@ -98,7 +130,7 @@ class QaRecordServiceTest {
 
     @Test
     void distinguishesAMissingRecordFromAConditionalUpdateMiss() {
-        QaRecordService service = new QaRecordServiceImpl(new Records());
+        QaRecordService service = new QaRecordServiceImpl(new Records(), new Diagnostics());
 
         assertThatThrownBy(() -> service.markUnfinished("missing-generation"))
                 .isInstanceOf(BusinessException.class);
@@ -107,7 +139,7 @@ class QaRecordServiceTest {
     @Test
     void appendsDeltasToStartedRecord() {
         Records records = new Records();
-        QaRecordService service = new QaRecordServiceImpl(records);
+        QaRecordService service = new QaRecordServiceImpl(records, new Diagnostics());
 
         service.create(10L, 20L, "request-1", "generation-1", "question");
         service.appendAnswer("generation-1", "片段一");
@@ -117,6 +149,37 @@ class QaRecordServiceTest {
         QaRecordEntity record = records.findByGenerationId("generation-1");
         assertThat(record.getStatus()).isEqualTo(QaRecordStatus.COMPLETED);
         assertThat(record.getAnswer()).isEqualTo("片段一片段二");
+    }
+
+    @Test
+    void savesRetrievalAndStageDiagnosticsForCompletedAnswer() {
+        Records records = new Records();
+        Diagnostics diagnostics = new Diagnostics();
+        QaRecordService service = new QaRecordServiceImpl(records, diagnostics);
+        service.create(10L, 20L, "request-1", "generation-1", "question");
+        service.markCompleted("generation-1", "答案正文");
+
+        service.saveDiagnostics("generation-1",
+                List.of(new RetrievedChunkDiagnostic("doc-1", "doc-1#c1", 0.32)),
+                Map.of("embedding", 8, "retrieval", 14, "generation", 326));
+
+        // 检索片段诊断只含标识与分数，不含正文；阶段耗时按 key 落库。
+        assertThat(diagnostics.items()).anyMatch(d ->
+                "retrieval".equals(d.getStage()) && "doc-1".equals(d.getDocumentId())
+                        && "doc-1#c1".equals(d.getChunkId()) && 0.32 == d.getScore());
+        assertThat(diagnostics.items()).extracting(RetrievalDiagnosticEntity::getStage)
+                .contains("embedding", "retrieval", "generation");
+    }
+
+    @Test
+    void saveDiagnosticsForUnknownGenerationIsSilentlySkipped() {
+        Records records = new Records();
+        Diagnostics diagnostics = new Diagnostics();
+        QaRecordService service = new QaRecordServiceImpl(records, diagnostics);
+
+        service.saveDiagnostics("missing-generation", List.of(), Map.of());
+
+        assertThat(diagnostics.items()).isEmpty();
     }
 
     private static final class Records implements QaRecordMapper {
@@ -196,6 +259,33 @@ class QaRecordServiceTest {
             List<QaRecordEntity> removed = findByConversation(conversationId);
             removed.forEach(entity -> records.remove(entity.getGenerationId()));
             return removed.size();
+        }
+    }
+
+    private static final class Diagnostics implements RetrievalDiagnosticMapper {
+        private final List<RetrievalDiagnosticEntity> stored = new ArrayList<>();
+
+        List<RetrievalDiagnosticEntity> items() {
+            return stored;
+        }
+
+        @Override
+        public int insertBatch(List<RetrievalDiagnosticEntity> items) {
+            stored.addAll(items);
+            return items.size();
+        }
+
+        @Override
+        public List<RetrievalDiagnosticEntity> findByQaRecordId(long qaRecordId) {
+            return stored.stream()
+                    .filter(entity -> entity.getQaRecordId() != null
+                            && entity.getQaRecordId() == qaRecordId)
+                    .toList();
+        }
+
+        @Override
+        public int deleteByConversation(long conversationId) {
+            return stored.size();
         }
     }
 }

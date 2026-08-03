@@ -1,0 +1,22 @@
+{
+  "type": "completed",
+  "generationId": "8bcdd88e-9e64-4cd1-b781-f9a890f691a6",
+  "retrievalDiagnostics": [
+    {
+      "documentId": "doc-20240520-001",
+      "chunkId": "doc-20240520-001#c003",
+      "score": 0.312
+    },
+    {
+      "documentId": "doc-20240520-001",
+      "chunkId": "doc-20240520-001#c007",
+      "score": 0.274
+    }
+  ],
+  "stageDurations": {
+    "embedding": 8,
+    "retrieval": 14,
+    "generation": 326
+  },
+  "modelRequestId": null
+}

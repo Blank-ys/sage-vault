@@ -170,6 +170,29 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void failedEventDecidesFailedTerminalStateWithoutLeakingRawDiagnostics() {
+        Fixture fixture = Fixture.streaming();
+        Sinks.Many<AnswerEvent> upstream = Sinks.many().unicast().onBackpressureBuffer();
+        when(fixture.rag.answer(anyLong(), anyString(), anyString(), anyString())).thenReturn(upstream.asFlux());
+
+        List<AnswerEvent> received = new ArrayList<>();
+        Disposable subscription = fixture.service
+                .askAndStream(7L, 3L, new AskQuestionRequest("问题", "request-1")).subscribe(received::add);
+        String generationId = fixture.startedGenerationId();
+        upstream.tryEmitNext(new AnswerEvent.Started(generationId));
+        upstream.tryEmitNext(new AnswerEvent.Delta(generationId, "已经生成的部分"));
+        // 生成中途失败：detail 为脱敏后的受控失败类别。
+        upstream.tryEmitNext(new AnswerEvent.Failed(generationId, "retrieval_or_generation_failed"));
+        subscription.dispose();
+
+        assertThat(received).last().isInstanceOf(AnswerEvent.Failed.class);
+        verify(fixture.records).markFailed(eq(generationId), eq("retrieval_or_generation_failed"));
+        verify(fixture.records, never()).markUnfinished(anyString());
+        // 失败后不向 Python 发取消：Java 已是终态 owner，且 Python 已自我终止。
+        verify(fixture.rag, never()).cancel(anyString(), anyString());
+    }
+
+    @Test
     void stopIsRejectedOnceTheAnswerAlreadyReachedATerminalState() {
         Fixture fixture = Fixture.streaming();
         stubTerminalRecord(fixture, "gen-done", QaRecordStatus.COMPLETED, "最终答案");

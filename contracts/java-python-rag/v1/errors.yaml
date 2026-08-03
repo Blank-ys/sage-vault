@@ -20,3 +20,11 @@ errors:
   - code: 510005
     name: INDEXING_CALLBACK_FAILED
     retryable: true
+  - code: 510006
+    name: RAG_INTERNAL_ERROR
+    retryable: false
+    source_event: failed
+    note: >-
+      Java 网关在把 Python 的 failed 事件转译为用户可见的最终状态时返回。
+      服务端诊断（trace 标识、原始异常、模型或知识库 id）只留在 Python 日志，
+      不得在对外响应中回传给浏览器。

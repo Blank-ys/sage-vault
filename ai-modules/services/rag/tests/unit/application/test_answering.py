@@ -3,7 +3,15 @@ from collections.abc import AsyncIterator
 from sage_vault_rag.application.answering.cancellation import CancellationRegistry
 from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.model.chunk import Chunk
-from sage_vault_rag.model.events import Completed, Delta, Refused, Started, Stopped
+from sage_vault_rag.model.events import (
+    Completed,
+    Delta,
+    Failed,
+    Refused,
+    RetrievedChunkDiagnostic,
+    Started,
+    Stopped,
+)
 from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
 from sage_vault_rag.ports.embedding import EmbeddingPort
 from sage_vault_rag.ports.generation import GenerationPort
@@ -99,12 +107,20 @@ async def test_sufficient_evidence_streams_deltas_and_completed() -> None:
 
     events = [event async for event in service.answer(1, "问题", "gen-1")]
 
-    assert events == [
-        Started("gen-1"),
-        Delta("gen-1", "答案"),
-        Delta("gen-1", "内容"),
-        Completed("gen-1"),
+    assert events[0] == Started("gen-1")
+    assert events[1] == Delta("gen-1", "答案")
+    assert events[2] == Delta("gen-1", "内容")
+    completed = events[3]
+    assert isinstance(completed, Completed)
+    assert completed.generation_id == "gen-1"
+    # 检索诊断只携带标识与分数，不含片段正文。
+    assert completed.retrieval_diagnostics == [
+        RetrievedChunkDiagnostic(document_id="d1", chunk_id="c1", score=0.3)
     ]
+    # 三个阶段的耗时都被采集，且为非负整数毫秒。
+    assert set(completed.stage_durations) == {"embedding", "retrieval", "generation"}
+    assert all(isinstance(v, int) and v >= 0 for v in completed.stage_durations.values())
+    assert completed.model_request_id is None
 
 
 async def test_cancel_mid_stream_ends_with_stopped_and_keeps_earlier_deltas() -> None:
@@ -177,3 +193,81 @@ async def test_retrieval_filters_by_knowledge_base_id() -> None:
     assert len(captured_chunks) == 1
     assert captured_chunks[0].text == "知识库 B"
     assert isinstance(events[-1], Completed)
+
+
+class FailingEmbedder(EmbeddingPort):
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise self._error
+
+    async def ready(self) -> bool:
+        return True
+
+
+class CrashingGenerator(GenerationPort):
+    def __init__(self, before: list[str], error: Exception) -> None:
+        self._before = before
+        self._error = error
+
+    async def generate(
+        self,
+        generation_id: str,
+        question: str,
+        chunks: list[RetrievedChunk],
+    ) -> AsyncIterator[str]:
+        for delta in self._before:
+            yield delta
+        raise self._error
+
+
+async def test_embedding_failure_emits_failed_with_masked_detail() -> None:
+    service = AnsweringService(
+        embedder=FailingEmbedder(RuntimeError("sk-ABC123DEF456 embedding backend 5xx")),
+        vector_store=InMemoryVectorStore([]),
+        generator=CapturingGenerator([]),
+        top_k=3,
+        refusal_threshold=1.0,
+    )
+
+    events = [event async for event in service.answer(1, "问题", "gen-1")]
+
+    assert isinstance(events[-1], Failed)
+    # 对外只暴露受控失败类别，绝不携带原始异常文本或密钥。
+    assert events[-1].detail in {
+        "embedding_failed",
+        "retrieval_or_generation_failed",
+        "vector_store_failed",
+        "unexpected_failure",
+    }
+    assert "sk-ABC123DEF456" not in events[-1].detail
+
+
+async def test_generation_crash_after_deltas_emits_failed_keeping_earlier_deltas() -> None:
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=CrashingGenerator(
+            ["部分", "答案"], RuntimeError("bge-m3 model timeout during generation")
+        ),
+        top_k=3,
+        refusal_threshold=1.0,
+    )
+
+    events = [event async for event in service.answer(1, "问题", "gen-1")]
+
+    assert [type(e).__name__ for e in events] == [
+        "Started",
+        "Delta",
+        "Delta",
+        "Failed",
+    ]
+    assert isinstance(events[-1], Failed)
+    assert events[-1].detail in {
+        "retrieval_or_generation_failed",
+        "embedding_failed",
+        "vector_store_failed",
+        "unexpected_failure",
+    }

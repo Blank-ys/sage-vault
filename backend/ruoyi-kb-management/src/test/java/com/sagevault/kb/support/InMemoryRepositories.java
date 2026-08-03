@@ -26,6 +26,8 @@ import com.sagevault.kb.feedback.service.port.FeedbackAudit;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
+import com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper;
+import com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity;
 import com.sagevault.kb.qarecord.service.QaRecordService;
 import com.sagevault.kb.qarecord.service.impl.QaRecordServiceImpl;
 import java.time.LocalDateTime;
@@ -83,8 +85,8 @@ public final class InMemoryRepositories {
         Feedbacks feedbackMapper = new Feedbacks();
         QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
         feedbackMapper.bindQaRecords(qaRecordMapper);
-        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper);
-        feedbacks = new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, recordingFeedbackAudit());
+        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper, new Diagnostics());
+        feedbacks = new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, new Diagnostics(), recordingFeedbackAudit());
         DocumentService documents = Mockito.mock(DocumentService.class);
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
         ConversationAudit audit = (conversationId, removedRecordCount) ->
@@ -119,9 +121,9 @@ public final class InMemoryRepositories {
         QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
         feedbackMapper.bindQaRecords(qaRecordMapper);
         return new ConversationServiceImpl(new Conversations(), knowledgeBases, documents,
-                new QaRecordServiceImpl(qaRecordMapper), rag,
+                new QaRecordServiceImpl(qaRecordMapper, new Diagnostics()), rag,
                 (conversationId, removedRecordCount) -> { },
-                new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, recordingFeedbackAudit()));
+                new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, new Diagnostics(), recordingFeedbackAudit()));
     }
 
     /** 记录审计调用，便于断言管理端操作留痕且不含正文。 */
@@ -378,6 +380,34 @@ public final class InMemoryRepositories {
             feedback.setAdminNote(adminNote);
             feedback.setUpdatedAt(LocalDateTime.now());
             return 1;
+        }
+    }
+
+    private static final class Diagnostics implements RetrievalDiagnosticMapper {
+        private final Map<Long, List<RetrievalDiagnosticEntity>> byQaRecordId = new LinkedHashMap<>();
+
+        void store(long qaRecordId, RetrievalDiagnosticEntity entity) {
+            byQaRecordId.computeIfAbsent(qaRecordId, k -> new ArrayList<>()).add(entity);
+        }
+
+        @Override
+        public int insertBatch(List<RetrievalDiagnosticEntity> items) {
+            for (RetrievalDiagnosticEntity item : items) {
+                if (item.getQaRecordId() != null) {
+                    store(item.getQaRecordId(), item);
+                }
+            }
+            return items.size();
+        }
+
+        @Override
+        public List<RetrievalDiagnosticEntity> findByQaRecordId(long qaRecordId) {
+            return byQaRecordId.getOrDefault(qaRecordId, List.of());
+        }
+
+        @Override
+        public int deleteByConversation(long conversationId) {
+            return 0;
         }
     }
 }

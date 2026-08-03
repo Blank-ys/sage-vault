@@ -3,6 +3,7 @@ package com.sagevault.kb.conversation.adapter.rag;
 import com.sagevault.kb.bootstrap.RagProperties;
 import com.sagevault.kb.conversation.domain.AnswerEvent;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
+import com.sagevault.kb.feedback.domain.RetrievedChunkDiagnostic;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.net.URI;
@@ -12,6 +13,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.crypto.Mac;
@@ -89,9 +91,19 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
         return switch (event.type()) {
             case "started" -> new AnswerEvent.Started(event.generationId());
             case "delta" -> new AnswerEvent.Delta(event.generationId(), event.delta());
-            case "completed" -> new AnswerEvent.Completed(event.generationId());
+            case "completed" -> new AnswerEvent.Completed(
+                    event.generationId(),
+                    event.retrievalDiagnostics() == null
+                            ? List.of() : event.retrievalDiagnostics(),
+                    event.stageDurations() == null
+                            ? Map.of() : event.stageDurations());
             case "refused" -> new AnswerEvent.Refused(event.generationId(), event.message());
             case "stopped" -> new AnswerEvent.Stopped(event.generationId());
+            case "failed" -> {
+                // 诊断只留在网关日志，detail 已是脱敏后的受控失败类别，不得回传原始异常/知识库 id。
+                log.warn("RAG answer failed: generationId={} detail={}", generationId, event.detail());
+                yield new AnswerEvent.Failed(generationId, event.detail());
+            }
             default -> throw new BusinessException(ErrorCode.RAG_UNAVAILABLE, "问答服务返回了未知事件");
         };
     }
@@ -126,5 +138,12 @@ public class DiscoveredRagAnswerAdapter implements RagAnswerPort {
     private record RagAnswerRequest(long knowledgeBaseId, String question, String requestId, String generationId) { }
     private record RagCancelRequest(String generationId, String requestId) { }
     private record RagCancelAck(String generationId, boolean cancelled) { }
-    private record RagEvent(String type, String generationId, String delta, String message) { }
+    private record RagEvent(
+            String type,
+            String generationId,
+            String delta,
+            String message,
+            String detail,
+            List<RetrievedChunkDiagnostic> retrievalDiagnostics,
+            Map<String, Integer> stageDurations) { }
 }

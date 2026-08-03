@@ -53,7 +53,22 @@ class ContractExamplesTest(unittest.TestCase):
         example = json.loads((root / "examples" / "indexing-command.json").read_text(encoding="utf-8"))
         Draft202012Validator(schemas["IndexingCommand"], format_checker=FormatChecker()).validate(example["request"])
 
-    def test_indexing_callback_example_matches_schema(self) -> None:
+    def test_failed_generation_example_matches_schemas(self) -> None:
+        root = Path(__file__).parents[1] / "java-python-rag" / "v1"
+        openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
+        schemas = openapi["components"]["schemas"]
+        example = json.loads((root / "examples" / "failed-generation.json").read_text(encoding="utf-8"))
+        event_schemas = {
+            path.stem.split(".")[0]: json.loads(path.read_text(encoding="utf-8"))
+            for path in (root / "events").glob("*.schema.json")
+        }
+
+        # 对外失败事件必须是脱敏后的受控失败类别，且符合 failed 事件契约。
+        # （failed.schema.json 是自包含的，不依赖 openapi 内的 $ref。）
+        Draft202012Validator(event_schemas["failed"], format_checker=FormatChecker()).validate(example)
+        self.assertEqual("failed", example["type"])
+        # 受控失败词表需与 openapi 的 RagRuntimeFailureCode 保持一致。
+        self.assertIn(example["detail"], schemas["RagRuntimeFailureCode"]["enum"])
         root = Path(__file__).parents[1] / "java-python-rag" / "v1"
         openapi = yaml.safe_load((root / "openapi.yaml").read_text(encoding="utf-8"))
         schemas = openapi["components"]["schemas"]
