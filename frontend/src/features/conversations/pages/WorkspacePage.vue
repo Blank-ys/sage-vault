@@ -48,11 +48,13 @@
         <div v-for="record in history" :key="record.id" class="history-item">
           <p class="history-question">{{ record.question }}</p>
           <el-alert
-            :title="answerTitle(record)"
-            :type="record.status === 'REFUSED' || record.status === 'STOPPED' ? 'warning' : record.status === 'COMPLETED' ? 'info' : 'error'"
+            :type="statusType(record)"
             show-icon
             :closable="false"
-          />
+          >
+            <div v-if="record.answer" class="answer-content" v-html="renderMarkdown(record.answer)" />
+            <div v-else class="answer-status-text">{{ answerStatusText(record) }}</div>
+          </el-alert>
           <div class="history-feedback">
             <!-- 已反馈的问答收敛为状态文案，避免重复提交 -->
             <span v-if="record.feedbackSubmitted" class="feedback-submitted">已反馈，感谢你的帮助</span>
@@ -61,7 +63,9 @@
         </div>
         <div v-if="streaming" class="history-item">
           <p class="history-question">{{ streamingQuestion }}</p>
-          <el-alert :title="streamingAnswer" :type="refused ? 'warning' : 'info'" show-icon :closable="false" />
+          <el-alert :type="refused ? 'warning' : 'info'" show-icon :closable="false">
+            <div class="answer-content" v-html="renderMarkdown(streamingAnswer)" />
+          </el-alert>
         </div>
       </div>
       <el-input
@@ -71,7 +75,8 @@
         maxlength="2000"
         show-word-limit
         :disabled="activeKnowledgeBaseDeleted"
-        :placeholder="activeKnowledgeBaseDeleted ? '知识库已删除，无法继续提问' : '请输入你的问题'"
+        :placeholder="activeKnowledgeBaseDeleted ? '知识库已删除，无法继续提问' : '请输入你的问题（Enter 发送，Shift+Enter 换行）'"
+        @keydown="onQuestionKeydown"
       />
       <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
       <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
@@ -94,6 +99,7 @@ import {
   renameConversation,
   stopAnswer
 } from '../api/conversations'
+import { renderMarkdown } from '../composables/useMarkdown'
 
 const knowledgeBases = ref([])
 const knowledgeBaseId = ref()
@@ -126,9 +132,14 @@ function displayTitle(conversation) {
 }
 
 // 已停止与未完成都保留残缺正文，只有完全没有正文时才提示中断原因
-function answerTitle(record) {
-  if (record.answer) return record.answer
+function answerStatusText(record) {
   return record.status === 'STOPPED' ? '本次回答已停止' : '本次回答未完成'
+}
+
+function statusType(record) {
+  return record.status === 'REFUSED' || record.status === 'STOPPED'
+    ? 'warning'
+    : record.status === 'COMPLETED' ? 'info' : 'error'
 }
 
 async function load() {
@@ -190,6 +201,17 @@ async function remove(conversation) {
   conversations.value = conversations.value.filter(item => item.id !== conversation.id)
   if (activeId.value === conversation.id) startNew()
   ElMessage.success('会话已删除')
+}
+
+function onQuestionKeydown(event) {
+  if (event.key !== 'Enter') return
+  // 中文输入法组合期间 Enter 用于选词，不触发发送
+  if (event.isComposing || event.keyCode === 229) return
+  // Shift+Enter：放行默认换行
+  if (event.shiftKey) return
+  // Enter：阻止默认换行并发送
+  event.preventDefault()
+  if (canAsk.value) ask()
 }
 
 async function ask() {
@@ -302,4 +324,18 @@ load()
 .history-feedback { margin-top: 4px; text-align: right; }
 .feedback-submitted { font-size: 12px; color: var(--el-text-color-secondary); }
 .el-textarea, .el-button { width: 100%; margin-bottom: 20px; }
+.answer-content { line-height: 1.7; word-break: break-word; }
+.answer-content :deep(h1),
+.answer-content :deep(h2),
+.answer-content :deep(h3) { margin: 0.6em 0 0.3em; }
+.answer-content :deep(p) { margin: 0.4em 0; }
+.answer-content :deep(ul),
+.answer-content :deep(ol) { margin: 0.4em 0; padding-left: 1.5em; }
+.answer-content :deep(pre) { background: var(--el-fill-color-light); padding: 8px 12px; border-radius: 4px; overflow-x: auto; }
+.answer-content :deep(code) { font-family: var(--el-font-family-mono, monospace); }
+.answer-content :deep(table) { border-collapse: collapse; margin: 0.4em 0; }
+.answer-content :deep(th),
+.answer-content :deep(td) { border: 1px solid var(--el-border-color); padding: 4px 8px; }
+.answer-content :deep(blockquote) { margin: 0.4em 0; padding-left: 1em; color: var(--el-text-color-secondary); border-left: 3px solid var(--el-border-color); }
+.answer-status-text { white-space: pre-wrap; }
 </style>
