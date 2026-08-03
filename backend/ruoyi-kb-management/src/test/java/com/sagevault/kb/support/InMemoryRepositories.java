@@ -64,7 +64,8 @@ public final class InMemoryRepositories {
 
     public InMemoryRepositories() {
         knowledgeBaseMapper = new KnowledgeBases();
-        knowledgeBases = new KnowledgeBaseServiceImpl(knowledgeBaseMapper, (operation, id) -> { },
+        knowledgeBases = new KnowledgeBaseServiceImpl(knowledgeBaseMapper,
+                Mockito.mock(com.sagevault.kb.knowledgebase.service.port.ManagementAudit.class),
                 retryTrackingCleaner);
         RagAnswerPort emptyRag = new RagAnswerPort() {
             @Override
@@ -134,6 +135,11 @@ public final class InMemoryRepositories {
             @Override
             public void recordResolved(long feedbackId, String status) {
                 feedbackAuditTrail.add("resolved:" + feedbackId + ":" + status);
+            }
+
+            @Override
+            public void recordResolveFailed(long feedbackId, String errorMessage) {
+                feedbackAuditTrail.add("resolveFailed:" + feedbackId + ":" + errorMessage);
             }
         };
     }

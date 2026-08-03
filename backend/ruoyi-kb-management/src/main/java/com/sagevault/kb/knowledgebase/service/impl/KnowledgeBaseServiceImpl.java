@@ -44,6 +44,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         try {
             mapper.insert(entity);
         } catch (DuplicateKeyException exception) {
+            audit.recordFailure(ManagementAudit.Operation.CREATE, 0L, "知识库名称已存在");
             throw nameConflict();
         }
         KnowledgeBaseResponse response = response(entity);
@@ -75,6 +76,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         try {
             mapper.update(entity);
         } catch (DuplicateKeyException exception) {
+            audit.recordFailure(ManagementAudit.Operation.UPDATE, id, "知识库名称已存在");
             throw nameConflict();
         }
         KnowledgeBaseResponse response = response(entity);
@@ -106,7 +108,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     @Override
     public KnowledgeBaseResponse delete(long id) {
-        KnowledgeBaseEntity entity = requireEntity(id);
+        KnowledgeBaseEntity entity = mapper.findById(id);
+        if (entity == null) {
+            audit.recordFailure(ManagementAudit.Operation.DELETE, id, "知识库不存在");
+            throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_AVAILABLE, "知识库不存在");
+        }
 
         // 幂等：已在删除中的知识库重复删除直接返回当前状态，不重复派发清理
         if (entity.getStatus() == KnowledgeBaseStatus.DELETING) {
@@ -117,6 +123,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         // 删除失败的知识库允许重新发起删除，由后台清理重新推进
         KnowledgeBaseStatus from = entity.getStatus();
         if (from != KnowledgeBaseStatus.AVAILABLE && from != KnowledgeBaseStatus.DELETE_FAILED) {
+            audit.recordFailure(ManagementAudit.Operation.DELETE, id, "知识库当前状态不允许删除");
             throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_STATE_CONFLICT, "知识库当前状态不允许删除");
         }
 

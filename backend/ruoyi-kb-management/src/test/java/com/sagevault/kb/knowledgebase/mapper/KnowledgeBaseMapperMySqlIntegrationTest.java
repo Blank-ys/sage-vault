@@ -2,6 +2,7 @@ package com.sagevault.kb.knowledgebase.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseEntity;
@@ -107,7 +108,8 @@ class KnowledgeBaseMapperMySqlIntegrationTest {
             @Override public int incrementCleanupAttempt(long id) { return mapper.incrementCleanupAttempt(id); }
             @Override public int deleteByIdIfDeleting(long id) { return mapper.deleteByIdIfDeleting(id); }
         };
-        KnowledgeBaseServiceImpl service = new KnowledgeBaseServiceImpl(raceMapper, (operation, id) -> { },
+        KnowledgeBaseServiceImpl service = new KnowledgeBaseServiceImpl(raceMapper,
+                mock(com.sagevault.kb.knowledgebase.service.port.ManagementAudit.class),
                 new KnowledgeBaseContentCleaner() {
                     @Override public CleanupProgress cleanupContent(long knowledgeBaseId) {
                         return CleanupProgress.inProgress(0);

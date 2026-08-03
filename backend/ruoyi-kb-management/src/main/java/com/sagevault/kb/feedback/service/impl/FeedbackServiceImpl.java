@@ -117,6 +117,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         String note = normalizeAdminNote(request.adminNote());
         // 单条 UPDATE 自带原子性，无需额外事务；审计是远程调用，必须留在事务外。
         if (feedbacks.updateStatus(feedbackId, request.status(), note) == 0) {
+            audit.recordResolveFailed(feedbackId, "反馈不存在");
             throw new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND, "反馈不存在");
         }
         audit.recordResolved(feedbackId, request.status().name());
