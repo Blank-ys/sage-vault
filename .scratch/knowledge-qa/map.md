@@ -15,6 +15,8 @@
 ## Decisions so far
 
 - [确定通用企业文档问答 V1 产品基线](wayfinder-design/01-define-v1-product-baseline.md) — 已锁定用户、知识库、文档、会话、反馈、RAG 范围、试点指标和明确延期项。
+- [11b 管理操作审计记录](issues/11/11b-management-operation-audit.md) — resolved：复用 RuoYi 现有操作日志/审计入口记录知识库/文档/反馈的管理操作（操作者、对象、时间、结果），不新建平行审计系统，审计事实仅含标识与结果不含正文。
+- [11c 跨语言诊断日志与隐私安全日志](issues/11/11c-cross-language-diagnostics-and-privacy-logging.md) — ready-for-agent（未 resolved）：全链路诊断与隐私脱敏已完成，DB 迁移由 `backend/ruoyi-kb-management/sql/011_schema.sql` 交付；Open 项：K4 生成失败实时观测无注入开关、model_request_id 回填阻塞于 10、MinIO/Milvus 应用层打点缺位。
 
 ## Not yet specified
 

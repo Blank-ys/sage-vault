@@ -48,8 +48,17 @@
 
 ### 本次新增待办（部署前必须完成）
 
-- [ ] **DB 迁移：新建 `sv_qa_retrieval_diagnostic` 诊断子表。** 本次按确认方案新增独立子表（1:N 关联 `sv_qa_record`），但仓库当前无 `.sql` 迁移脚本（RuoYi 自动建表），真实环境部署前需补建表 DDL：
-  - 列：`id` BIGINT PK、`qa_record_id` BIGINT（FK→`sv_qa_record.id`，索引）、`generation_id` VARCHAR、`document_id` VARCHAR、`chunk_id` VARCHAR、`score` DECIMAL(10,6)、`stage` VARCHAR（retrieval/embedding/generation）、`duration_ms` BIGINT、`created_at` DATETIME。
-  - 索引：`idx_qa_record_id(qa_record_id)`、`idx_generation_id(generation_id)`。
-  - 联删：`RetrievalDiagnosticMapper.deleteByConversation` 已按 `sv_qa_record.conversation_id` 级联清理（见 `RetrievalDiagnosticMapper.xml`）。
+- [x] **DB 迁移：新建 `sv_qa_retrieval_diagnostic` 诊断子表。** 已由 `backend/ruoyi-kb-management/sql/011_schema.sql` 交付建表 DDL（1:N 关联 `sv_qa_record`）：
+  - 列：`id` BIGINT AUTO_INCREMENT PK、`qa_record_id` BIGINT NOT NULL（FK→`sv_qa_record.id` ON DELETE CASCADE）、`generation_id` VARCHAR(100) NOT NULL、`document_id` VARCHAR(100)、`chunk_id` VARCHAR(100)、`score` DECIMAL(10,6)、`stage` VARCHAR(32) NOT NULL（retrieval/embedding/generation）、`duration_ms` BIGINT、`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP。
+  - 索引：`idx_sv_qa_retrieval_diagnostic_qa_record(qa_record_id)`、`idx_sv_qa_retrieval_diagnostic_generation(generation_id)`（实际索引用带表前缀长名；与上文登记短名 `idx_qa_record_id`/`idx_generation_id` 不一致，以本 SQL 长名为准）。
+  - 联删：FK `ON DELETE CASCADE` 由父表级联清理，另 `RetrievalDiagnosticMapper.deleteByConversation` 按 `sv_qa_record.conversation_id` 清理（见 `RetrievalDiagnosticMapper.xml`）。
+  - 注：相对原登记，`generation_id`/`stage` 加了 NOT NULL，`created_at` 用 TIMESTAMP 而非 DATETIME（均等价或更严格，业务上两列恒非空）。
 - [ ] 可选：百炼 `qwen-plus` 生成适配器若返回模型请求 ID，回填 `Completed.model_request_id`（当前契约/Java 端已贯通，值为 `null`）。
+
+### Open（未覆盖，保持未完成）
+
+- **K4 生成失败实时观测未触发**：端到端失败注入只能在索引流水线触发，生成阶段无失败注入开关，故 K4 未能在真实环境触发；如需启用可新增生成阶段失败注入开关。
+- **`model_request_id` 回填阻塞于上游 10**：百炼 `qwen-plus` 生成适配器（工单 10）尚未返回模型请求 ID，当前 `Completed.model_request_id` 恒为 `null`，契约/Java 端字段已贯通待回填。
+- **MinIO/Milvus 应用层打点缺位**：MinIO 直接对象读写与 Milvus 内部查询当前不在应用层打点，跨端诊断在这两个环节存在断层（模型请求 ID 字段已贯通待百炼适配器回填）。
+
+> 因上述 Open 项未关闭，本工单 **Status 保持 `ready-for-agent`**，不标 resolved。
