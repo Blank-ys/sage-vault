@@ -80,7 +80,7 @@ class AdminFeedbackAuthorizationTest {
 
     @Test
     void anOrdinaryUserWithoutTheManagePermissionCannotReadFeedbackDetail() throws Exception {
-        authenticate(7L, Set.of());
+        authenticate(7L, Set.of(), Set.of());
 
         mockMvc.perform(get("/admin/feedback/1").header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
@@ -91,8 +91,20 @@ class AdminFeedbackAuthorizationTest {
     }
 
     @Test
+    void aUserWithManagePermissionButNoKnowledgeAdminRoleIsRejected() throws Exception {
+        authenticate(7L, Set.of(MANAGE_PERMISSION), Set.of());
+
+        mockMvc.perform(get("/admin/feedback/1").header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+
+        // 角色不足时服务层完全不被触达，问答正文没有任何被读出的机会
+        verify(feedbacks, never()).findDetailForAdmin(anyLong(), anyLong());
+    }
+
+    @Test
     void anOrdinaryUserCannotResolveFeedback() throws Exception {
-        authenticate(7L, Set.of());
+        authenticate(7L, Set.of(), Set.of());
 
         mockMvc.perform(put("/admin/feedback/1/status")
                         .header("Authorization", "Bearer test-token")
@@ -106,7 +118,7 @@ class AdminFeedbackAuthorizationTest {
 
     @Test
     void anAdministratorSeesTheSharedQuestionAndAnswer() throws Exception {
-        authenticate(9L, Set.of(MANAGE_PERMISSION));
+        authenticate(9L, Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(feedbacks.findDetailForAdmin(9L, 1L)).thenReturn(detail("完整回答", QaRecordStatus.COMPLETED));
 
         mockMvc.perform(get("/admin/feedback/1").header("Authorization", "Bearer test-token"))
@@ -119,7 +131,7 @@ class AdminFeedbackAuthorizationTest {
 
     @Test
     void aPartialAnswerIsShownAsStoredSoTheAdminCanDiagnoseIt() throws Exception {
-        authenticate(9L, Set.of(MANAGE_PERMISSION));
+        authenticate(9L, Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(feedbacks.findDetailForAdmin(9L, 1L)).thenReturn(detail("残缺回", QaRecordStatus.STOPPED));
 
         mockMvc.perform(get("/admin/feedback/1").header("Authorization", "Bearer test-token"))
@@ -130,7 +142,7 @@ class AdminFeedbackAuthorizationTest {
 
     @Test
     void theResolvingAdminIsTakenFromTheLoginNotFromTheRequest() throws Exception {
-        authenticate(9L, Set.of(MANAGE_PERMISSION));
+        authenticate(9L, Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(feedbacks.resolve(anyLong(), anyLong(), any()))
                 .thenReturn(detail("完整回答", QaRecordStatus.COMPLETED));
         ArgumentCaptor<Long> adminId = ArgumentCaptor.forClass(Long.class);
@@ -148,7 +160,7 @@ class AdminFeedbackAuthorizationTest {
 
     @Test
     void aMissingFeedbackIsReportedAsNotFound() throws Exception {
-        authenticate(9L, Set.of(MANAGE_PERMISSION));
+        authenticate(9L, Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(feedbacks.findDetailForAdmin(9L, 404L))
                 .thenThrow(new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND, "反馈不存在"));
 
@@ -159,7 +171,7 @@ class AdminFeedbackAuthorizationTest {
 
     @Test
     void theQueueCanBeFilteredByStatus() throws Exception {
-        authenticate(9L, Set.of(MANAGE_PERMISSION));
+        authenticate(9L, Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(feedbacks.listForAdmin(any()))
                 .thenReturn(new AdminFeedbackPage(List.of(), 0, 1, 20));
         ArgumentCaptor<AdminFeedbackQuery> query = ArgumentCaptor.forClass(AdminFeedbackQuery.class);
@@ -196,12 +208,12 @@ class AdminFeedbackAuthorizationTest {
                 Map.of());
     }
 
-    private void authenticate(long userId, Set<String> permissions) {
+    private void authenticate(long userId, Set<String> permissions, Set<String> roles) {
         LoginUser user = new LoginUser();
         user.setToken("test-token");
         user.setUserid(userId);
         user.setPermissions(permissions);
-        user.setRoles(Set.of());
+        user.setRoles(roles);
         user.setExpireTime(Long.MAX_VALUE);
         SecurityContextHolder.set(SecurityConstants.LOGIN_USER, user);
         SecurityContextHolder.setUserId(String.valueOf(userId));

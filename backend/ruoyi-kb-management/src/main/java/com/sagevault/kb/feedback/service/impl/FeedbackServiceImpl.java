@@ -18,7 +18,9 @@ import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
+import com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
+import com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,12 +37,15 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     private final FeedbackMapper feedbacks;
     private final QaRecordMapper qaRecords;
+    private final RetrievalDiagnosticMapper diagnostics;
     private final FeedbackAudit audit;
 
     public FeedbackServiceImpl(
-            FeedbackMapper feedbacks, QaRecordMapper qaRecords, FeedbackAudit audit) {
+            FeedbackMapper feedbacks, QaRecordMapper qaRecords,
+            RetrievalDiagnosticMapper diagnostics, FeedbackAudit audit) {
         this.feedbacks = feedbacks;
         this.qaRecords = qaRecords;
+        this.diagnostics = diagnostics;
         this.audit = audit;
     }
 
@@ -102,7 +107,9 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     @Override
     public AdminFeedbackDetail findDetailForAdmin(long adminUserId, long feedbackId) {
-        AdminFeedbackDetail detail = AdminFeedbackDetail.from(requireDetail(feedbackId));
+        AdminFeedbackDetailRow row = requireDetail(feedbackId);
+        AdminFeedbackDetail detail =
+                AdminFeedbackDetail.from(row, diagnostics.findByQaRecordId(row.getQaId()));
         // 审计是远程调用，放在事务外；查看行为本身不改状态，无需事务。
         audit.recordViewed(detail.id(), detail.qaId());
         return detail;
@@ -117,10 +124,12 @@ public class FeedbackServiceImpl implements FeedbackService {
         String note = normalizeAdminNote(request.adminNote());
         // 单条 UPDATE 自带原子性，无需额外事务；审计是远程调用，必须留在事务外。
         if (feedbacks.updateStatus(feedbackId, request.status(), note) == 0) {
+            audit.recordResolveFailed(feedbackId, "反馈不存在");
             throw new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND, "反馈不存在");
         }
         audit.recordResolved(feedbackId, request.status().name());
-        return AdminFeedbackDetail.from(requireDetail(feedbackId));
+        AdminFeedbackDetailRow row = requireDetail(feedbackId);
+        return AdminFeedbackDetail.from(row, diagnostics.findByQaRecordId(row.getQaId()));
     }
 
     private AdminFeedbackDetailRow requireDetail(long feedbackId) {

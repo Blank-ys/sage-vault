@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper">
+    <resultMap id="diagnosticResult" type="com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity">
+        <id property="id" column="id"/>
+        <result property="qaRecordId" column="qa_record_id"/>
+        <result property="generationId" column="generation_id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="chunkId" column="chunk_id"/>
+        <result property="score" column="score"/>
+        <result property="stage" column="stage"/>
+        <result property="durationMs" column="duration_ms"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, qa_record_id, generation_id, document_id, chunk_id, score, stage, duration_ms, created_at
+    </sql>
+
+    <insert id="insertBatch" parameterType="java.util.List" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sv_qa_retrieval_diagnostic
+            (qa_record_id, generation_id, document_id, chunk_id, score, stage, duration_ms)
+        VALUES
+        <foreach collection="items" item="item" separator=",">
+            (#{item.qaRecordId}, #{item.generationId}, #{item.documentId}, #{item.chunkId},
+             #{item.score}, #{item.stage}, #{item.durationMs})
+        </foreach>
+    </insert>
+
+    <select id="findByQaRecordId" resultMap="diagnosticResult">
+        SELECT <include refid="columns"/> FROM sv_qa_retrieval_diagnostic
+        WHERE qa_record_id = #{qaRecordId}
+        ORDER BY id ASC
+    </select>
+
+    <!-- 会话级联删除：通过 qa_record 反查本会话的全部诊断后清除。 -->
+    <delete id="deleteByConversation">
+        DELETE d FROM sv_qa_retrieval_diagnostic d
+        JOIN sv_qa_record r ON r.id = d.qa_record_id
+        WHERE r.conversation_id = #{conversationId}
+    </delete>
+</mapper>

@@ -133,6 +133,28 @@ class FeedbackServiceTest {
         assertThat(feedbacks.findSubmitted(List.of(qaId))).isEmpty();
     }
 
+    @Test
+    void recordsAuditTrailForFailedResolve() {
+        long qaId = answeredRecordId();
+        feedbacks.submit(OWNER, qaId, new SubmitFeedbackRequest("OTHER", "", true));
+        long feedbackId = feedbacks.findSubmitted(List.of(qaId)).get(qaId).id();
+
+        assertThatThrownBy(() -> feedbacks.resolve(OWNER, 999L,
+                new com.sagevault.kb.feedback.domain.ResolveFeedbackRequest(
+                        com.sagevault.kb.feedback.domain.FeedbackStatus.RESOLVED, "")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("反馈不存在");
+
+        assertThat(repositories.feedbackAuditTrail())
+                .anyMatch(entry -> entry.equals("resolveFailed:999:反馈不存在"));
+        // 已存在反馈的正常流转仍会被记录，不因失败路径而缺失
+        feedbacks.resolve(OWNER, feedbackId,
+                new com.sagevault.kb.feedback.domain.ResolveFeedbackRequest(
+                        com.sagevault.kb.feedback.domain.FeedbackStatus.RESOLVED, ""));
+        assertThat(repositories.feedbackAuditTrail())
+                .anyMatch(entry -> entry.equals("resolved:" + feedbackId + ":RESOLVED"));
+    }
+
     /** 走真实问答流程产生一条终态问答，反馈只针对这种已完成的问答。 */
     private long answeredRecordId() {
         conversations.askAndStream(OWNER, conversationId, new AskQuestionRequest("问题", "request-1"))

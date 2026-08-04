@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "generationId", "detail"],
+  "properties": {
+    "type": {"const": "failed"},
+    "generationId": {"type": "string", "format": "uuid"},
+    "detail": {
+      "type": "string",
+      "description": "Masked, user-safe failure category. Never contains raw exceptions, model or trace identifiers, or knowledge base ids.",
+      "enum": [
+        "retrieval_or_generation_failed",
+        "embedding_failed",
+        "vector_store_failed",
+        "unexpected_failure"
+      ]
+    }
+  }
+}

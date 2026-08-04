@@ -15,6 +15,7 @@ import com.sagevault.kb.platform.error.ErrorCode;
 import com.sagevault.kb.support.InMemoryRepositories;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -167,7 +168,8 @@ class ConversationHistoryTest {
         public Flux<AnswerEvent> answer(long knowledgeBaseId, String question, String requestId, String generationId) {
             knowledgeBaseIds.add(knowledgeBaseId);
             questions.add(question);
-            return Flux.just(new AnswerEvent.Started(generationId), new AnswerEvent.Completed(generationId));
+            return Flux.just(new AnswerEvent.Started(generationId),
+                    new AnswerEvent.Completed(generationId, List.of(), Map.of()));
         }
 
         @Override

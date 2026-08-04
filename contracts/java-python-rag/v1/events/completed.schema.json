@@ -5,6 +5,29 @@
   "required": ["type", "generationId"],
   "properties": {
     "type": {"const": "completed"},
-    "generationId": {"type": "string", "format": "uuid"}
+    "generationId": {"type": "string", "format": "uuid"},
+    "retrievalDiagnostics": {
+      "type": "array",
+      "description": "检索召回片段的诊断信息；只包含文档/片段标识与分数，绝不包含片段正文。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["documentId", "chunkId", "score"],
+        "properties": {
+          "documentId": {"type": "string"},
+          "chunkId": {"type": "string"},
+          "score": {"type": "number"}
+        }
+      }
+    },
+    "stageDurations": {
+      "type": "object",
+      "description": "各阶段毫秒耗时，key 为 embedding / retrieval / generation。",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "modelRequestId": {
+      "type": ["string", "null"],
+      "description": "模型侧请求标识；上游未返回时为空。"
+    }
   }
 }

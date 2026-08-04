@@ -13,4 +13,7 @@ public interface FeedbackAudit {
 
     /** 管理员流转了某条反馈的处理状态。 */
     void recordResolved(long feedbackId, String status);
+
+    /** 管理员流转反馈处理状态失败，记录失败原因（仅含标识与状态，不含正文）。 */
+    void recordResolveFailed(long feedbackId, String errorMessage);
 }

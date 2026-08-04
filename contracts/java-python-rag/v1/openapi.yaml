@@ -189,3 +189,23 @@ components:
         diagnostics:
           type: object
           additionalProperties: true
+    RagRuntimeFailureCode:
+      type: string
+      description: >-
+        User-safe, masked failure category. Must never contain raw exceptions,
+        model or trace identifiers, or knowledge base ids.
+      enum:
+        - retrieval_or_generation_failed
+        - embedding_failed
+        - vector_store_failed
+        - unexpected_failure
+    RagRuntimeFailure:
+      type: object
+      additionalProperties: false
+      required: [type, generationId, detail]
+      properties:
+        type:
+          type: string
+          const: failed
+        generationId: {type: string, format: uuid}
+        detail: {$ref: '#/components/schemas/RagRuntimeFailureCode'}

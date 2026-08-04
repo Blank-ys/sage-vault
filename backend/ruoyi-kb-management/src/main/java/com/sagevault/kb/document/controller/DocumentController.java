@@ -2,6 +2,7 @@ package com.sagevault.kb.document.controller;
 
 import com.ruoyi.common.core.domain.R;
 import com.ruoyi.common.security.annotation.RequiresPermissions;
+import com.ruoyi.common.security.annotation.RequiresRoles;
 import com.sagevault.kb.document.domain.DocumentResponse;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.service.DocumentService;
@@ -26,12 +27,14 @@ public class DocumentController {
         this.service = service;
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions("sage:document:manage")
     @PostMapping
     public R<DocumentResponse> upload(@RequestParam long knowledgeBaseId, @RequestPart MultipartFile file) {
         return R.ok(service.upload(new UploadDocumentRequest(knowledgeBaseId, file)));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions("sage:document:manage")
     @PostMapping("/batch")
     public R<List<DocumentResponse>> uploadBatch(@RequestParam long knowledgeBaseId,
@@ -39,24 +42,28 @@ public class DocumentController {
         return R.ok(service.uploadBatch(knowledgeBaseId, Arrays.asList(files)));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions("sage:document:manage")
     @GetMapping
     public R<List<DocumentResponse>> list(@RequestParam long knowledgeBaseId) {
         return R.ok(service.listByKnowledgeBase(knowledgeBaseId));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions("sage:document:manage")
     @PostMapping("/{id}/retry")
     public R<DocumentResponse> retry(@PathVariable long id) {
         return R.ok(service.retry(id));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions("sage:document:manage")
     @PostMapping("/{id}/cleanup-retry")
     public R<DocumentResponse> cleanupRetry(@PathVariable long id) {
         return R.ok(service.cleanupRetry(id));
     }
 
+    @RequiresRoles("knowledge_admin")
     @RequiresPermissions("sage:document:manage")
     @DeleteMapping("/{id}")
     public R<DocumentResponse> delete(@PathVariable long id) {

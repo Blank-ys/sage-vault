@@ -202,14 +202,23 @@ public class ConversationServiceImpl implements ConversationService {
                     if (event instanceof AnswerEvent.Delta delta) {
                         records.appendAnswer(generationId, delta.delta());
                         answer.append(delta.delta());
-                    } else if (event instanceof AnswerEvent.Completed) {
+                    } else if (event instanceof AnswerEvent.Completed completed) {
                         records.markCompleted(generationId, answer.toString());
+                        // 全链路诊断落库：检索片段标识/分数与阶段耗时写入独立子表，
+                        // 供管理端反馈详情展示。不携带片段正文，遵守隐私约束。
+                        records.saveDiagnostics(
+                                generationId, completed.retrievalDiagnostics(), completed.stageDurations());
                         terminal.set(true);
                     } else if (event instanceof AnswerEvent.Refused refused) {
                         records.markRefused(generationId, refused.message());
                         terminal.set(true);
                     } else if (event instanceof AnswerEvent.Stopped) {
                         // Python 已确认停止；终态已由 stopAnswer 裁决，此处仅停止后续处理。
+                        terminal.set(true);
+                    } else if (event instanceof AnswerEvent.Failed failed) {
+                        // Python 在生成中途失败：已产出的 delta 依然有效，但必须以 FAILED 终态收口。
+                        // detail 已是脱敏后的受控失败类别，直接落库，不得写入原始异常/知识库 id。
+                        records.markFailed(generationId, failed.detail());
                         terminal.set(true);
                     }
                 })

@@ -88,6 +88,38 @@ class DiscoveredRagAnswerAdapterTest {
     }
 
     @Test
+    void mapsFailedEventWithoutLeakingRawDiagnostics() throws Exception {
+        // 独立的 provider：返回 failed 事件，携带脱敏后的受控失败类别。
+        HttpServer failedProvider = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        failedProvider.createContext("/internal/v1/answers", exchange -> {
+            String events = "event: started\ndata: {\"type\":\"started\",\"generationId\":\"gen-1\"}\n\n"
+                    + "event: delta\ndata: {\"type\":\"delta\",\"generationId\":\"gen-1\",\"delta\":\"部分\"}\n\n"
+                    + "event: failed\ndata: {\"type\":\"failed\",\"generationId\":\"gen-1\","
+                    + "\"detail\":\"retrieval_or_generation_failed\"}\n\n";
+            byte[] body = events.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream;charset=UTF-8");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        failedProvider.start();
+        try {
+            DiscoveryClient discovery = new FixedDiscoveryClient(failedProvider.getAddress().getPort());
+            var adapter = new DiscoveredRagAnswerAdapter(discovery, WebClient.builder(),
+                    new RagProperties("sage-vault-rag", "test-key"));
+
+            List<AnswerEvent> events = adapter.answer(1, "问题", "req-1", "gen-1").collectList().block();
+
+            assertThat(events).containsExactly(
+                    new AnswerEvent.Started("gen-1"),
+                    new AnswerEvent.Delta("gen-1", "部分"),
+                    new AnswerEvent.Failed("gen-1", "retrieval_or_generation_failed"));
+        } finally {
+            failedProvider.stop(0);
+        }
+    }
+
+    @Test
     void rejectsEventForAnotherGeneration() {
         DiscoveryClient discovery = new FixedDiscoveryClient(provider.getAddress().getPort());
         var adapter = new DiscoveredRagAnswerAdapter(discovery, WebClient.builder(),

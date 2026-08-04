@@ -70,7 +70,15 @@ class DocumentAuthorizationTest {
 
     @Test
     void generalUserCannotManageDocuments() throws Exception {
-        authenticate(Set.of());
+        authenticate(Set.of(), Set.of());
+        mockMvc.perform(get("/documents").param("knowledgeBaseId", "7").header("Authorization", "Bearer token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void userWithManagePermissionButNoKnowledgeAdminRoleIsRejected() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of());
         mockMvc.perform(get("/documents").param("knowledgeBaseId", "7").header("Authorization", "Bearer token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(403));
@@ -78,7 +86,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void knowledgeAdministratorCanUploadAndListDocuments() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         MockMultipartFile file = new MockMultipartFile("file", "report.txt", "text/plain", "content".getBytes());
         when(service.upload(any())).thenReturn(new DocumentResponse(1L, 7L, "report.txt", "report.txt",
                 DocumentStatus.PROCESSING, 7L, "", LocalDateTime.now(), LocalDateTime.now()));
@@ -96,7 +104,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void businessExceptionUsesRegisteredCodeAndMessage() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(service.upload(any())).thenThrow(new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT,
                 "该知识库下已存在同名文档"));
         MockMultipartFile file = new MockMultipartFile("file", "report.txt", "text/plain", "content".getBytes());
@@ -110,7 +118,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void generalUserCannotUploadBatch() throws Exception {
-        authenticate(Set.of());
+        authenticate(Set.of(), Set.of());
         MockMultipartFile file = new MockMultipartFile("files", "report.txt", "text/plain", "content".getBytes());
 
         mockMvc.perform(multipart("/documents/batch").file(file).param("knowledgeBaseId", "7")
@@ -121,7 +129,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void knowledgeAdministratorCanUploadBatch() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         MockMultipartFile firstFile = new MockMultipartFile("files", "alpha.txt", "text/plain", "a".getBytes());
         MockMultipartFile secondFile = new MockMultipartFile("files", "beta.pdf", "application/pdf", "b".getBytes());
         when(service.uploadBatch(anyLong(), any())).thenReturn(List.of(
@@ -141,7 +149,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void batchConflictReturnsRegisteredErrorCodeAndAllConflicts() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(service.uploadBatch(anyLong(), any())).thenThrow(new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT,
                 "以下文件名在知识库内或本批中已存在：alpha.txt、beta.pdf"));
         MockMultipartFile file = new MockMultipartFile("files", "alpha.txt", "text/plain", "content".getBytes());
@@ -155,7 +163,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void generalUserCannotRetryFailedDocument() throws Exception {
-        authenticate(Set.of());
+        authenticate(Set.of(), Set.of());
         mockMvc.perform(post("/documents/11/retry").header("Authorization", "Bearer token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(403));
@@ -163,7 +171,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void knowledgeAdministratorCanRetryFailedDocument() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(service.retry(11L)).thenReturn(new DocumentResponse(11L, 7L, "report.txt", "report.txt",
                 DocumentStatus.PROCESSING, 10L, "", LocalDateTime.now(), LocalDateTime.now()));
 
@@ -175,7 +183,7 @@ class DocumentAuthorizationTest {
 
     @Test
     void retryStateConflictReturnsRegisteredErrorCode() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(service.retry(11L)).thenThrow(new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
                 "仅处理失败的文档可以重试"));
 
@@ -185,12 +193,12 @@ class DocumentAuthorizationTest {
                 .andExpect(jsonPath("$.msg").value("仅处理失败的文档可以重试"));
     }
 
-    private void authenticate(Set<String> permissions) {
+    private void authenticate(Set<String> permissions, Set<String> roles) {
         LoginUser user = new LoginUser();
         user.setToken("test-token");
         user.setUserid(7L);
         user.setPermissions(permissions);
-        user.setRoles(Set.of());
+        user.setRoles(roles);
         user.setExpireTime(Long.MAX_VALUE);
         SecurityContextHolder.set(SecurityConstants.LOGIN_USER, user);
     }

@@ -9,44 +9,43 @@ import com.ruoyi.common.core.constant.SecurityConstants;
 import com.ruoyi.common.core.context.SecurityContextHolder;
 import com.ruoyi.system.api.RemoteLogService;
 import com.ruoyi.system.api.domain.SysOperLog;
-import com.sagevault.kb.knowledgebase.service.port.ManagementAudit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-class RuoyiManagementAuditTest {
+class RuoyiFeedbackAuditTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.remove();
     }
 
     @Test
-    void emitsOnlyWhitelistedKnowledgeBaseFields() throws Exception {
-        SecurityContextHolder.setUserName("knowledge-admin");
+    void recordsResolvedWithoutBody() throws Exception {
+        SecurityContextHolder.setUserName("feedback-admin");
         RemoteLogService remote = mock(RemoteLogService.class);
-        RuoyiManagementAudit audit = new RuoyiManagementAudit(remote);
+        RuoyiFeedbackAudit audit = new RuoyiFeedbackAudit(remote);
 
-        audit.record(ManagementAudit.Operation.UPDATE, 42L);
+        audit.recordResolved(99L, "RESOLVED");
 
         ArgumentCaptor<SysOperLog> event = ArgumentCaptor.forClass(SysOperLog.class);
         verify(remote).saveLog(event.capture(), eq(SecurityConstants.INNER));
-        assertThat(event.getValue().getOperParam()).isEqualTo("knowledgeBaseId=42");
-        assertThat(event.getValue().getJsonResult()).isNull();
+        assertThat(event.getValue().getOperParam()).isEqualTo("feedbackId=99,status=RESOLVED");
+        assertThat(event.getValue().getStatus()).isEqualTo(0);
         assertThat(event.getValue().getErrorMsg()).isNull();
     }
 
     @Test
-    void recordsFailureWithStatusAndReason() throws Exception {
-        SecurityContextHolder.setUserName("knowledge-admin");
+    void recordsResolveFailureWithStatusAndReason() throws Exception {
+        SecurityContextHolder.setUserName("feedback-admin");
         RemoteLogService remote = mock(RemoteLogService.class);
-        RuoyiManagementAudit audit = new RuoyiManagementAudit(remote);
+        RuoyiFeedbackAudit audit = new RuoyiFeedbackAudit(remote);
 
-        audit.recordFailure(ManagementAudit.Operation.DELETE, 7L, "知识库当前状态不允许删除");
+        audit.recordResolveFailed(99L, "反馈不存在");
 
         ArgumentCaptor<SysOperLog> event = ArgumentCaptor.forClass(SysOperLog.class);
         verify(remote).saveLog(event.capture(), eq(SecurityConstants.INNER));
-        assertThat(event.getValue().getOperParam()).isEqualTo("knowledgeBaseId=7");
+        assertThat(event.getValue().getOperParam()).isEqualTo("feedbackId=99");
         assertThat(event.getValue().getStatus()).isEqualTo(1);
-        assertThat(event.getValue().getErrorMsg()).isEqualTo("知识库当前状态不允许删除");
+        assertThat(event.getValue().getErrorMsg()).isEqualTo("反馈不存在");
     }
 }

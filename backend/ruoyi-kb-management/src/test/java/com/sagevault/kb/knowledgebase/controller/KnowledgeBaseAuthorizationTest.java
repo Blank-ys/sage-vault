@@ -62,7 +62,7 @@ class KnowledgeBaseAuthorizationTest {
 
     @Test
     void generalUserCanListAvailableKnowledgeBasesButCannotOpenManagementApi() throws Exception {
-        authenticate(Set.of());
+        authenticate(Set.of(), Set.of());
         mockMvc.perform(get("/knowledge-bases/available").header("Authorization", "Bearer general-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
@@ -73,8 +73,16 @@ class KnowledgeBaseAuthorizationTest {
     }
 
     @Test
+    void userWithManagePermissionButNoKnowledgeAdminRoleIsRejected() throws Exception {
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of());
+        mockMvc.perform(get("/knowledge-bases").header("Authorization", "Bearer token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
     void knowledgeAdministratorCanOpenManagementApi() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         mockMvc.perform(get("/knowledge-bases").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
@@ -82,7 +90,7 @@ class KnowledgeBaseAuthorizationTest {
 
     @Test
     void businessExceptionUsesRegisteredCodeAndMessage() throws Exception {
-        authenticate(Set.of(MANAGE_PERMISSION));
+        authenticate(Set.of(MANAGE_PERMISSION), Set.of("knowledge_admin"));
         when(knowledgeBases.get(9L)).thenThrow(new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_AVAILABLE,
                 "knowledge base is unavailable"));
 
@@ -92,12 +100,12 @@ class KnowledgeBaseAuthorizationTest {
                 .andExpect(jsonPath("$.msg").value("knowledge base is unavailable"));
     }
 
-    private void authenticate(Set<String> permissions) {
+    private void authenticate(Set<String> permissions, Set<String> roles) {
         LoginUser user = new LoginUser();
         user.setToken("test-token");
         user.setUserid(7L);
         user.setPermissions(permissions);
-        user.setRoles(Set.of());
+        user.setRoles(roles);
         user.setExpireTime(Long.MAX_VALUE);
         SecurityContextHolder.set(SecurityConstants.LOGIN_USER, user);
     }

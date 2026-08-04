@@ -10,7 +10,16 @@ from fastapi.testclient import TestClient
 from sage_vault_rag.application.answering.cancellation import CancellationRegistry
 from sage_vault_rag.application.answering.service import AnsweringService
 from sage_vault_rag.bootstrap.settings import Settings
-from sage_vault_rag.model.events import AnswerEvent, Completed, Delta, Refused, Started, Stopped
+from sage_vault_rag.model.events import (
+    AnswerEvent,
+    Completed,
+    Delta,
+    Failed,
+    Refused,
+    RetrievedChunkDiagnostic,
+    Started,
+    Stopped,
+)
 from sage_vault_rag.transport.http.app import create_app
 
 
@@ -92,7 +101,14 @@ def test_successful_answer_streams_started_delta_completed() -> None:
         Started(generation_id),
         Delta(generation_id, "根据"),
         Delta(generation_id, "文档"),
-        Completed(generation_id),
+        Completed(
+            generation_id,
+            retrieval_diagnostics=[
+                RetrievedChunkDiagnostic(document_id="d1", chunk_id="c1", score=0.25)
+            ],
+            stage_durations={"embedding": 5, "retrieval": 12, "generation": 320},
+            model_request_id=None,
+        ),
     ])
     client = TestClient(create_app(settings_for_test(), answering=answering, registration=NoOpRegistration()))
     timestamp = str(int(time.time()))
@@ -109,6 +125,15 @@ def test_successful_answer_streams_started_delta_completed() -> None:
     assert "event: delta" in response.text
     assert "event: completed" in response.text
     assert json.dumps({"type": "delta", "generationId": generation_id, "delta": "根据"}, ensure_ascii=False) in response.text
+    # completed 事件必须将检索诊断与阶段耗时贯通到对外 SSE 契约（不含片段正文）。
+    completed_payload = {
+        "type": "completed",
+        "generationId": generation_id,
+        "retrievalDiagnostics": [{"documentId": "d1", "chunkId": "c1", "score": 0.25}],
+        "stageDurations": {"embedding": 5, "retrieval": 12, "generation": 320},
+        "modelRequestId": None,
+    }
+    assert json.dumps(completed_payload, ensure_ascii=False, separators=(",", ":")) in response.text.replace(" ", "")
 
 
 def _sign_cancel_request(generation_id: str, request_id: str, timestamp: str, key: str = "test-key") -> str:
@@ -148,7 +173,44 @@ def test_stopped_event_is_streamed_with_contract_payload() -> None:
     assert streamed == [(event["type"], event) for event in example["events"]]
 
 
-def test_cancel_acknowledges_generation_owned_by_this_instance() -> None:
+def test_failed_event_is_streamed_with_masked_detail_and_no_raw_diagnostics() -> None:
+    generation_id = "8bcdd88e-9e64-4cd1-b781-f9a890f691a6"
+    request: dict[str, str] = {
+        "knowledgeBaseId": "1",
+        "question": "公司制度是什么？",
+        "requestId": "req-1",
+        "generationId": generation_id,
+    }
+    # 模拟生成中途崩溃：detail 必须是脱敏后的受控失败类别。
+    answering = FakeAnsweringService([
+        Started(generation_id),
+        Delta(generation_id, "部分答案"),
+        Failed(generation_id, "retrieval_or_generation_failed"),
+    ])
+    client = TestClient(create_app(settings_for_test(), answering=answering, registration=NoOpRegistration()))
+    timestamp = str(int(time.time()))
+
+    response = client.post(
+        "/internal/v1/answers",
+        headers={"X-Sage-Timestamp": timestamp, "X-Sage-Signature": _sign_answer_request(request, timestamp)},
+        json=request,
+    )
+
+    assert response.status_code == 200
+    assert "event: failed" in response.text
+    # 对外事件体不得携带原始异常文本、trace 标识或知识库 id。
+    payload = json.loads(
+        [b for b in response.text.strip().split("\n\n") if "event: failed" in b][0]
+        .splitlines()[1]
+        .removeprefix("data: ")
+    )
+    assert payload == {
+        "type": "failed",
+        "generationId": generation_id,
+        "detail": "retrieval_or_generation_failed",
+    }
+    assert "sk-" not in response.text
+    assert "knowledge_base_id" not in response.text
     generation_id = "0f6f6b1e-6d1a-4f5f-9a0f-2b3c4d5e6f70"
     answering = FakeAnsweringService([Started(generation_id)])
     app = create_app(settings_for_test(), answering=answering, registration=NoOpRegistration())

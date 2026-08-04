@@ -379,7 +379,8 @@ class CleanupFailureTest {
                 documentMapper, mock(DocumentRecordWriter.class),
                 mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
                 mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class),
-                mock(IndexingCommandDispatcher.class), mock(CleanupCommandDispatcher.class));
+                mock(IndexingCommandDispatcher.class), mock(CleanupCommandDispatcher.class),
+                mock(com.sagevault.kb.document.service.port.DocumentAudit.class));
 
         service.delete(11L);
 
@@ -399,7 +400,8 @@ class CleanupFailureTest {
                 documentMapper, mock(DocumentRecordWriter.class),
                 mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
                 mock(CleanupRecordWriter.class), mock(MinioDocumentStorage.class),
-                mock(IndexingCommandDispatcher.class), mock(CleanupCommandDispatcher.class));
+                mock(IndexingCommandDispatcher.class), mock(CleanupCommandDispatcher.class),
+                mock(com.sagevault.kb.document.service.port.DocumentAudit.class));
 
         assertThatThrownBy(() -> service.delete(11L))
                 .isInstanceOf(BusinessException.class)
@@ -433,7 +435,7 @@ class CleanupFailureTest {
                 documentMapper, mock(DocumentRecordWriter.class),
                 mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
                 cleanupRecordWriter, mock(MinioDocumentStorage.class),
-                mock(IndexingCommandDispatcher.class), cleanupDispatcher);
+                mock(IndexingCommandDispatcher.class), cleanupDispatcher, mock(com.sagevault.kb.document.service.port.DocumentAudit.class));
 
         service.cleanupRetry(11L);
 
@@ -468,7 +470,7 @@ class CleanupFailureTest {
                 documentMapper, mock(DocumentRecordWriter.class),
                 mock(IndexingTaskRecordWriter.class), mock(RetryRecordWriter.class),
                 cleanupRecordWriter, mock(MinioDocumentStorage.class),
-                mock(IndexingCommandDispatcher.class), cleanupDispatcher);
+                mock(IndexingCommandDispatcher.class), cleanupDispatcher, mock(com.sagevault.kb.document.service.port.DocumentAudit.class));
 
         assertThatThrownBy(() -> service.cleanupRetry(11L))
                 .isInstanceOf(BusinessException.class)

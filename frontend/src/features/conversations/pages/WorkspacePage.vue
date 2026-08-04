@@ -133,13 +133,15 @@ function displayTitle(conversation) {
 
 // 已停止与未完成都保留残缺正文，只有完全没有正文时才提示中断原因
 function answerStatusText(record) {
-  return record.status === 'STOPPED' ? '本次回答已停止' : '本次回答未完成'
+  if (record.status === 'STOPPED') return '本次回答已停止'
+  if (record.status === 'FAILED') return '本次回答生成失败'
+  return '本次回答未完成'
 }
 
 function statusType(record) {
-  return record.status === 'REFUSED' || record.status === 'STOPPED'
-    ? 'warning'
-    : record.status === 'COMPLETED' ? 'info' : 'error'
+  if (record.status === 'REFUSED' || record.status === 'STOPPED') return 'warning'
+  if (record.status === 'FAILED') return 'error'
+  return record.status === 'COMPLETED' ? 'info' : 'error'
 }
 
 async function load() {
@@ -254,6 +256,10 @@ function onAnswerEvent(event) {
   } else if (event.type === 'refused') {
     refused.value = true
     streamingAnswer.value = event.message
+  } else if (event.type === 'failed') {
+    // Python 生成中途失败：detail 已是脱敏后的受控失败类别，不暴露原始异常/知识库 id。
+    refused.value = true
+    streamingAnswer.value = '回答生成失败，请稍后重试。' + (event.detail ? `（${event.detail}）` : '')
   } else if (event.type === 'stopped') {
     // 已经收到的内容保持展示，终态由后端裁决后在历史里体现为"已停止"
     streamingGenerationId.value = ''
