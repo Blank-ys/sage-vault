@@ -16,9 +16,10 @@ SYSTEM_PROMPT = (
 
 
 class DashScopeGenerationAdapter(GenerationPort):
-    """百炼 qwen 流式生成适配器：把供应商流转换为项目自有的 delta 流。
+    """百炼（含 MaaS 私有实例）流式生成适配器：把 OpenAI 兼容流转换为项目自有的 delta 流。
 
-    DashScope SDK 类型与凭据仅在本适配器内出现，不进入 port 或 application；
+    通过 openai 客户端访问百炼暴露的 OpenAI 兼容 /chat/completions 接口，
+    DashScope/openai 凭据与类型仅在本适配器内出现，不进入 port 或 application；
     上游错误或中途断流以异常方式向上抛出，由既有问答流程保存残缺内容。
     """
 
@@ -63,10 +64,12 @@ class DashScopeGenerationAdapter(GenerationPort):
                     self._model,
                 )
                 raise
+            # 仅调试使用
+            # print("百炼调用返回结果: response=", response, " model=", self._model)
             if response is None:
                 return
             self._raise_if_error(response)
-            delta = _extract_delta(response)
+            delta = self._extract_delta(response)
             if delta:
                 yield delta
 
@@ -75,16 +78,13 @@ class DashScopeGenerationAdapter(GenerationPort):
             "api_key": self._api_key,
             "model": self._model,
             "messages": messages,
-            "result_format": "message",
             "stream": True,
-            "incremental_output": True,
             "max_tokens": self._max_tokens,
             "temperature": self._temperature,
-            # DashScope SDK 识别的关键字为 request_timeout，作为流式分块间的空闲超时
-            "request_timeout": self._timeout,
+            "timeout": self._timeout,
         }
         if self._base_url:
-            kwargs["base_http_api_url"] = self._base_url
+            kwargs["base_url"] = self._base_url
         try:
             return self._stream_call(**kwargs)
         except Exception as exception:
@@ -108,6 +108,27 @@ class DashScopeGenerationAdapter(GenerationPort):
         )
         raise RuntimeError("百炼流式生成失败")
 
+    def _extract_delta(self, response: Any) -> str | None:
+        # OpenAI 兼容 chunk：response.choices[0].delta.content
+        if hasattr(response, "choices"):
+            choices = response.choices or []
+        else:
+            output = getattr(response, "output", None)
+            if output is None:
+                return None
+            choices = getattr(output, "choices", None) or []
+        if not choices:
+            return None
+        delta = getattr(choices[0], "delta", None)
+        if delta is None:
+            message = getattr(choices[0], "message", None)
+            content = getattr(message, "content", None) if message is not None else None
+        else:
+            content = getattr(delta, "content", None)
+        if not content:
+            return None
+        return str(content)
+
     def _build_messages(self, question: str, chunks: list[RetrievedChunk]) -> list[dict[str, str]]:
         evidence = "\n\n".join(
             f"【片段{i + 1}】（来源：{chunk.filename}）\n{chunk.text}"
@@ -121,12 +142,15 @@ class DashScopeGenerationAdapter(GenerationPort):
 
 
 def _default_stream_call(**kwargs: Any) -> Iterable[Any]:
-    import dashscope  # SDK 仅在适配器内延迟导入，凭据与类型不离开本模块
+    from openai import OpenAI  # 仅在适配器内延迟导入，凭据与类型不离开本模块
 
-    base_url = kwargs.pop("base_http_api_url", None)
-    if base_url:
-        dashscope.base_http_api_url = base_url
-    responses = dashscope.Generation.call(**kwargs)
+    client = OpenAI(
+        api_key=kwargs.pop("api_key"),
+        base_url=kwargs.pop("base_url", None) or None,
+        timeout=kwargs.get("timeout", 60.0),
+        max_retries=0,
+    )
+    responses = client.chat.completions.create(**kwargs)
     return cast(Iterable[Any], responses)
 
 
@@ -136,18 +160,3 @@ def _next_or_none(iterator: Iterator[Any]) -> Any:
     except StopIteration:
         return None
 
-
-def _extract_delta(response: Any) -> str | None:
-    output = getattr(response, "output", None)
-    if output is None:
-        return None
-    choices = getattr(output, "choices", None) or []
-    if not choices:
-        return None
-    message = getattr(choices[0], "message", None)
-    if message is None:
-        return None
-    content = getattr(message, "content", None)
-    if not content:
-        return None
-    return str(content)

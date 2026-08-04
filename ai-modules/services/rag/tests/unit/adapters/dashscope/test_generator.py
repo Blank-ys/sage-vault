@@ -7,24 +7,20 @@ from sage_vault_rag.adapters.dashscope.generator import DashScopeGenerationAdapt
 from sage_vault_rag.model.retrieved_chunk import RetrievedChunk
 
 
-class _FakeMessage:
+class _FakeDelta:
     def __init__(self, content: str) -> None:
         self.content = content
 
 
 class _FakeChoice:
     def __init__(self, content: str) -> None:
-        self.message = _FakeMessage(content)
-
-
-class _FakeOutput:
-    def __init__(self, content: str) -> None:
-        self.choices = [_FakeChoice(content)]
+        self.delta = _FakeDelta(content)
+        self.message = None
 
 
 class _FakeResponse:
     def __init__(self, content: str, status_code: int = 200, request_id: str = "req-1") -> None:
-        self.output = _FakeOutput(content)
+        self.choices = [_FakeChoice(content)]
         self.status_code = status_code
         self.request_id = request_id
 
@@ -61,8 +57,7 @@ async def test_streams_deltas_from_bailian_chunks() -> None:
     assert stream_call.captured["model"] == "qwen-plus"
     assert stream_call.captured["api_key"] == "sk-test"
     assert stream_call.captured["stream"] is True
-    assert stream_call.captured["incremental_output"] is True
-    assert stream_call.captured["result_format"] == "message"
+    assert "base_url" not in stream_call.captured
 
 
 async def test_prompt_only_includes_retrieved_chunks_and_question() -> None:
@@ -133,4 +128,4 @@ async def test_default_max_tokens_and_temperature_forwarded() -> None:
 
     assert stream_call.captured["max_tokens"] == 1024
     assert stream_call.captured["temperature"] == 0.3
-    assert stream_call.captured["request_timeout"] == 60.0
+    assert stream_call.captured["timeout"] == 60.0
