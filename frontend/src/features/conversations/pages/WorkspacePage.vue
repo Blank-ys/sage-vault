@@ -334,8 +334,10 @@ function resetStreaming() {
 }
 
 onBeforeUnmount(() => controller?.abort())
-// 一次性消费无管理权限提示，必须在路由就绪后执行
-consumeAdminDeniedOnce()
+// 一次性消费无管理权限提示：用 watch 覆盖组件复用（同路径不同 query）场景
+watch(() => route.query.adminDenied, (val) => {
+  if (val === '1') consumeAdminDeniedOnce()
+}, { immediate: true })
 load()
 </script>
 

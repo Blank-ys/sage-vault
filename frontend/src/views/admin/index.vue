@@ -62,6 +62,8 @@ function firstNavigableChild(route) {
 function resolveMenuPath(route) {
   const target = firstNavigableChild(route)
   if (isExternal(target.path)) return target.path
+  // 顶层菜单自身即叶子节点时直接返回，避免路径重复拼接
+  if (target === route) return route.path
   const base = route.path || ''
   const childPath = target.path || ''
   return getNormalPath(`${base}/${childPath}`)
