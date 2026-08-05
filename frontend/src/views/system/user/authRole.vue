@@ -1,5 +1,7 @@
 <template>
-   <div class="app-container">
+   <div class="management-page">
+      <management-page-header title="用户授权角色" subtitle="为指定用户分配可登录角色" />
+
       <h4 class="form-header h4">基本信息</h4>
       <el-form :model="form" label-width="80px">
          <el-row>
@@ -17,7 +19,7 @@
       </el-form>
 
       <h4 class="form-header h4">角色信息</h4>
-      <el-table v-loading="loading" :row-key="getRowKey" @row-click="clickRow" ref="roleRef" @selection-change="handleSelectionChange" :data="roles.slice((pageNum - 1) * pageSize, pageNum * pageSize)">
+      <el-table class="management-table" v-loading="loading" :row-key="getRowKey" @row-click="clickRow" ref="roleRef" @selection-change="handleSelectionChange" :data="roles.slice((pageNum - 1) * pageSize, pageNum * pageSize)">
          <el-table-column label="序号" width="55" type="index" align="center">
             <template #default="scope">
                <span>{{ (pageNum - 1) * pageSize + scope.$index + 1 }}</span>
@@ -34,7 +36,9 @@
          </el-table-column>
       </el-table>
 
-      <pagination v-show="total > 0" :total="total" v-model:page="pageNum" v-model:limit="pageSize" />
+      <div class="management-pagination">
+         <pagination v-show="total > 0" :total="total" v-model:page="pageNum" v-model:limit="pageSize" />
+      </div>
 
       <el-form label-width="100px">
          <div style="text-align: center;margin-left:-120px;margin-top:30px;">

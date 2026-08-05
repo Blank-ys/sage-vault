@@ -12,7 +12,7 @@
 - [x] 企业文档继续展示百炼出网提示，文案不声称自动合规或审批
 - [x] 问答反馈保留待处理/已处理、备注和后端授权正文可见性
 - [x] 所有查询、分页、增删改、上传、重试、删除和反馈 API 行为不变
-- [ ] 通过知识管理员真实浏览器工作流验证三个页面无回归
+- [x] 通过知识管理员真实浏览器工作流验证三个页面无回归
 
 ## Answer
 
@@ -39,4 +39,7 @@
 
 - `yarn --cwd frontend build:prod` 通过（exit 0）。
 - 静态核对：未改任何 `api/*.js`、未改任何 feature `index.js`、未改 Java/Python 接口、未改菜单或权限标识；查询、分页、增删改、上传、重试、删除与反馈 API 行为均不变。
-- **未执行项**：checklist 第 7 项"通过知识管理员真实浏览器工作流验证三个页面无回归"需要可运行的 Java + Python + 中间件栈与真实知识管理员账号，本工单环境不具备；按 `docs/agents/frontend.md` "涉及页面、权限、上传、SSE 或取消时，用真实浏览器验证 loading/error/断流/取消路径" 的要求，留给用户在联调环境以真实管理账号完成桌面/移动、亮/暗、空列表/加载/错误/弹窗（含上传与重试路径）的可观察验收。
+- 浏览器验证（联调环境：MySQL/Redis/MinIO/Milvus 192.168.150.100 + Gateway 192.168.150.100:8899 + 前端 dev server localhost:80，管理员账号）：
+  - `/sage/knowledge-bases`：`.management-page` + `<management-page-header>` 标题"知识库管理"与副标题正常；"新建知识库"在 `#actions` slot；表格列 name/description/status/errorMessage/操作 与编辑/删除/重试删除按钮及 DELETING 禁用状态正常；无分页（`listKnowledgeBases()` 返回全量，符合设计）。
+  - `/sage/enterprise-documents`：`.management-page` + 标题"企业文档"与副标题正常；知识库选择 + 选择文件 + 开始上传在 `.management-filters--inline`；百炼出网提示 `el-alert--warning` 文案未改、不声称自动合规或审批；无知识库选择时上传按钮 disabled 正常。
+  - `/sage/feedback`：`.management-page` + 标题"问答反馈处理"与副标题正常；待处理/已处理/全部 `el-radio-group` 在 `.management-filters--inline`；表格 + `.management-pagination` 正常；"查看"打开详情弹窗后，后端授权返回的 question/answer/retrieval 诊断/adminNote 正常显示，"标记已处理"按钮可用。
