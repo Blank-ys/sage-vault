@@ -125,7 +125,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, ChatDotRound, CircleCheck } from '@element-plus/icons-vue'
 import { listAvailableKnowledgeBases } from '@/features/knowledge-bases'
 import { FeedbackDialog } from '@/features/feedback'
-import { useQaGuardStore } from '@/features/conversations'
+import { useQaGuardStore, useQaSessionStore } from '@/features/conversations'
 import {
   askQuestion,
   createConversation,
@@ -143,6 +143,7 @@ const router = useRouter()
 const route = useRoute()
 const permissionStore = usePermissionStore()
 const qaGuard = useQaGuardStore()
+const qaSession = useQaSessionStore()
 
 const knowledgeBases = ref([])
 const knowledgeBaseId = ref()
@@ -181,6 +182,11 @@ const canStop = computed(() => asking.value && Boolean(streamingGenerationId.val
 // asking 单独为 true（请求已发出但 started 未到达）不足以触发离开保护，因为没有 generationId 无法调用停止接口。
 const isGenerating = computed(() => asking.value && Boolean(streamingGenerationId.value) && !stopping.value)
 watch(isGenerating, (val) => qaGuard.setStreaming(val))
+
+// 记录最后活跃会话，供管理后台"返回问答"时恢复
+watch(activeId, (id) => {
+  if (id) qaSession.setLastConversation(id)
+})
 
 // 仅根据已加载会话的标题过滤，不读取或持久化问题/回答正文
 const filteredConversations = computed(() => {
@@ -258,7 +264,12 @@ async function load() {
     const [bases, items] = await Promise.all([listAvailableKnowledgeBases(), listConversations()])
     knowledgeBases.value = bases
     conversations.value = items
-    if (items.length) await select(items[0].id)
+    if (items.length) {
+      // 返回问答优先恢复离开前的问答会话，无恢复位置时选择最近的会话
+      const lastId = qaSession.lastConversationId
+      const restoreId = lastId && items.find(item => item.id === lastId) ? lastId : items[0].id
+      await select(restoreId)
+    }
   } finally {
     loading.value = false
   }

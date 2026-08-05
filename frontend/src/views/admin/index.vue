@@ -86,6 +86,7 @@ function menuDescription(route) {
   return visible.slice(0, 3).map(child => child.meta.title).join(' · ')
 }
 
+// 返回问答工作台：WorkspacePage 会在挂载时按 qaSession.lastConversationId 恢复离开前的会话
 function backToWorkspace() {
   router.push('/sage/qa')
 }
