@@ -52,39 +52,67 @@
       />
 
       <div v-loading="historyLoading" class="history">
-        <el-empty v-if="!history.length" description="还没有提问，问一个试试" :image-size="60" />
-        <div v-for="record in history" :key="record.id" class="history-item">
-          <p class="history-question">{{ record.question }}</p>
-          <el-alert :type="statusType(record)" show-icon :closable="false">
-            <div v-if="record.answer" class="answer-content" v-html="renderMarkdown(record.answer)" />
-            <div v-else class="answer-status-text">{{ answerStatusText(record) }}</div>
-          </el-alert>
-          <div class="history-feedback">
-            <span v-if="record.feedbackSubmitted" class="feedback-submitted">已反馈，感谢你的帮助</span>
-            <el-button v-else type="primary" link @click="openFeedback(record)">反馈这条回答</el-button>
+        <div v-if="!history.length && !streaming" class="qa-empty">
+          <template v-if="!activeId">
+            <h3 class="qa-empty-title">从企业知识中找到答案</h3>
+            <p class="qa-empty-desc">选择知识库，答案将仅基于其中的可用企业文档生成</p>
+          </template>
+          <el-empty v-else description="还没有提问，问一个试试" :image-size="60" />
+        </div>
+
+        <div v-for="record in history" :key="record.id" class="qa-turn">
+          <div class="turn-question">
+            <div class="question-bubble">{{ record.question }}</div>
+          </div>
+          <div class="turn-answer">
+            <div class="answer-bubble" :class="answerBubbleClass(record)">
+              <div v-if="record.answer" class="answer-content" v-html="renderMarkdown(record.answer)" />
+              <div v-else class="answer-status-text">{{ answerStatusText(record) }}</div>
+            </div>
+            <div class="answer-footer">
+              <span v-if="record.status !== 'COMPLETED'" class="answer-status-badge" :class="statusBadgeClass(record)">
+                {{ statusBadgeText(record) }}
+              </span>
+              <el-tooltip v-if="record.feedbackSubmitted" content="已反馈，感谢你的帮助" placement="top">
+                <span class="feedback-icon done"><el-icon><CircleCheck /></el-icon></span>
+              </el-tooltip>
+              <el-tooltip v-else content="反馈这条回答" placement="top">
+                <button class="feedback-icon" type="button" @click="openFeedback(record)">
+                  <el-icon><ChatDotRound /></el-icon>
+                </button>
+              </el-tooltip>
+            </div>
           </div>
         </div>
-        <div v-if="streaming" class="history-item">
-          <p class="history-question">{{ streamingQuestion }}</p>
-          <el-alert :type="refused ? 'warning' : 'info'" show-icon :closable="false">
-            <div class="answer-content" v-html="renderMarkdown(streamingAnswer)" />
-          </el-alert>
+
+        <div v-if="streaming" class="qa-turn">
+          <div class="turn-question">
+            <div class="question-bubble">{{ streamingQuestion }}</div>
+          </div>
+          <div class="turn-answer">
+            <div class="answer-bubble" :class="streamingBubbleClass">
+              <div v-if="streamingHasContent" class="answer-content" v-html="renderMarkdown(streamingAnswer)" />
+              <div v-else class="answer-status-text">{{ streamingAnswer || '正在处理问题…' }}</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <el-input
-        v-model="question"
-        type="textarea"
-        :rows="5"
-        maxlength="2000"
-        show-word-limit
-        :disabled="activeKnowledgeBaseDeleted"
-        :placeholder="inputPlaceholder"
-        @keydown="onQuestionKeydown"
-      />
-      <div class="qa-input-actions">
-        <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
-        <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
+      <div class="qa-input-area">
+        <el-input
+          v-model="question"
+          type="textarea"
+          :rows="3"
+          maxlength="2000"
+          show-word-limit
+          :disabled="activeKnowledgeBaseDeleted"
+          :placeholder="inputPlaceholder"
+          @keydown="onQuestionKeydown"
+        />
+        <div class="qa-input-actions">
+          <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
+          <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
+        </div>
       </div>
 
       <feedback-dialog v-model="feedbackVisible" :qa-id="feedbackQaId" @submitted="markFeedbackSubmitted" />
@@ -94,8 +122,10 @@
 
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Collection, ChatDotRound, CircleCheck } from '@element-plus/icons-vue'
 import { listAvailableKnowledgeBases } from '@/features/knowledge-bases'
 import { FeedbackDialog } from '@/features/feedback'
+import { useQaGuardStore } from '@/features/conversations'
 import {
   askQuestion,
   createConversation,
@@ -108,11 +138,11 @@ import {
 import { renderMarkdown } from '../composables/useMarkdown'
 import usePermissionStore from '@/store/modules/permission'
 import ConversationSidebar from '../components/ConversationSidebar.vue'
-import { Collection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const permissionStore = usePermissionStore()
+const qaGuard = useQaGuardStore()
 
 const knowledgeBases = ref([])
 const knowledgeBaseId = ref()
@@ -125,6 +155,7 @@ const streamingQuestion = ref('')
 const streamingAnswer = ref('')
 const streaming = ref(false)
 const refused = ref(false)
+const streamingFailed = ref(false)
 const loading = ref(false)
 const historyLoading = ref(false)
 const asking = ref(false)
@@ -133,8 +164,10 @@ const streamingGenerationId = ref('')
 const feedbackVisible = ref(false)
 const feedbackQaId = ref()
 let controller
+// 离开确认串行化标志：避免路由守卫与 UI 守卫同时触发时弹出两个确认框
+let leaveConfirming = false
 
-// 拥有至少一个后台动态菜单权限时才展示“管理后台”入口
+// 拥有至少一个后台动态菜单权限时才展示"管理后台"入口
 const hasAdminAccess = computed(() => permissionStore.hasAdminAccess)
 
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
@@ -143,6 +176,11 @@ const activeKnowledgeBaseDeleted = computed(() => Boolean(activeConversation.val
 const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim())
   && !asking.value && !activeKnowledgeBaseDeleted.value)
 const canStop = computed(() => asking.value && Boolean(streamingGenerationId.value))
+
+// 生成是否处于"用户尚未显式停止"的活跃状态：路由守卫和 UI 守卫都依赖该信号。
+// asking 单独为 true（请求已发出但 started 未到达）不足以触发离开保护，因为没有 generationId 无法调用停止接口。
+const isGenerating = computed(() => asking.value && Boolean(streamingGenerationId.value) && !stopping.value)
+watch(isGenerating, (val) => qaGuard.setStreaming(val))
 
 // 仅根据已加载会话的标题过滤，不读取或持久化问题/回答正文
 const filteredConversations = computed(() => {
@@ -157,8 +195,22 @@ const inputPlaceholder = computed(() => {
   return '请输入你的问题（Enter 发送，Shift+Enter 换行）'
 })
 
+// 流式回答只有非占位、非拒绝、非失败的正文才走 Markdown 渲染
+const streamingHasContent = computed(() =>
+  Boolean(streamingAnswer.value)
+  && streamingAnswer.value !== '正在处理问题…'
+  && !refused.value
+  && !streamingFailed.value
+)
+
+const streamingBubbleClass = computed(() => {
+  if (refused.value) return 'bubble-refused'
+  if (streamingFailed.value) return 'bubble-failed'
+  return ''
+})
+
 function goAdmin() {
-  router.push('/admin/index')
+  guardNavigate(() => router.push('/admin/index'))
 }
 
 // 无管理权限访问 /admin/* 时守卫会带 adminDenied=1 回到问答工作台，这里只提示一次并清理 URL
@@ -177,13 +229,27 @@ function displayTitle(conversation) {
 function answerStatusText(record) {
   if (record.status === 'STOPPED') return '本次回答已停止'
   if (record.status === 'FAILED') return '本次回答生成失败'
+  if (record.status === 'REFUSED') return '本次回答已拒答'
   return '本次回答未完成'
 }
 
-function statusType(record) {
-  if (record.status === 'REFUSED' || record.status === 'STOPPED') return 'warning'
-  if (record.status === 'FAILED') return 'error'
-  return record.status === 'COMPLETED' ? 'info' : 'error'
+function answerBubbleClass(record) {
+  if (record.status === 'REFUSED') return 'bubble-refused'
+  if (record.status === 'FAILED') return 'bubble-failed'
+  return ''
+}
+
+function statusBadgeText(record) {
+  if (record.status === 'REFUSED') return '已拒答'
+  if (record.status === 'FAILED') return '生成失败'
+  if (record.status === 'STOPPED') return '已停止'
+  return '未完成'
+}
+
+function statusBadgeClass(record) {
+  if (record.status === 'FAILED') return 'badge-error'
+  if (record.status === 'REFUSED' || record.status === 'STOPPED') return 'badge-warning'
+  return 'badge-info'
 }
 
 async function load() {
@@ -199,6 +265,12 @@ async function load() {
 }
 
 async function select(conversationId) {
+  if (conversationId === activeId.value) return
+  // 切换会话会卸载当前问答上下文：生成期间需要先停止并确认
+  await guardNavigate(() => doSelect(conversationId))
+}
+
+async function doSelect(conversationId) {
   activeId.value = conversationId
   resetStreaming()
   const conversation = conversations.value.find(item => item.id === conversationId)
@@ -215,7 +287,11 @@ async function select(conversationId) {
   }
 }
 
-function startNew() {
+async function startNew() {
+  await guardNavigate(doStartNew)
+}
+
+function doStartNew() {
   activeId.value = undefined
   // 新会话须在右侧主区域显式选择知识库，未选择前不允许提问
   knowledgeBaseId.value = undefined
@@ -246,9 +322,67 @@ async function remove(conversationId) {
   if (!confirmed) return
   await deleteConversation(conversationId)
   conversations.value = conversations.value.filter(item => item.id !== conversationId)
-  if (activeId.value === conversationId) startNew()
+  if (activeId.value === conversationId) doStartNew()
   ElMessage.success('会话已删除')
 }
+
+// 统一的离开保护：UI 触发的切换会话、新建会话和进入管理后台都经过这里。
+// 生成未活跃时直接执行 action；生成活跃时先弹"停止生成并离开"确认，
+// 确认后调用现有显式停止接口，停止成功才执行 action，失败则留在原页。
+async function guardNavigate(action) {
+  if (!qaGuard.needsLeaveConfirm) {
+    action()
+    return
+  }
+  if (await confirmStopAndLeave()) {
+    action()
+  }
+}
+
+// 返回 true 表示可以继续导航（已停止或本来就没有活跃生成）；false 表示应留在原页（取消或停止失败）。
+// 路由守卫写入 qaGuard.pendingLeave 后由 watch 消费，复用同一份确认逻辑。
+async function confirmStopAndLeave() {
+  // 生成已自然结束（generationId 被清空），无需停止
+  if (!streamingGenerationId.value) return true
+  if (leaveConfirming) return false
+  leaveConfirming = true
+  try {
+    try {
+      await ElMessageBox.confirm(
+        '当前正在生成回答，离开会先停止生成。是否停止生成并离开？',
+        '停止生成并离开',
+        { confirmButtonText: '停止生成并离开', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch {
+      return false
+    }
+    try {
+      await stopAnswer(activeId.value, streamingGenerationId.value)
+    } catch (error) {
+      ElMessage.error(error.message || '停止失败，已留在当前页面')
+      return false
+    }
+    // 停止成功：中断 SSE 读取并立即清理本地活跃状态，避免后续 router.push 触发二次守卫
+    controller?.abort()
+    streamingGenerationId.value = ''
+    qaGuard.setStreaming(false)
+    resetStreaming()
+    ElMessage.success('已停止生成')
+    return true
+  } finally {
+    leaveConfirming = false
+  }
+}
+
+// 路由守卫拦截浏览器后退、URL 直跳等非 UI 触发的导航后，由问答页消费 pendingLeave：
+// 展示同一份确认框，停止成功后重新发起导航，失败或取消则留在原页。
+watch(() => qaGuard.pendingLeave, async (target) => {
+  if (!target) return
+  qaGuard.clearLeave()
+  if (await confirmStopAndLeave()) {
+    router.push(target.fullPath)
+  }
+})
 
 function onQuestionKeydown(event) {
   if (event.key !== 'Enter') return
@@ -273,6 +407,7 @@ async function ask() {
   }
   asking.value = true
   refused.value = false
+  streamingFailed.value = false
   streaming.value = true
   streamingQuestion.value = question.value.trim()
   streamingAnswer.value = '正在处理问题…'
@@ -284,6 +419,7 @@ async function ask() {
     await refreshAfterAnswer(conversationId)
   } catch (error) {
     if (error.name !== 'AbortError') {
+      streamingFailed.value = true
       const message = error.message || '提问失败'
       streamingAnswer.value = message
       ElMessage.error(message)
@@ -312,7 +448,7 @@ function onAnswerEvent(event) {
     streamingAnswer.value = event.message
   } else if (event.type === 'failed') {
     // Python 生成中途失败：detail 已是脱敏后的受控失败类别，不暴露原始异常/知识库 id。
-    refused.value = true
+    streamingFailed.value = true
     streamingAnswer.value = '回答生成失败，请稍后重试。' + (event.detail ? `（${event.detail}）` : '')
   } else if (event.type === 'stopped') {
     // 已经收到的内容保持展示，终态由后端裁决后在历史里体现为"已停止"
@@ -324,6 +460,9 @@ async function stop() {
   stopping.value = true
   try {
     await stopAnswer(activeId.value, streamingGenerationId.value)
+    // 停止接口已成功：立即清空 generationId，避免离开保护在 SSE 'stopped' 事件到达前重复触发
+    streamingGenerationId.value = ''
+    qaGuard.setStreaming(false)
     ElMessage.success('已停止生成')
   } catch (error) {
     ElMessage.error(error.message || '停止失败')
@@ -353,12 +492,17 @@ function markFeedbackSubmitted(qaId) {
 function resetStreaming() {
   streaming.value = false
   refused.value = false
+  streamingFailed.value = false
   streamingQuestion.value = ''
   streamingAnswer.value = ''
   streamingGenerationId.value = ''
 }
 
-onBeforeUnmount(() => controller?.abort())
+onBeforeUnmount(() => {
+  controller?.abort()
+  qaGuard.setStreaming(false)
+  qaGuard.clearLeave()
+})
 // 一次性消费无管理权限提示：用 watch 覆盖组件复用（同路径不同 query）场景
 watch(() => route.query.adminDenied, (val) => {
   if (val === '1') consumeAdminDeniedOnce()
@@ -427,26 +571,128 @@ load()
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  margin-bottom: 20px;
-}
-.history-item {
   margin-bottom: 16px;
 }
-.history-question {
-  margin: 0 0 8px;
-  font-weight: 600;
-}
-.history-feedback {
-  margin-top: 4px;
-  text-align: right;
-}
-.feedback-submitted {
-  font-size: 12px;
+.qa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
   color: var(--el-text-color-secondary);
+}
+.qa-empty-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.qa-empty-desc {
+  margin: 0;
+  font-size: 13px;
+  max-width: 360px;
+  line-height: 1.6;
+}
+.qa-turn {
+  margin-bottom: 20px;
+}
+.turn-question {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.question-bubble {
+  max-width: 80%;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--el-color-primary);
+  color: #fff;
+  line-height: 1.6;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.turn-answer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.answer-bubble {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+  line-height: 1.7;
+  word-break: break-word;
+}
+.answer-bubble.bubble-refused {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning-dark-2);
+}
+.answer-bubble.bubble-failed {
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger-dark-2);
+}
+.answer-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-left: 4px;
+}
+.answer-status-badge {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color);
+}
+.answer-status-badge.badge-warning {
+  color: var(--el-color-warning-dark-2);
+  background: var(--el-color-warning-light-9);
+}
+.answer-status-badge.badge-error {
+  color: var(--el-color-danger-dark-2);
+  background: var(--el-color-danger-light-9);
+}
+.answer-status-badge.badge-info {
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color);
+}
+.feedback-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.feedback-icon:hover {
+  background: var(--el-fill-color);
+  color: var(--el-color-primary);
+}
+.feedback-icon.done {
+  color: var(--el-color-success);
+  cursor: default;
+}
+.feedback-icon.done:hover {
+  background: transparent;
+  color: var(--el-color-success);
+}
+.qa-input-area {
+  flex: none;
 }
 .qa-input-actions {
   display: flex;
   justify-content: flex-end;
+  margin-top: 8px;
 }
 .answer-content {
   line-height: 1.7;
@@ -466,7 +712,7 @@ load()
   padding-left: 1.5em;
 }
 .answer-content :deep(pre) {
-  background: var(--el-fill-color-light);
+  background: var(--el-fill-color);
   padding: 8px 12px;
   border-radius: 4px;
   overflow-x: auto;
