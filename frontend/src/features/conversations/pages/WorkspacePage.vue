@@ -1,49 +1,47 @@
 <template>
-  <div class="app-container workspace">
-    <el-card class="conversation-list">
+  <div class="qa-workbench" v-loading="loading">
+    <ConversationSidebar
+      :conversations="filteredConversations"
+      :active-id="activeId"
+      :search-key="searchKey"
+      :has-admin-access="hasAdminAccess"
+      @update:search-key="(v) => (searchKey = v)"
+      @select="select"
+      @new="startNew"
+      @admin="goAdmin"
+      @rename="rename"
+      @delete="remove"
+    />
+
+    <el-card class="qa-detail">
       <template #header>
-        <div class="list-header">
-          <span>我的会话</span>
-          <div class="list-header-actions">
-            <el-button
-              v-if="hasAdminAccess"
-              type="primary"
-              link
-              icon="Setting"
-              @click="goAdmin"
-            >管理后台</el-button>
-            <el-button type="primary" link :disabled="!knowledgeBaseId" @click="startNew">新建会话</el-button>
-          </div>
+        <div class="qa-detail-header">
+          <span class="qa-detail-title">{{ activeConversation ? displayTitle(activeConversation) : '新对话' }}</span>
+          <el-tooltip
+            v-if="activeConversation && !activeKnowledgeBaseDeleted"
+            :content="activeConversation.knowledgeBaseName || '未知知识库'"
+            placement="top"
+          >
+            <span class="qa-detail-kb">
+              <el-icon><Collection /></el-icon>
+              <span class="qa-detail-kb-name">{{ activeConversation.knowledgeBaseName }}</span>
+            </span>
+          </el-tooltip>
+          <span v-else-if="activeConversation && activeKnowledgeBaseDeleted" class="qa-detail-kb deleted">
+            <el-icon><Collection /></el-icon>知识库已删除
+          </span>
+          <el-select
+            v-else
+            v-model="knowledgeBaseId"
+            placeholder="选择知识库"
+            :loading="loading"
+            class="qa-new-kb-select"
+          >
+            <el-option v-for="item in knowledgeBases" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
         </div>
       </template>
-      <el-select v-model="knowledgeBaseId" placeholder="选择知识库" :loading="loading" class="full-width">
-        <el-option v-for="item in knowledgeBases" :key="item.id" :label="item.name" :value="item.id" />
-      </el-select>
-      <el-empty v-if="!conversations.length" description="暂无会话" :image-size="60" />
-      <ul v-else class="conversation-items">
-        <li
-          v-for="item in conversations"
-          :key="item.id"
-          :class="['conversation-item', { active: item.id === activeId }]"
-          @click="select(item.id)"
-        >
-          <span class="conversation-title" :title="displayTitle(item)">
-            {{ displayTitle(item) }}
-            <!-- 知识库已被级联删除：历史仍可读，但不能继续提问 -->
-            <el-tag v-if="item.knowledgeBaseDeleted" type="info" size="small" disable-transitions>
-              知识库已删除
-            </el-tag>
-          </span>
-          <span class="conversation-actions">
-            <el-button type="primary" link @click.stop="rename(item)">改名</el-button>
-            <el-button type="danger" link @click.stop="remove(item)">删除</el-button>
-          </span>
-        </li>
-      </ul>
-    </el-card>
 
-    <el-card class="conversation-detail">
-      <template #header>{{ activeConversation ? displayTitle(activeConversation) : '知识问答' }}</template>
       <el-alert
         v-if="activeKnowledgeBaseDeleted"
         title="该会话的知识库已删除，历史问答仍可查看，但无法继续提问。"
@@ -52,20 +50,16 @@
         :closable="false"
         class="deleted-notice"
       />
+
       <div v-loading="historyLoading" class="history">
         <el-empty v-if="!history.length" description="还没有提问，问一个试试" :image-size="60" />
         <div v-for="record in history" :key="record.id" class="history-item">
           <p class="history-question">{{ record.question }}</p>
-          <el-alert
-            :type="statusType(record)"
-            show-icon
-            :closable="false"
-          >
+          <el-alert :type="statusType(record)" show-icon :closable="false">
             <div v-if="record.answer" class="answer-content" v-html="renderMarkdown(record.answer)" />
             <div v-else class="answer-status-text">{{ answerStatusText(record) }}</div>
           </el-alert>
           <div class="history-feedback">
-            <!-- 已反馈的问答收敛为状态文案，避免重复提交 -->
             <span v-if="record.feedbackSubmitted" class="feedback-submitted">已反馈，感谢你的帮助</span>
             <el-button v-else type="primary" link @click="openFeedback(record)">反馈这条回答</el-button>
           </div>
@@ -77,6 +71,7 @@
           </el-alert>
         </div>
       </div>
+
       <el-input
         v-model="question"
         type="textarea"
@@ -84,14 +79,16 @@
         maxlength="2000"
         show-word-limit
         :disabled="activeKnowledgeBaseDeleted"
-        :placeholder="activeKnowledgeBaseDeleted ? '知识库已删除，无法继续提问' : '请输入你的问题（Enter 发送，Shift+Enter 换行）'"
+        :placeholder="inputPlaceholder"
         @keydown="onQuestionKeydown"
       />
-      <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
-      <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
-    </el-card>
+      <div class="qa-input-actions">
+        <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
+        <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
+      </div>
 
-    <feedback-dialog v-model="feedbackVisible" :qa-id="feedbackQaId" @submitted="markFeedbackSubmitted" />
+      <feedback-dialog v-model="feedbackVisible" :qa-id="feedbackQaId" @submitted="markFeedbackSubmitted" />
+    </el-card>
   </div>
 </template>
 
@@ -110,15 +107,18 @@ import {
 } from '../api/conversations'
 import { renderMarkdown } from '../composables/useMarkdown'
 import usePermissionStore from '@/store/modules/permission'
+import ConversationSidebar from '../components/ConversationSidebar.vue'
+import { Collection } from '@element-plus/icons-vue'
 
-const route = useRoute()
 const router = useRouter()
+const route = useRoute()
 const permissionStore = usePermissionStore()
 
 const knowledgeBases = ref([])
 const knowledgeBaseId = ref()
 const conversations = ref([])
 const activeId = ref()
+const searchKey = ref('')
 const history = ref([])
 const question = ref('')
 const streamingQuestion = ref('')
@@ -137,6 +137,26 @@ let controller
 // 拥有至少一个后台动态菜单权限时才展示“管理后台”入口
 const hasAdminAccess = computed(() => permissionStore.hasAdminAccess)
 
+const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
+// 知识库活动记录已被级联删除：会话只读，提问入口必须关闭
+const activeKnowledgeBaseDeleted = computed(() => Boolean(activeConversation.value?.knowledgeBaseDeleted))
+const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim())
+  && !asking.value && !activeKnowledgeBaseDeleted.value)
+const canStop = computed(() => asking.value && Boolean(streamingGenerationId.value))
+
+// 仅根据已加载会话的标题过滤，不读取或持久化问题/回答正文
+const filteredConversations = computed(() => {
+  const key = searchKey.value.trim().toLowerCase()
+  if (!key) return conversations.value
+  return conversations.value.filter(item => (item.title || '').toLowerCase().includes(key))
+})
+
+const inputPlaceholder = computed(() => {
+  if (activeKnowledgeBaseDeleted.value) return '知识库已删除，无法继续提问'
+  if (!activeId.value && !knowledgeBaseId.value) return '请先在上方选择知识库，再输入你的问题'
+  return '请输入你的问题（Enter 发送，Shift+Enter 换行）'
+})
+
 function goAdmin() {
   router.push('/admin/index')
 }
@@ -148,13 +168,6 @@ function consumeAdminDeniedOnce() {
   const { adminDenied, ...rest } = route.query
   router.replace({ path: route.path, query: rest })
 }
-
-const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
-// 知识库活动记录已被级联删除：会话只读，提问入口必须关闭
-const activeKnowledgeBaseDeleted = computed(() => Boolean(activeConversation.value?.knowledgeBaseDeleted))
-const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim())
-  && !asking.value && !activeKnowledgeBaseDeleted.value)
-const canStop = computed(() => asking.value && Boolean(streamingGenerationId.value))
 
 function displayTitle(conversation) {
   return conversation.title?.trim() || '未命名会话'
@@ -179,7 +192,6 @@ async function load() {
     const [bases, items] = await Promise.all([listAvailableKnowledgeBases(), listConversations()])
     knowledgeBases.value = bases
     conversations.value = items
-    if (!knowledgeBaseId.value && bases.length) knowledgeBaseId.value = bases[0].id
     if (items.length) await select(items[0].id)
   } finally {
     loading.value = false
@@ -205,32 +217,36 @@ async function select(conversationId) {
 
 function startNew() {
   activeId.value = undefined
+  // 新会话须在右侧主区域显式选择知识库，未选择前不允许提问
+  knowledgeBaseId.value = undefined
   history.value = []
   question.value = ''
   resetStreaming()
 }
 
-async function rename(conversation) {
+async function rename(conversationId) {
+  const conversation = conversations.value.find(item => item.id === conversationId)
   const result = await ElMessageBox.prompt('请输入新的会话标题', '重命名会话', {
-    inputValue: conversation.title || '',
+    inputValue: conversation?.title || '',
     inputValidator: value => (value && value.trim() ? true : '会话标题不能为空')
   }).catch(() => null)
   if (!result) return
-  const updated = await renameConversation(conversation.id, result.value.trim())
+  const updated = await renameConversation(conversationId, result.value.trim())
   conversations.value = conversations.value.map(item => (item.id === updated.id ? updated : item))
   ElMessage.success('会话已重命名')
 }
 
-async function remove(conversation) {
+async function remove(conversationId) {
+  const conversation = conversations.value.find(item => item.id === conversationId)
   const confirmed = await ElMessageBox.confirm(
     `删除后该会话的全部提问与回答都会被清除，确认删除“${displayTitle(conversation)}”？`,
     '删除会话',
     { type: 'warning' }
   ).catch(() => false)
   if (!confirmed) return
-  await deleteConversation(conversation.id)
-  conversations.value = conversations.value.filter(item => item.id !== conversation.id)
-  if (activeId.value === conversation.id) startNew()
+  await deleteConversation(conversationId)
+  conversations.value = conversations.value.filter(item => item.id !== conversationId)
+  if (activeId.value === conversationId) startNew()
   ElMessage.success('会话已删除')
 }
 
@@ -246,6 +262,15 @@ function onQuestionKeydown(event) {
 }
 
 async function ask() {
+  // 新会话必须先在右侧主区域选择知识库
+  if (!activeId.value && !knowledgeBaseId.value) {
+    ElMessage.warning('请先在上方选择知识库')
+    return
+  }
+  if (activeKnowledgeBaseDeleted.value) {
+    ElMessage.warning('知识库已删除，无法继续提问')
+    return
+  }
   asking.value = true
   refused.value = false
   streaming.value = true
@@ -342,40 +367,129 @@ load()
 </script>
 
 <style scoped>
-.workspace { display: flex; gap: 20px; align-items: flex-start; }
-.conversation-list { width: 300px; flex: none; }
-.conversation-detail { flex: 1; min-width: 0; }
-.list-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.list-header-actions { display: flex; align-items: center; gap: 4px; }
-.full-width { width: 100%; margin-bottom: 16px; }
-.conversation-items { list-style: none; margin: 0; padding: 0; }
-.conversation-item {
-  display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  padding: 8px 10px; border-radius: 4px; cursor: pointer;
+.qa-workbench {
+  display: flex;
+  height: 100%;
+  width: 100%;
 }
-.conversation-item:hover { background: var(--el-fill-color-light); }
-.conversation-item.active { background: var(--el-color-primary-light-9); }
-.conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conversation-actions { flex: none; }
-.deleted-notice { margin-bottom: 16px; }
-.history { min-height: 120px; margin-bottom: 20px; }
-.history-item { margin-bottom: 16px; }
-.history-question { margin: 0 0 8px; font-weight: 600; }
-.history-feedback { margin-top: 4px; text-align: right; }
-.feedback-submitted { font-size: 12px; color: var(--el-text-color-secondary); }
-.el-textarea, .el-button { width: 100%; margin-bottom: 20px; }
-.answer-content { line-height: 1.7; word-break: break-word; }
+.qa-detail {
+  flex: 1;
+  min-width: 0;
+  margin: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.qa-detail :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px;
+}
+.qa-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.qa-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  flex: none;
+}
+.qa-detail-kb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 320px;
+  padding: 2px 10px;
+  border-radius: 14px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.qa-detail-kb.deleted {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+.qa-detail-kb-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qa-new-kb-select {
+  width: 240px;
+}
+.deleted-notice {
+  margin-bottom: 16px;
+}
+.history {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+.history-item {
+  margin-bottom: 16px;
+}
+.history-question {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.history-feedback {
+  margin-top: 4px;
+  text-align: right;
+}
+.feedback-submitted {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.qa-input-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.answer-content {
+  line-height: 1.7;
+  word-break: break-word;
+}
 .answer-content :deep(h1),
 .answer-content :deep(h2),
-.answer-content :deep(h3) { margin: 0.6em 0 0.3em; }
-.answer-content :deep(p) { margin: 0.4em 0; }
+.answer-content :deep(h3) {
+  margin: 0.6em 0 0.3em;
+}
+.answer-content :deep(p) {
+  margin: 0.4em 0;
+}
 .answer-content :deep(ul),
-.answer-content :deep(ol) { margin: 0.4em 0; padding-left: 1.5em; }
-.answer-content :deep(pre) { background: var(--el-fill-color-light); padding: 8px 12px; border-radius: 4px; overflow-x: auto; }
-.answer-content :deep(code) { font-family: var(--el-font-family-mono, monospace); }
-.answer-content :deep(table) { border-collapse: collapse; margin: 0.4em 0; }
+.answer-content :deep(ol) {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+.answer-content :deep(pre) {
+  background: var(--el-fill-color-light);
+  padding: 8px 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.answer-content :deep(code) {
+  font-family: var(--el-font-family-mono, monospace);
+}
+.answer-content :deep(table) {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+}
 .answer-content :deep(th),
-.answer-content :deep(td) { border: 1px solid var(--el-border-color); padding: 4px 8px; }
-.answer-content :deep(blockquote) { margin: 0.4em 0; padding-left: 1em; color: var(--el-text-color-secondary); border-left: 3px solid var(--el-border-color); }
-.answer-status-text { white-space: pre-wrap; }
+.answer-content :deep(td) {
+  border: 1px solid var(--el-border-color);
+  padding: 4px 8px;
+}
+.answer-content :deep(blockquote) {
+  margin: 0.4em 0;
+  padding-left: 1em;
+  color: var(--el-text-color-secondary);
+  border-left: 3px solid var(--el-border-color);
+}
+.answer-status-text {
+  white-space: pre-wrap;
+}
 </style>
