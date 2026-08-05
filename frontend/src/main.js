@@ -43,6 +43,8 @@ import ImageUpload from "@/components/ImageUpload"
 import ImagePreview from "@/components/ImagePreview"
 // 字典标签组件
 import DictTag from '@/components/DictTag'
+// 管理后台页面标题区组件
+import ManagementPageHeader from '@/components/ManagementPageHeader'
 
 const app = createApp(App)
 
@@ -65,6 +67,7 @@ app.component('ImageUpload', ImageUpload)
 app.component('ImagePreview', ImagePreview)
 app.component('RightToolbar', RightToolbar)
 app.component('Editor', Editor)
+app.component('ManagementPageHeader', ManagementPageHeader)
 
 app.use(router)
 app.use(store)
