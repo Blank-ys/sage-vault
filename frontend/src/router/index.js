@@ -77,9 +77,9 @@ export const constantRoutes = [
     meta: { title: '锁定屏幕' }
   },
   {
-    // 问答工作台正式路径
+    // 问答工作台正式路径，使用独立全屏布局，不显示后台侧栏/顶栏/多页签
     path: '/sage/qa',
-    component: Layout,
+    component: () => import('@/layout/QaLayout.vue'),
     children: [
       {
         path: '',
