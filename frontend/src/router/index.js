@@ -58,17 +58,17 @@ export const constantRoutes = [
     hidden: true
   },
   {
+    // 根入口直接进入问答工作台正式路径
     path: '',
-    component: Layout,
-    redirect: '/index',
-    children: [
-      {
-        path: '/index',
-        component: () => import('@/views/index'),
-        name: 'Index',
-        meta: { title: '首页', icon: 'dashboard', affix: true }
-      }
-    ]
+    redirect: '/sage/qa',
+    hidden: true
+  },
+  {
+    // 兼容旧首页入口，同样进入问答工作台
+    path: '/index',
+    redirect: '/sage/qa',
+    hidden: true,
+    meta: { title: '首页' }
   },
   {
     path: '/lock',
@@ -77,6 +77,7 @@ export const constantRoutes = [
     meta: { title: '锁定屏幕' }
   },
   {
+    // 问答工作台正式路径
     path: '/sage/qa',
     component: Layout,
     children: [
@@ -85,6 +86,20 @@ export const constantRoutes = [
         component: () => import('@/features/conversations/pages/WorkspacePage.vue'),
         name: 'KnowledgeQa',
         meta: { title: '知识问答', icon: 'question' }
+      }
+    ]
+  },
+  {
+    // 管理概览正式路径，访问门槛由 permission.js 守卫校验
+    path: '/admin',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'index',
+        component: () => import('@/views/admin/index.vue'),
+        name: 'AdminIndex',
+        meta: { title: '管理概览', icon: 'dashboard' }
       }
     ]
   },

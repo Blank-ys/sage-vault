@@ -4,7 +4,16 @@
       <template #header>
         <div class="list-header">
           <span>我的会话</span>
-          <el-button type="primary" link :disabled="!knowledgeBaseId" @click="startNew">新建会话</el-button>
+          <div class="list-header-actions">
+            <el-button
+              v-if="hasAdminAccess"
+              type="primary"
+              link
+              icon="Setting"
+              @click="goAdmin"
+            >管理后台</el-button>
+            <el-button type="primary" link :disabled="!knowledgeBaseId" @click="startNew">新建会话</el-button>
+          </div>
         </div>
       </template>
       <el-select v-model="knowledgeBaseId" placeholder="选择知识库" :loading="loading" class="full-width">
@@ -100,6 +109,11 @@ import {
   stopAnswer
 } from '../api/conversations'
 import { renderMarkdown } from '../composables/useMarkdown'
+import usePermissionStore from '@/store/modules/permission'
+
+const route = useRoute()
+const router = useRouter()
+const permissionStore = usePermissionStore()
 
 const knowledgeBases = ref([])
 const knowledgeBaseId = ref()
@@ -119,6 +133,21 @@ const streamingGenerationId = ref('')
 const feedbackVisible = ref(false)
 const feedbackQaId = ref()
 let controller
+
+// 拥有至少一个后台动态菜单权限时才展示“管理后台”入口
+const hasAdminAccess = computed(() => permissionStore.hasAdminAccess)
+
+function goAdmin() {
+  router.push('/admin/index')
+}
+
+// 无管理权限访问 /admin/* 时守卫会带 adminDenied=1 回到问答工作台，这里只提示一次并清理 URL
+function consumeAdminDeniedOnce() {
+  if (route.query.adminDenied !== '1') return
+  ElMessage.warning('暂无管理后台权限')
+  const { adminDenied, ...rest } = route.query
+  router.replace({ path: route.path, query: rest })
+}
 
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value))
 // 知识库活动记录已被级联删除：会话只读，提问入口必须关闭
@@ -305,6 +334,8 @@ function resetStreaming() {
 }
 
 onBeforeUnmount(() => controller?.abort())
+// 一次性消费无管理权限提示，必须在路由就绪后执行
+consumeAdminDeniedOnce()
 load()
 </script>
 
@@ -312,7 +343,8 @@ load()
 .workspace { display: flex; gap: 20px; align-items: flex-start; }
 .conversation-list { width: 300px; flex: none; }
 .conversation-detail { flex: 1; min-width: 0; }
-.list-header { display: flex; justify-content: space-between; align-items: center; }
+.list-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.list-header-actions { display: flex; align-items: center; gap: 4px; }
 .full-width { width: 100%; margin-bottom: 16px; }
 .conversation-items { list-style: none; margin: 0; padding: 0; }
 .conversation-item {

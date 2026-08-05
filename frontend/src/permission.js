@@ -18,6 +18,9 @@ const isWhiteList = (path) => {
   return whiteList.some(pattern => isPathMatch(pattern, path))
 }
 
+// 管理后台深链接统一以 /admin 前缀作为路由边界
+const isAdminRoute = (path) => path.startsWith('/admin')
+
 router.beforeEach(async (to, from) => {
   NProgress.start()
   if (getToken()) {
@@ -58,6 +61,12 @@ router.beforeEach(async (to, from) => {
         ElMessage.error(err)
         return { path: '/' }
       }
+    }
+    // 用户信息已就绪：管理后台深链接需要至少一个后台动态菜单权限
+    // 隐藏按钮不是授权机制，Java 响应和现有菜单权限仍是最终权威
+    if (isAdminRoute(to.path) && !usePermissionStore().hasAdminAccess) {
+      NProgress.done()
+      return { path: '/sage/qa', query: { adminDenied: '1' } }
     }
     return true
   } else {

@@ -21,6 +21,10 @@ const usePermissionStore = defineStore(
       topbarRouters: [],
       sidebarRouters: []
     }),
+    getters: {
+      // 是否拥有至少一个后台动态菜单权限：addRoutes 只包含后端返回的动态菜单
+      hasAdminAccess: (state) => state.addRoutes.length > 0
+    },
     actions: {
       setRoutes(routes) {
         this.addRoutes = routes
