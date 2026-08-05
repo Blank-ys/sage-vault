@@ -1,40 +1,45 @@
 <template>
-  <div class="app-container">
-    <el-card>
-      <template #header>
-        <div class="header">
-          <span>知识库管理</span>
-          <el-button type="primary" @click="openCreate">新建知识库</el-button>
-        </div>
+  <div class="management-page knowledge-bases-page">
+    <management-page-header
+      title="知识库管理"
+      subtitle="维护知识库元数据；删除为后台级联清理，列表会轮询直至清理完成。"
+    >
+      <template #actions>
+        <el-button type="primary" @click="openCreate">新建知识库</el-button>
       </template>
-      <el-table v-loading="loading" :data="items">
-        <el-table-column prop="name" label="名称" />
-        <el-table-column prop="description" label="描述" />
-        <el-table-column label="状态" width="140">
-          <template #default="scope">
-            <el-tag :type="statusTagType(scope.row.status)" disable-transitions>
-              {{ statusLabel(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="删除失败原因" min-width="200">
-          <template #default="scope">
-            <span v-if="scope.row.status === 'DELETE_FAILED'" class="failure">{{ scope.row.errorMessage }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="180">
-          <template #default="scope">
-            <el-button link type="primary" :disabled="inDeleteFlow(scope.row)" @click="openEdit(scope.row)">
-              编辑
-            </el-button>
-            <el-button link type="danger" :disabled="isDeleting(scope.row)" @click="confirmDelete(scope.row)">
-              {{ scope.row.status === 'DELETE_FAILED' ? '重试删除' : '删除' }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    </management-page-header>
+
+    <el-table
+      v-loading="loading"
+      :data="items"
+      class="management-table"
+    >
+      <el-table-column prop="name" label="名称" />
+      <el-table-column prop="description" label="描述" />
+      <el-table-column label="状态" width="140">
+        <template #default="scope">
+          <el-tag :type="statusTagType(scope.row.status)" disable-transitions>
+            {{ statusLabel(scope.row.status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="删除失败原因" min-width="200">
+        <template #default="scope">
+          <span v-if="scope.row.status === 'DELETE_FAILED'" class="failure">{{ scope.row.errorMessage }}</span>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="180">
+        <template #default="scope">
+          <el-button link type="primary" :disabled="inDeleteFlow(scope.row)" @click="openEdit(scope.row)">
+            编辑
+          </el-button>
+          <el-button link type="danger" :disabled="isDeleting(scope.row)" @click="confirmDelete(scope.row)">
+            {{ scope.row.status === 'DELETE_FAILED' ? '重试删除' : '删除' }}
+          </el-button>
+        </template>
+      </el-table-column>
+    </el-table>
 
     <el-dialog v-model="visible" :title="form.id ? '编辑知识库' : '新建知识库'" width="480px">
       <el-form label-width="80px">
@@ -141,6 +146,6 @@ load()
 </script>
 
 <style scoped>
-.header { display: flex; align-items: center; justify-content: space-between; }
+/* 页面外壳与标题区由 .management-page / ManagementPageHeader 统一约束 */
 .failure { color: var(--el-color-danger); }
 </style>

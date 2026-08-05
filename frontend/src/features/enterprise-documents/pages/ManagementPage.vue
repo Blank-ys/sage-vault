@@ -1,21 +1,20 @@
 <template>
-  <div class="app-container">
-    <el-card>
-      <template #header>
-        <div class="header">
-          <span>企业文档</span>
-        </div>
-      </template>
+  <div class="management-page enterprise-documents-page">
+    <management-page-header
+      title="企业文档"
+      subtitle="按知识库批量上传与维护文档；处理失败可重试，删除为后台级联清理。"
+    />
 
-      <el-alert
-        class="bailian-notice"
-        type="warning"
-        :closable="false"
-        show-icon
-        title="提示：用户问题和检索到的文档片段将发送到阿里云百炼进行回答生成。本提示不构成敏感分类或审批，请自行判断上传文档的敏感性。"
-      />
+    <el-alert
+      class="bailian-notice"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="提示：用户问题和检索到的文档片段将发送到阿里云百炼进行回答生成。本提示不构成敏感分类或审批，请自行判断上传文档的敏感性。"
+    />
 
-      <el-form :inline="true" class="search-form">
+    <div class="management-filters management-filters--inline">
+      <el-form :inline="true">
         <el-form-item label="知识库">
           <el-select v-model="selectedKnowledgeBaseId" placeholder="请选择知识库" clearable @change="load">
             <el-option
@@ -49,46 +48,50 @@
           >开始上传</el-button>
         </el-form-item>
       </el-form>
+    </div>
 
-      <el-table v-loading="loading" :data="items">
-        <el-table-column prop="filename" label="文件名" />
-        <el-table-column prop="normalizedName" label="规范化名称" />
-        <el-table-column prop="size" label="大小（字节）" width="120" />
-        <el-table-column label="状态" width="120">
-          <template #default="scope">
-            <el-tag :type="statusType(scope.row.status)">{{ statusLabel(scope.row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="errorMessage" label="错误信息" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
-        <el-table-column prop="updatedAt" label="更新时间" width="180" />
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="scope">
-            <el-button
-              v-if="scope.row.status === 'FAILED'"
-              type="primary"
-              size="small"
-              :loading="retryingId === scope.row.id"
-              @click="handleRetry(scope.row)"
-            >重试</el-button>
-            <el-button
-              v-if="scope.row.status === 'CLEANUP_FAILED'"
-              type="warning"
-              size="small"
-              :loading="cleanupRetryingId === scope.row.id"
-              @click="handleCleanupRetry(scope.row)"
-            >重试清理</el-button>
-            <el-button
-              v-if="scope.row.status === 'AVAILABLE'"
-              type="danger"
-              size="small"
-              :loading="deletingId === scope.row.id"
-              @click="handleDelete(scope.row)"
-            >删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <el-table
+      v-loading="loading"
+      :data="items"
+      class="management-table"
+    >
+      <el-table-column prop="filename" label="文件名" />
+      <el-table-column prop="normalizedName" label="规范化名称" />
+      <el-table-column prop="size" label="大小（字节）" width="120" />
+      <el-table-column label="状态" width="120">
+        <template #default="scope">
+          <el-tag :type="statusType(scope.row.status)">{{ statusLabel(scope.row.status) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="errorMessage" label="错误信息" show-overflow-tooltip />
+      <el-table-column prop="createdAt" label="创建时间" width="180" />
+      <el-table-column prop="updatedAt" label="更新时间" width="180" />
+      <el-table-column label="操作" width="200" fixed="right">
+        <template #default="scope">
+          <el-button
+            v-if="scope.row.status === 'FAILED'"
+            type="primary"
+            size="small"
+            :loading="retryingId === scope.row.id"
+            @click="handleRetry(scope.row)"
+          >重试</el-button>
+          <el-button
+            v-if="scope.row.status === 'CLEANUP_FAILED'"
+            type="warning"
+            size="small"
+            :loading="cleanupRetryingId === scope.row.id"
+            @click="handleCleanupRetry(scope.row)"
+          >重试清理</el-button>
+          <el-button
+            v-if="scope.row.status === 'AVAILABLE'"
+            type="danger"
+            size="small"
+            :loading="deletingId === scope.row.id"
+            @click="handleDelete(scope.row)"
+          >删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
   </div>
 </template>
 
@@ -252,7 +255,6 @@ loadKnowledgeBases()
 </script>
 
 <style scoped>
-.header { display: flex; align-items: center; justify-content: space-between; }
-.search-form { margin-bottom: 16px; }
-.bailian-notice { margin-bottom: 16px; }
+/* 页面外壳与筛选区由 .management-page / .management-filters--inline 统一约束 */
+.bailian-notice { margin-bottom: var(--mgmt-section-gap); }
 </style>
