@@ -422,11 +422,11 @@ async function ask() {
   streaming.value = true
   streamingQuestion.value = question.value.trim()
   streamingAnswer.value = '正在处理问题…'
+  question.value = ''
   controller = new AbortController()
   try {
     const conversationId = activeId.value ?? (await createNewConversation())
     await askQuestion(conversationId, streamingQuestion.value, onAnswerEvent, controller.signal)
-    question.value = ''
     await refreshAfterAnswer(conversationId)
   } catch (error) {
     if (error.name !== 'AbortError') {
