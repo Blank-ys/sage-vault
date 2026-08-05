@@ -306,18 +306,18 @@ MyBatis 改动以 Service 行为测试和真实 MySQL Mapper 集成测试互补�
 
 | 实施工单 | 唯一主落点 | 必要协作落点 | 验证落点 |
 | --- | --- | --- | --- |
-| [打通空知识库问答细线](../.scratch/knowledge-qa/issues/01-empty-knowledge-base-qa-tracer.md) | Java 的知识库、会话与问答能力 | 知识库/会话前端 feature；Python 回答与 transport adapters；跨端契约 | 浏览器到 Java 的 HTTP/SSE 系统验收；契约测试 |
-| [上传并问答一篇 TXT 企业文档](../.scratch/knowledge-qa/issues/02-upload-and-answer-txt-document.md) | Java 的企业文档任务、状态与发布裁决 | 企业文档/会话前端 feature；Python 入库、回答、MinIO、嵌入和 Milvus adapters | 上传至回答系统验收；真实 Milvus；契约测试 |
-| [扩展 PDF、DOCX、MD 企业文档解析](../.scratch/knowledge-qa/issues/03-support-pdf-docx-markdown.md) | Python RAG 入库模块 | Java 上传校验与失败映射；企业文档前端 feature | 解析器集成测试；上传成功/失败系统验收 |
-| [实现批量上传与同名原子校验](../.scratch/knowledge-qa/issues/04-batch-upload-and-name-validation.md) | Java 企业文档能力 | 企业文档前端 feature；Python 复用单文档命令 | Java/MySQL；批量上传系统验收 |
-| [完成文档失败重试与原子发布](../.scratch/knowledge-qa/issues/05-retry-and-atomic-document-publication.md) | Java 企业文档任务状态机 | 企业文档前端 feature；Python 入库和 Milvus 发布/清理；跨端契约 | 状态/幂等/乱序；Milvus；失败注入系统验收 |
-| [完成文档删除与名称释放](../.scratch/knowledge-qa/issues/06-delete-document-and-release-name.md) | Java 企业文档删除与名称占用 | 企业文档前端 feature；Java MinIO；Python 清理/Milvus；跨端契约 | Java/MySQL/MinIO；Milvus；删除系统验收 |
-| [完善会话、历史与流式中断](../.scratch/knowledge-qa/issues/07-conversations-history-and-stream-control.md) | Java 会话、问答记录、单活跃回答和终态裁决 | 会话前端 feature；Python 回答、生成、取消；流/取消契约 | 历史与流状态系统验收；流契约测试 |
-| [建立用户反馈隐私闭环](../.scratch/knowledge-qa/issues/08-user-feedback-privacy-loop.md) | Java 反馈能力与正文授权 | 反馈/会话前端 feature；Java 审计 | 权限/持久化；同意、可见性和删除系统验收 |
-| [实现知识库级联删除](../.scratch/knowledge-qa/issues/09-cascade-delete-knowledge-base.md) | Java 知识库能力与级联协调 | 三个相关前端 feature；Java MinIO；Python 清理/Milvus；跨端契约 | 恢复/幂等/存储；Milvus；级联系统验收 |
-| [接入百炼 qwen-plus 生成适配器](../.scratch/knowledge-qa/issues/10-bailian-qwen-generation-adapter.md) | Python DashScope adapter | Python 回答/bootstrap；前端出网提示；部署 smoke | 假生成 adapter 自动化；真实百炼人工 smoke |
-| [守住角色、审计与安全日志边界](../.scratch/knowledge-qa/issues/11-roles-audit-and-safe-logging.md) | Java 权限、审计和安全日志规则 | 四个前端 feature；Python 安全日志；RuoYi adapters；泄漏探针 | 权限/审计系统验收；两端日志；端到端泄漏扫描 |
-| [建立 V1 质量、容量与性能验收](../.scratch/knowledge-qa/issues/12-v1-quality-capacity-acceptance.md) | 试点负责人拥有的跨系统评测资产 | 部署 smoke；Milvus 集成测试；各端可观测性 | 只经 Java HTTP/SSE 的质量、隔离、容量、时延和部署验收 |
+| [打通空知识库问答细线](../.scratch/V1.0(knowledge-qa)/issues/01-empty-knowledge-base-qa-tracer.md) | Java 的知识库、会话与问答能力 | 知识库/会话前端 feature；Python 回答与 transport adapters；跨端契约 | 浏览器到 Java 的 HTTP/SSE 系统验收；契约测试 |
+| [上传并问答一篇 TXT 企业文档](../.scratch/V1.0(knowledge-qa)/issues/02-upload-and-answer-txt-document.md) | Java 的企业文档任务、状态与发布裁决 | 企业文档/会话前端 feature；Python 入库、回答、MinIO、嵌入和 Milvus adapters | 上传至回答系统验收；真实 Milvus；契约测试 |
+| [扩展 PDF、DOCX、MD 企业文档解析](../.scratch/V1.0(knowledge-qa)/issues/03-support-pdf-docx-markdown.md) | Python RAG 入库模块 | Java 上传校验与失败映射；企业文档前端 feature | 解析器集成测试；上传成功/失败系统验收 |
+| [实现批量上传与同名原子校验](../.scratch/V1.0(knowledge-qa)/issues/04-batch-upload-and-name-validation.md) | Java 企业文档能力 | 企业文档前端 feature；Python 复用单文档命令 | Java/MySQL；批量上传系统验收 |
+| [完成文档失败重试与原子发布](../.scratch/V1.0(knowledge-qa)/issues/05-retry-and-atomic-document-publication.md) | Java 企业文档任务状态机 | 企业文档前端 feature；Python 入库和 Milvus 发布/清理；跨端契约 | 状态/幂等/乱序；Milvus；失败注入系统验收 |
+| [完成文档删除与名称释放](../.scratch/V1.0(knowledge-qa)/issues/06-delete-document-and-release-name.md) | Java 企业文档删除与名称占用 | 企业文档前端 feature；Java MinIO；Python 清理/Milvus；跨端契约 | Java/MySQL/MinIO；Milvus；删除系统验收 |
+| [完善会话、历史与流式中断](../.scratch/V1.0(knowledge-qa)/issues/07-conversations-history-and-stream-control.md) | Java 会话、问答记录、单活跃回答和终态裁决 | 会话前端 feature；Python 回答、生成、取消；流/取消契约 | 历史与流状态系统验收；流契约测试 |
+| [建立用户反馈隐私闭环](../.scratch/V1.0(knowledge-qa)/issues/08-user-feedback-privacy-loop.md) | Java 反馈能力与正文授权 | 反馈/会话前端 feature；Java 审计 | 权限/持久化；同意、可见性和删除系统验收 |
+| [实现知识库级联删除](../.scratch/V1.0(knowledge-qa)/issues/09-cascade-delete-knowledge-base.md) | Java 知识库能力与级联协调 | 三个相关前端 feature；Java MinIO；Python 清理/Milvus；跨端契约 | 恢复/幂等/存储；Milvus；级联系统验收 |
+| [接入百炼 qwen-plus 生成适配器](../.scratch/V1.0(knowledge-qa)/issues/10-bailian-qwen-generation-adapter.md) | Python DashScope adapter | Python 回答/bootstrap；前端出网提示；部署 smoke | 假生成 adapter 自动化；真实百炼人工 smoke |
+| [守住角色、审计与安全日志边界](../.scratch/V1.0(knowledge-qa)/issues/11-roles-audit-and-safe-logging.md) | Java 权限、审计和安全日志规则 | 四个前端 feature；Python 安全日志；RuoYi adapters；泄漏探针 | 权限/审计系统验收；两端日志；端到端泄漏扫描 |
+| [建立 V1 质量、容量与性能验收](../.scratch/V1.0(knowledge-qa)/issues/12-v1-quality-capacity-acceptance.md) | 试点负责人拥有的跨系统评测资产 | 部署 smoke；Milvus 集成测试；各端可观测性 | 只经 Java HTTP/SSE 的质量、隔离、容量、时延和部署验收 |
 
 工单正文是需求与验收 checklist 的唯一权威；本表不复制 checklist，也不绑定易变类名或函数名。新增、拆分、改名或改变主落点时，必须在同一变更中更新本表。工单完成后保留该行，只更新状态或稳定实现入口，以保留追踪。
 

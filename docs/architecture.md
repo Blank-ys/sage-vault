@@ -1,6 +1,6 @@
 # Sage Vault 系统架构
 
-本文是 Sage Vault 系统关系的权威文档，描述当前底座、V1 目标模块、运行时协作、数据所有权、依赖方向与关键 seam。完整代码目录、目录准入规则和实施工单导航见 [代码框架](code-framework.md)。产品行为和验收指标仍以 [通用企业文档问答 V1 规格](../.scratch/knowledge-qa/spec.md) 为准。
+本文是 Sage Vault 系统关系的权威文档，描述当前底座、V1 目标模块、运行时协作、数据所有权、依赖方向与关键 seam。完整代码目录、目录准入规则和实施工单导航见 [代码框架](code-framework.md)。产品行为和验收指标仍以 [通用企业文档问答 V1 规格](../.scratch/V1.0(knowledge-qa)/spec.md) 为准。
 
 ## 架构原则
 
