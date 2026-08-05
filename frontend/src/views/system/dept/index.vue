@@ -1,62 +1,61 @@
 <template>
-   <div class="app-container">
-      <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch">
-         <el-form-item label="部门名称" prop="deptName">
-            <el-input
-               v-model="queryParams.deptName"
-               placeholder="请输入部门名称"
-               clearable
-               style="width: 200px"
-               @keyup.enter="handleQuery"
-            />
-         </el-form-item>
-         <el-form-item label="状态" prop="status">
-            <el-select v-model="queryParams.status" placeholder="部门状态" clearable style="width: 200px">
-               <el-option
-                  v-for="dict in sys_normal_disable"
-                  :key="dict.value"
-                  :label="dict.label"
-                  :value="dict.value"
-               />
-            </el-select>
-         </el-form-item>
-         <el-form-item>
-            <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-            <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-         </el-form-item>
-      </el-form>
+   <div class="management-page">
+      <management-page-header title="部门管理" subtitle="维护部门树结构与排序" />
 
-      <el-row :gutter="10" class="mb8">
-         <el-col :span="1.5">
-            <el-button
-               type="primary"
-               plain
-               icon="Plus"
-               @click="handleAdd"
-               v-hasPermi="['system:dept:add']"
-            >新增</el-button>
-         </el-col>
-         <el-col :span="1.5">
-            <el-button
-               type="warning"
-               plain
-               icon="Check"
-               @click="handleSaveSort"
-               v-hasPermi="['system:dept:edit']"
-            >保存排序</el-button>
-         </el-col>
-         <el-col :span="1.5">
-            <el-button
-               type="info"
-               plain
-               icon="Sort"
-               @click="toggleExpandAll"
-            >展开/折叠</el-button>
-         </el-col>
+      <div class="management-filters management-filters--stacked">
+         <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch">
+            <el-form-item label="部门名称" prop="deptName">
+               <el-input
+                  v-model="queryParams.deptName"
+                  placeholder="请输入部门名称"
+                  clearable
+                  style="width: 200px"
+                  @keyup.enter="handleQuery"
+               />
+            </el-form-item>
+            <el-form-item label="状态" prop="status">
+               <el-select v-model="queryParams.status" placeholder="部门状态" clearable style="width: 200px">
+                  <el-option
+                     v-for="dict in sys_normal_disable"
+                     :key="dict.value"
+                     :label="dict.label"
+                     :value="dict.value"
+                  />
+               </el-select>
+            </el-form-item>
+            <el-form-item>
+               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+            </el-form-item>
+         </el-form>
+      </div>
+
+      <div class="management-toolbar">
+         <el-button
+            type="primary"
+            plain
+            icon="Plus"
+            @click="handleAdd"
+            v-hasPermi="['system:dept:add']"
+         >新增</el-button>
+         <el-button
+            type="warning"
+            plain
+            icon="Check"
+            @click="handleSaveSort"
+            v-hasPermi="['system:dept:edit']"
+         >保存排序</el-button>
+         <el-button
+            type="info"
+            plain
+            icon="Sort"
+            @click="toggleExpandAll"
+         >展开/折叠</el-button>
          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
-      </el-row>
+      </div>
 
       <el-table
+         class="management-table"
          v-if="refreshTable"
          v-loading="loading"
          :data="deptList"

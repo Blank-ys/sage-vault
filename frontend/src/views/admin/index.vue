@@ -1,12 +1,10 @@
 <template>
-  <div class="admin-overview">
-    <div class="overview-header">
-      <div class="overview-title">
-        <h2>Sage Vault 管理后台</h2>
-        <p class="overview-subtitle">按现有菜单权限组织的管理功能导航</p>
-      </div>
-      <el-button type="primary" plain icon="Back" @click="backToWorkspace">返回问答</el-button>
-    </div>
+  <div class="management-page admin-overview">
+    <management-page-header title="Sage Vault 管理后台" subtitle="按现有菜单权限组织的管理功能导航">
+      <template #actions>
+        <el-button type="primary" plain icon="Back" @click="backToWorkspace">返回问答</el-button>
+      </template>
+    </management-page-header>
 
     <el-alert
       v-if="!adminMenus.length"
@@ -86,35 +84,14 @@ function menuDescription(route) {
   return visible.slice(0, 3).map(child => child.meta.title).join(' · ')
 }
 
+// 返回问答工作台：WorkspacePage 会在挂载时按 qaSession.lastConversationId 恢复离开前的会话
 function backToWorkspace() {
   router.push('/sage/qa')
 }
 </script>
 
 <style scoped lang="scss">
-.admin-overview {
-  padding: 24px;
-}
-
-.overview-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  gap: 16px;
-}
-
-.overview-title h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
-  font-weight: 600;
-}
-
-.overview-subtitle {
-  margin: 0;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-}
+/* 页面容器与标题区由 .management-page / ManagementPageHeader 统一约束 */
 
 .empty-alert {
   margin-top: 16px;

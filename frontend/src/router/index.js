@@ -38,6 +38,21 @@ export const constantRoutes = [
     ]
   },
   {
+    // 个人中心使用独立账号页面外壳，不显示问答侧栏、管理侧栏或可见 TagsView
+    path: '/user',
+    component: () => import('@/layout/AccountLayout.vue'),
+    hidden: true,
+    redirect: 'noredirect',
+    children: [
+      {
+        path: 'profile/:activeTab?',
+        component: () => import('@/views/system/user/profile/index'),
+        name: 'Profile',
+        meta: { title: '个人中心', icon: 'user' }
+      }
+    ]
+  },
+  {
     path: '/login',
     component: () => import('@/views/login'),
     hidden: true
@@ -100,20 +115,6 @@ export const constantRoutes = [
         component: () => import('@/views/admin/index.vue'),
         name: 'AdminIndex',
         meta: { title: '管理概览', icon: 'dashboard' }
-      }
-    ]
-  },
-  {
-    path: '/user',
-    component: Layout,
-    hidden: true,
-    redirect: 'noredirect',
-    children: [
-      {
-        path: 'profile/:activeTab?',
-        component: () => import('@/views/system/user/profile/index'),
-        name: 'Profile',
-        meta: { title: '个人中心', icon: 'user' }
       }
     ]
   }

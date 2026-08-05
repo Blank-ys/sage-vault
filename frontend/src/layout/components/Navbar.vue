@@ -12,12 +12,11 @@
       <template v-if="appStore.device !== 'mobile'">
         <header-search id="header-search" class="right-menu-item" />
 
-        <el-tooltip content="源码地址" effect="dark" placement="bottom">
-          <ruo-yi-git id="ruoyi-git" class="right-menu-item hover-effect" />
-        </el-tooltip>
-
-        <el-tooltip content="文档地址" effect="dark" placement="bottom">
-          <ruo-yi-doc id="ruoyi-doc" class="right-menu-item hover-effect" />
+        <el-tooltip content="返回问答" effect="dark" placement="bottom">
+          <div class="right-menu-item hover-effect back-to-qa" @click="backToWorkspace">
+            <svg-icon icon-class="exit-fullscreen" />
+            <span class="back-to-qa-text">返回问答</span>
+          </div>
         </el-tooltip>
 
         <screenfull id="screenfull" class="right-menu-item hover-effect" />
@@ -45,9 +44,7 @@
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <router-link to="/user/profile">
-              <el-dropdown-item>个人中心</el-dropdown-item>
-            </router-link>
+            <el-dropdown-item @click="goProfile">个人中心</el-dropdown-item>
             <el-dropdown-item command="setLayout" v-if="settingsStore.showSettings">
                 <span>布局设置</span>
             </el-dropdown-item>
@@ -74,8 +71,6 @@ import Hamburger from '@/components/Hamburger'
 import Screenfull from '@/components/Screenfull'
 import SizeSelect from '@/components/SizeSelect'
 import HeaderSearch from '@/components/HeaderSearch'
-import RuoYiGit from '@/components/RuoYi/Git'
-import RuoYiDoc from '@/components/RuoYi/Doc'
 import useAppStore from '@/store/modules/app'
 import useUserStore from '@/store/modules/user'
 import useLockStore from '@/store/modules/lock'
@@ -91,6 +86,16 @@ const settingsStore = useSettingsStore()
 
 function toggleSideBar() {
   appStore.toggleSideBar()
+}
+
+// 返回问答工作台：WorkspacePage 会在挂载时按 qaSession.lastConversationId 恢复离开前的会话
+function backToWorkspace() {
+  router.push('/sage/qa')
+}
+
+// 进入个人中心，带上当前路径作为返回目标
+function goProfile() {
+  router.push({ path: '/user/profile', query: { returnTo: route.fullPath } })
 }
 
 function handleCommand(command) {
@@ -259,10 +264,22 @@ async function toggleTheme(event) {
 
         svg {
           transition: transform 0.3s;
-          
+
           &:hover {
             transform: scale(1.15);
           }
+        }
+      }
+
+      &.back-to-qa {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
+
+        .back-to-qa-text {
+          line-height: 1;
+          white-space: nowrap;
         }
       }
     }

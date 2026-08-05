@@ -1,102 +1,98 @@
 <template>
-   <div class="app-container">
-      <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
-         <el-form-item label="任务名称" prop="jobName">
-            <el-input
-               v-model="queryParams.jobName"
-               placeholder="请输入任务名称"
-               clearable
-               style="width: 240px"
-               @keyup.enter="handleQuery"
-            />
-         </el-form-item>
-         <el-form-item label="任务组名" prop="jobGroup">
-            <el-select
-               v-model="queryParams.jobGroup"
-               placeholder="请选择任务组名"
-               clearable
-               style="width: 240px"
-            >
-               <el-option
-                  v-for="dict in sys_job_group"
-                  :key="dict.value"
-                  :label="dict.label"
-                  :value="dict.value"
-               />
-            </el-select>
-         </el-form-item>
-         <el-form-item label="执行状态" prop="status">
-            <el-select
-               v-model="queryParams.status"
-               placeholder="请选择执行状态"
-               clearable
-               style="width: 240px"
-            >
-               <el-option
-                  v-for="dict in sys_common_status"
-                  :key="dict.value"
-                  :label="dict.label"
-                  :value="dict.value"
-               />
-            </el-select>
-         </el-form-item>
-         <el-form-item label="执行时间" style="width: 308px">
-            <el-date-picker
-               v-model="dateRange"
-               value-format="YYYY-MM-DD"
-               type="daterange"
-               range-separator="-"
-               start-placeholder="开始日期"
-               end-placeholder="结束日期"
-            ></el-date-picker>
-         </el-form-item>
-         <el-form-item>
-            <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-            <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-         </el-form-item>
-      </el-form>
+   <div class="management-page">
+      <management-page-header title="调度日志" subtitle="查询定时任务的执行记录与异常信息" />
 
-      <el-row :gutter="10" class="mb8">
-         <el-col :span="1.5">
-            <el-button
-               type="danger"
-               plain
-               icon="Delete"
-               :disabled="multiple"
-               @click="handleDelete"
-               v-hasPermi="['monitor:job:remove']"
-            >删除</el-button>
-         </el-col>
-         <el-col :span="1.5">
-            <el-button
-               type="danger"
-               plain
-               icon="Delete"
-               @click="handleClean"
-               v-hasPermi="['monitor:job:remove']"
-            >清空</el-button>
-         </el-col>
-         <el-col :span="1.5">
-            <el-button
-               type="warning"
-               plain
-               icon="Download"
-               @click="handleExport"
-               v-hasPermi="['monitor:job:export']"
-            >导出</el-button>
-         </el-col>
-         <el-col :span="1.5">
-            <el-button 
-               type="warning" 
-               plain 
-               icon="Close"
-               @click="handleClose"
-            >关闭</el-button>
-         </el-col>
+      <div class="management-filters management-filters--stacked">
+         <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
+            <el-form-item label="任务名称" prop="jobName">
+               <el-input
+                  v-model="queryParams.jobName"
+                  placeholder="请输入任务名称"
+                  clearable
+                  style="width: 240px"
+                  @keyup.enter="handleQuery"
+               />
+            </el-form-item>
+            <el-form-item label="任务组名" prop="jobGroup">
+               <el-select
+                  v-model="queryParams.jobGroup"
+                  placeholder="请选择任务组名"
+                  clearable
+                  style="width: 240px"
+               >
+                  <el-option
+                     v-for="dict in sys_job_group"
+                     :key="dict.value"
+                     :label="dict.label"
+                     :value="dict.value"
+                  />
+               </el-select>
+            </el-form-item>
+            <el-form-item label="执行状态" prop="status">
+               <el-select
+                  v-model="queryParams.status"
+                  placeholder="请选择执行状态"
+                  clearable
+                  style="width: 240px"
+               >
+                  <el-option
+                     v-for="dict in sys_common_status"
+                     :key="dict.value"
+                     :label="dict.label"
+                     :value="dict.value"
+                  />
+               </el-select>
+            </el-form-item>
+            <el-form-item label="执行时间" style="width: 308px">
+               <el-date-picker
+                  v-model="dateRange"
+                  value-format="YYYY-MM-DD"
+                  type="daterange"
+                  range-separator="-"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+               ></el-date-picker>
+            </el-form-item>
+            <el-form-item>
+               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+            </el-form-item>
+         </el-form>
+      </div>
+
+      <div class="management-toolbar">
+         <el-button
+            type="danger"
+            plain
+            icon="Delete"
+            :disabled="multiple"
+            @click="handleDelete"
+            v-hasPermi="['monitor:job:remove']"
+         >删除</el-button>
+         <el-button
+            type="danger"
+            plain
+            icon="Delete"
+            @click="handleClean"
+            v-hasPermi="['monitor:job:remove']"
+         >清空</el-button>
+         <el-button
+            type="warning"
+            plain
+            icon="Download"
+            @click="handleExport"
+            v-hasPermi="['monitor:job:export']"
+         >导出</el-button>
+         <el-button
+            type="warning"
+            plain
+            icon="Close"
+            @click="handleClose"
+         >关闭</el-button>
          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
-      </el-row>
+      </div>
 
-      <el-table v-loading="loading" :data="jobLogList" @selection-change="handleSelectionChange">
+      <el-table class="management-table" v-loading="loading" :data="jobLogList" @selection-change="handleSelectionChange">
          <el-table-column type="selection" width="55" align="center" />
          <el-table-column label="日志编号" width="80" align="center" prop="jobLogId" />
          <el-table-column label="任务名称" align="center" prop="jobName" :show-overflow-tooltip="true" />
@@ -124,13 +120,15 @@
          </el-table-column>
       </el-table>
 
-      <pagination
-         v-show="total > 0"
-         :total="total"
-         v-model:page="queryParams.pageNum"
-         v-model:limit="queryParams.pageSize"
-         @pagination="getList"
-      />
+      <div class="management-pagination">
+         <pagination
+            v-show="total > 0"
+            :total="total"
+            v-model:page="queryParams.pageNum"
+            v-model:limit="queryParams.pageSize"
+            @pagination="getList"
+         />
+      </div>
 
       <!-- 调度日志详细 -->
       <job-detail v-model:visible="open" :row="form" type="log" />

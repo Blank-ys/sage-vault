@@ -21,8 +21,9 @@ export default {
 
   /**
    * 是否显示 tagsView
+   * 管理后台使用侧栏、面包屑和页面标题导航，默认不显示可见 TagsView
    */
-  tagsView: true,
+  tagsView: false,
 
   /**
    * 持久化标签页
@@ -62,6 +63,6 @@ export default {
   /**
    * 底部版权文本内容
    */
-  footerContent: 'Copyright © 2018-2026 RuoYi. All Rights Reserved.'
+  footerContent: 'Copyright © 2024-2026 Sage Vault. All Rights Reserved.'
 }
 

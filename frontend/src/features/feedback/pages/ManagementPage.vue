@@ -1,47 +1,51 @@
 <template>
-  <div class="app-container">
-    <el-card>
-      <template #header>
-        <div class="header">
-          <span>问答反馈处理</span>
-          <el-radio-group v-model="status" @change="reload">
-            <el-radio-button label="PENDING">待处理</el-radio-button>
-            <el-radio-button label="RESOLVED">已处理</el-radio-button>
-            <el-radio-button :label="null">全部</el-radio-button>
-          </el-radio-group>
-        </div>
-      </template>
+  <div class="management-page feedback-page">
+    <management-page-header
+      title="问答反馈处理"
+      subtitle="按待处理/已处理查看用户反馈；详情正文仅在管理员显式打开时按后端授权返回。"
+    />
 
-      <el-table v-loading="loading" :data="items">
-        <el-table-column prop="id" label="编号" width="80" />
-        <el-table-column label="问题类型" width="140">
-          <template #default="scope">{{ categoryLabel(scope.row.category) }}</template>
-        </el-table-column>
-        <el-table-column prop="comment" label="用户说明" show-overflow-tooltip />
-        <el-table-column label="状态" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.status === 'RESOLVED' ? 'success' : 'warning'">
-              {{ statusLabel(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdAt" label="提交时间" width="180" />
-        <el-table-column label="操作" width="100">
-          <template #default="scope">
-            <el-button link type="primary" @click="openDetail(scope.row.id)">查看</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <div class="management-filters management-filters--inline">
+      <el-radio-group v-model="status" @change="reload">
+        <el-radio-button label="PENDING">待处理</el-radio-button>
+        <el-radio-button label="RESOLVED">已处理</el-radio-button>
+        <el-radio-button :label="null">全部</el-radio-button>
+      </el-radio-group>
+    </div>
 
-      <el-pagination
-        v-model:current-page="pageNum"
-        v-model:page-size="pageSize"
-        class="pager"
-        layout="total, prev, pager, next"
-        :total="total"
-        @current-change="load"
-      />
-    </el-card>
+    <el-table
+      v-loading="loading"
+      :data="items"
+      class="management-table"
+    >
+      <el-table-column prop="id" label="编号" width="80" />
+      <el-table-column label="问题类型" width="140">
+        <template #default="scope">{{ categoryLabel(scope.row.category) }}</template>
+      </el-table-column>
+      <el-table-column prop="comment" label="用户说明" show-overflow-tooltip />
+      <el-table-column label="状态" width="100">
+        <template #default="scope">
+          <el-tag :type="scope.row.status === 'RESOLVED' ? 'success' : 'warning'">
+            {{ statusLabel(scope.row.status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="createdAt" label="提交时间" width="180" />
+      <el-table-column label="操作" width="100">
+        <template #default="scope">
+          <el-button link type="primary" @click="openDetail(scope.row.id)">查看</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-pagination
+      v-model:current-page="pageNum"
+      v-model:page-size="pageSize"
+      class="management-pagination"
+      layout="total, prev, pager, next"
+      :total="total"
+      @current-change="load"
+    />
 
     <el-dialog v-model="detailVisible" title="反馈详情" width="720px">
       <el-descriptions v-if="detail" :column="1" border>
@@ -172,8 +176,7 @@ load()
 </script>
 
 <style scoped>
-.header { display: flex; align-items: center; justify-content: space-between; }
-.pager { margin-top: 16px; display: flex; justify-content: flex-end; }
+/* 页面外壳、筛选区与分页由 .management-page / .management-filters--inline / .management-pagination 统一约束 */
 .answer { white-space: pre-wrap; }
 .partial-hint { margin-bottom: 8px; }
 .muted { color: var(--el-text-color-secondary); }

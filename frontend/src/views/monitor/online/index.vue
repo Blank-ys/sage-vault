@@ -1,30 +1,36 @@
 <template>
-   <div class="app-container">
-      <el-form :model="queryParams" ref="queryRef" :inline="true">
-         <el-form-item label="登录地址" prop="ipaddr">
-            <el-input
-               v-model="queryParams.ipaddr"
-               placeholder="请输入登录地址"
-               clearable
-               style="width: 200px"
-               @keyup.enter="handleQuery"
-            />
-         </el-form-item>
-         <el-form-item label="用户名称" prop="userName">
-            <el-input
-               v-model="queryParams.userName"
-               placeholder="请输入用户名称"
-               clearable
-               style="width: 200px"
-               @keyup.enter="handleQuery"
-            />
-         </el-form-item>
-         <el-form-item>
-            <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-            <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-         </el-form-item>
-      </el-form>
+   <div class="management-page">
+      <management-page-header title="在线用户" subtitle="查看当前在线用户列表与会话信息" />
+
+      <div class="management-filters management-filters--stacked">
+         <el-form :model="queryParams" ref="queryRef" :inline="true">
+            <el-form-item label="登录地址" prop="ipaddr">
+               <el-input
+                  v-model="queryParams.ipaddr"
+                  placeholder="请输入登录地址"
+                  clearable
+                  style="width: 200px"
+                  @keyup.enter="handleQuery"
+               />
+            </el-form-item>
+            <el-form-item label="用户名称" prop="userName">
+               <el-input
+                  v-model="queryParams.userName"
+                  placeholder="请输入用户名称"
+                  clearable
+                  style="width: 200px"
+                  @keyup.enter="handleQuery"
+               />
+            </el-form-item>
+            <el-form-item>
+               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+            </el-form-item>
+         </el-form>
+      </div>
+
       <el-table
+         class="management-table"
          v-loading="loading"
          :data="onlineList.slice((pageNum - 1) * pageSize, pageNum * pageSize)"
          style="width: 100%;"
@@ -49,7 +55,9 @@
          </el-table-column>
       </el-table>
 
-      <pagination v-show="total > 0" :total="total" v-model:page="pageNum" v-model:limit="pageSize" />
+      <div class="management-pagination">
+         <pagination v-show="total > 0" :total="total" v-model:page="pageNum" v-model:limit="pageSize" />
+      </div>
    </div>
 </template>
 
