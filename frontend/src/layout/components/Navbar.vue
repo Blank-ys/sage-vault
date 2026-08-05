@@ -44,9 +44,7 @@
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <router-link to="/user/profile">
-              <el-dropdown-item>个人中心</el-dropdown-item>
-            </router-link>
+            <el-dropdown-item @click="goProfile">个人中心</el-dropdown-item>
             <el-dropdown-item command="setLayout" v-if="settingsStore.showSettings">
                 <span>布局设置</span>
             </el-dropdown-item>
@@ -93,6 +91,11 @@ function toggleSideBar() {
 // 返回问答工作台：WorkspacePage 会在挂载时按 qaSession.lastConversationId 恢复离开前的会话
 function backToWorkspace() {
   router.push('/sage/qa')
+}
+
+// 进入个人中心，带上当前路径作为返回目标
+function goProfile() {
+  router.push({ path: '/user/profile', query: { returnTo: route.fullPath } })
 }
 
 function handleCommand(command) {

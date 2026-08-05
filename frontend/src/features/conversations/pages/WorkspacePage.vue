@@ -1,21 +1,52 @@
 <template>
   <div class="qa-workbench" v-loading="loading">
+    <!-- 桌面：静态侧栏，支持收起 -->
     <ConversationSidebar
+      v-if="!isMobile"
       :conversations="filteredConversations"
       :active-id="activeId"
       :search-key="searchKey"
       :has-admin-access="hasAdminAccess"
+      :collapsed="sidebarCollapsed"
       @update:search-key="(v) => (searchKey = v)"
       @select="select"
       @new="startNew"
       @admin="goAdmin"
       @rename="rename"
       @delete="remove"
+      @toggle-collapse="toggleSidebarCollapse"
     />
+
+    <!-- 移动端：抽屉式侧栏，选择会话后自动关闭 -->
+    <el-drawer
+      v-if="isMobile"
+      v-model="drawerVisible"
+      direction="ltr"
+      :size="300"
+      :with-header="false"
+      class="qa-mobile-drawer"
+    >
+      <ConversationSidebar
+        :conversations="filteredConversations"
+        :active-id="activeId"
+        :search-key="searchKey"
+        :has-admin-access="hasAdminAccess"
+        :collapsed="false"
+        @update:search-key="(v) => (searchKey = v)"
+        @select="onMobileSelect"
+        @new="onMobileNew"
+        @admin="goAdmin"
+        @rename="rename"
+        @delete="remove"
+      />
+    </el-drawer>
 
     <el-card class="qa-detail">
       <template #header>
         <div class="qa-detail-header">
+          <el-button v-if="isMobile" text class="qa-sidebar-trigger" @click="drawerVisible = true">
+            <el-icon><Menu /></el-icon>
+          </el-button>
           <span class="qa-detail-title">{{ activeConversation ? displayTitle(activeConversation) : '新对话' }}</span>
           <el-tooltip
             v-if="activeConversation && !activeKnowledgeBaseDeleted"
@@ -122,7 +153,8 @@
 
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Collection, ChatDotRound, CircleCheck } from '@element-plus/icons-vue'
+import { useWindowSize } from '@vueuse/core'
+import { Collection, ChatDotRound, CircleCheck, Menu } from '@element-plus/icons-vue'
 import { listAvailableKnowledgeBases } from '@/features/knowledge-bases'
 import { FeedbackDialog } from '@/features/feedback'
 import { useQaGuardStore, useQaSessionStore } from '@/features/conversations'
@@ -167,6 +199,15 @@ const feedbackQaId = ref()
 let controller
 // 离开确认串行化标志：避免路由守卫与 UI 守卫同时触发时弹出两个确认框
 let leaveConfirming = false
+
+// 响应式断点：与 RuoYi layout 一致使用 992px 区分桌面/移动
+const { width: windowWidth } = useWindowSize()
+const MOBILE_BREAKPOINT = 992
+const isMobile = computed(() => windowWidth.value - 1 < MOBILE_BREAKPOINT)
+
+// 桌面侧栏收起状态：仅持久化布局偏好，不持久化问答正文
+const sidebarCollapsed = computed(() => qaSession.sidebarCollapsed)
+const drawerVisible = ref(false)
 
 // 拥有至少一个后台动态菜单权限时才展示"管理后台"入口
 const hasAdminAccess = computed(() => permissionStore.hasAdminAccess)
@@ -217,6 +258,23 @@ const streamingBubbleClass = computed(() => {
 
 function goAdmin() {
   guardNavigate(() => router.push('/admin/index'))
+}
+
+// 桌面侧栏收起/展开：仅持久化布局偏好
+function toggleSidebarCollapse() {
+  qaSession.setSidebarCollapsed(!qaSession.sidebarCollapsed)
+}
+
+// 移动端选择会话后自动关闭抽屉
+function onMobileSelect(conversationId) {
+  drawerVisible.value = false
+  select(conversationId)
+}
+
+// 移动端新建会话后自动关闭抽屉
+function onMobileNew() {
+  drawerVisible.value = false
+  startNew()
 }
 
 // 无管理权限访问 /admin/* 时守卫会带 adminDenied=1 回到问答工作台，这里只提示一次并清理 URL
@@ -748,5 +806,92 @@ load()
 }
 .answer-status-text {
   white-space: pre-wrap;
+}
+
+/* 移动端侧栏触发按钮 */
+.qa-sidebar-trigger {
+  flex: none;
+  padding: 4px 8px;
+  height: 32px;
+  color: var(--el-text-color-primary);
+}
+
+/* 响应式：中等宽度适配 */
+@media screen and (max-width: 1280px) {
+  .qa-detail {
+    margin: 12px;
+  }
+  .qa-detail :deep(.el-card__body) {
+    padding: 12px;
+  }
+  .qa-new-kb-select {
+    width: 200px;
+  }
+}
+
+/* 响应式：移动端 390x844 等 */
+@media screen and (max-width: 991px) {
+  .qa-detail {
+    margin: 8px;
+  }
+  .qa-detail :deep(.el-card__body) {
+    padding: 10px;
+  }
+  .qa-detail-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .qa-detail-title {
+    font-size: 15px;
+    max-width: calc(100% - 48px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .qa-new-kb-select {
+    width: 100%;
+  }
+  .qa-detail-kb {
+    max-width: 100%;
+  }
+  .question-bubble {
+    max-width: 90%;
+  }
+  .answer-bubble {
+    max-width: 95%;
+  }
+  .qa-input-actions {
+    flex-wrap: wrap;
+  }
+  .qa-empty-desc {
+    max-width: 280px;
+  }
+}
+
+/* 响应式：极窄屏 */
+@media screen and (max-width: 480px) {
+  .qa-detail {
+    margin: 4px;
+  }
+  .qa-detail :deep(.el-card__body) {
+    padding: 8px;
+  }
+  .qa-empty-title {
+    font-size: 16px;
+  }
+  .qa-input-actions {
+    justify-content: stretch;
+  }
+  .qa-input-actions .el-button {
+    flex: 1;
+  }
+}
+</style>
+
+<style lang="scss">
+/* 移动端抽屉内部样式 */
+.qa-mobile-drawer .el-drawer__body {
+  padding: 0;
+  height: 100%;
 }
 </style>
