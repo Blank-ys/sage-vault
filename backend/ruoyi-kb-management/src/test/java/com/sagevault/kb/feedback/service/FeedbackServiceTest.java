@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
+import com.sagevault.kb.conversation.service.AnswerSessionService;
 import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.feedback.domain.FeedbackCategory;
 import com.sagevault.kb.feedback.domain.FeedbackResponse;
@@ -24,6 +25,7 @@ class FeedbackServiceTest {
 
     private InMemoryRepositories repositories;
     private ConversationService conversations;
+    private AnswerSessionService answerSessions;
     private FeedbackService feedbacks;
     private long conversationId;
 
@@ -31,6 +33,7 @@ class FeedbackServiceTest {
     void setUp() {
         repositories = new InMemoryRepositories();
         conversations = repositories.conversations();
+        answerSessions = repositories.answerSessions();
         feedbacks = repositories.feedbacks();
         long knowledgeBaseId = repositories.knowledgeBases()
                 .create(new CreateKnowledgeBaseRequest("产品手册", "")).id();
@@ -157,7 +160,7 @@ class FeedbackServiceTest {
 
     /** 走真实问答流程产生一条终态问答，反馈只针对这种已完成的问答。 */
     private long answeredRecordId() {
-        conversations.askAndStream(OWNER, conversationId, new AskQuestionRequest("问题", "request-1"))
+        answerSessions.askAndStream(OWNER, conversationId, new AskQuestionRequest("问题", "request-1"))
                 .collectList().block();
         List<QaRecordResponse> history = conversations.history(OWNER, conversationId);
         return history.get(history.size() - 1).id();

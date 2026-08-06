@@ -9,6 +9,7 @@ import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
 import com.sagevault.kb.conversation.domain.RenameConversationRequest;
+import com.sagevault.kb.conversation.service.AnswerSessionService;
 import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.qarecord.domain.QaRecordResponse;
 import java.util.List;
@@ -28,9 +29,11 @@ import reactor.core.publisher.Flux;
 @RequestMapping("/conversations")
 public class ConversationController {
     private final ConversationService conversations;
+    private final AnswerSessionService answerSessions;
 
-    public ConversationController(ConversationService conversations) {
+    public ConversationController(ConversationService conversations, AnswerSessionService answerSessions) {
         this.conversations = conversations;
+        this.answerSessions = answerSessions;
     }
 
     @PostMapping
@@ -73,20 +76,20 @@ public class ConversationController {
     @PostMapping(value = "/{id}/questions", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RequiresLogin
     public Flux<ServerSentEvent<AnswerEvent>> ask(@PathVariable long id, @RequestBody AskQuestionRequest request) {
-        return conversations.askAndStream(SecurityUtils.getUserId(), id, request).map(event -> ServerSentEvent.builder(event)
+        return answerSessions.askAndStream(SecurityUtils.getUserId(), id, request).map(event -> ServerSentEvent.builder(event)
                 .event(eventName(event)).build());
     }
 
     @GetMapping("/{id}/answers/{generationId}")
     @RequiresLogin
     public R<AnswerStateSnapshot> answerState(@PathVariable long id, @PathVariable String generationId) {
-        return R.ok(conversations.getAnswerState(SecurityUtils.getUserId(), id, generationId));
+        return R.ok(answerSessions.getAnswerState(SecurityUtils.getUserId(), id, generationId));
     }
 
     @PostMapping("/{id}/answers/{generationId}/stop")
     @RequiresLogin
     public R<AnswerStateSnapshot> stopAnswer(@PathVariable long id, @PathVariable String generationId) {
-        return R.ok(conversations.stopAnswer(SecurityUtils.getUserId(), id, generationId));
+        return R.ok(answerSessions.stopAnswer(SecurityUtils.getUserId(), id, generationId));
     }
 
     private static String eventName(AnswerEvent event) {

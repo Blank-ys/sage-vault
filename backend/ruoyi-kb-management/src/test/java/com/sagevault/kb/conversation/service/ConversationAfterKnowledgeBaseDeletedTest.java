@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
+import com.sagevault.kb.conversation.service.AnswerSessionService;
 import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.knowledgebase.service.port.KnowledgeBaseContentCleaner;
@@ -24,6 +25,7 @@ class ConversationAfterKnowledgeBaseDeletedTest {
 
     private InMemoryRepositories repositories;
     private ConversationService conversations;
+    private AnswerSessionService answerSessions;
     private KnowledgeBaseService knowledgeBases;
     private long conversationId;
     private long knowledgeBaseId;
@@ -32,6 +34,7 @@ class ConversationAfterKnowledgeBaseDeletedTest {
     void setUp() {
         repositories = new InMemoryRepositories();
         conversations = repositories.conversations();
+        answerSessions = repositories.answerSessions();
         knowledgeBases = repositories.knowledgeBases();
         knowledgeBaseId = knowledgeBases.create(new CreateKnowledgeBaseRequest("产品手册", "历史可读性验证")).id();
         conversationId = conversations.create(USER_ID, new CreateConversationRequest(knowledgeBaseId)).id();
@@ -61,7 +64,7 @@ class ConversationAfterKnowledgeBaseDeletedTest {
     void askingIsRejectedAfterKnowledgeBaseIsDeleted() {
         completeCascadeDelete();
 
-        assertThatThrownBy(() -> conversations
+        assertThatThrownBy(() -> answerSessions
                 .askAndStream(USER_ID, conversationId, new AskQuestionRequest("还能提问吗", "req-1"))
                 .blockLast())
                 .isInstanceOf(BusinessException.class)

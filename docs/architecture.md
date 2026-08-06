@@ -61,7 +61,7 @@ RAG (Python)
 
 发布单元内部按五个业务能力组织：知识库、企业文档、会话、问答记录和反馈。异步任务随发起它的能力就近组织。每个能力的 Controller 只调用本能力 application interface；跨能力协作也只能调用对方公开 application interface，不得直接访问 Mapper、持久化对象、Service 实现或 adapter。
 
-会话能力拥有创建会话与发起问题的用例编排，并通过单一公开 `ConversationService` 暴露给 Controller。其实现直接通过本能力 Mapper 校验会话归属，通过 `KnowledgeBaseService` 校验知识库可用性，通过 `QaRecordService` 创建和裁决问答记录，并通过 RAG port 发起回答；不得通过 Service 自调用来访问本能力数据。
+会话能力拥有创建会话与发起问题的用例编排，通过两个公开 application interface 暴露给 Controller：`ConversationService` 承载会话 CRUD 与历史投影，`AnswerSessionService` 承载回答生命周期。`AnswerSessionServiceImpl` 收敛发起事务、SSE 事件流、停止信号、RAG 取消与终态裁决；它直接通过本能力 Mapper 校验会话归属，通过 `KnowledgeBaseService` 校验知识库可用性，通过 `QaRecordService` 创建和裁决问答记录，并通过 RAG port 发起和取消回答；不得通过 Service 自调用来访问本能力数据。
 
 发起问题的流式方法不持有覆盖 RAG HTTP/SSE 生命周期的数据库事务。问答记录创建和每次状态裁决由 `QaRecordService` 的独立短事务完成；事务提交后才调用外部 RAG，流错误通过新的短事务裁决为未完成，连接断开仍不等同于用户主动取消。
 

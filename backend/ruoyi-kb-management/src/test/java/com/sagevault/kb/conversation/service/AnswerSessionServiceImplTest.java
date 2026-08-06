@@ -16,11 +16,9 @@ import com.sagevault.kb.conversation.domain.AnswerStateSnapshot;
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.ConversationEntity;
 import com.sagevault.kb.conversation.mapper.ConversationMapper;
-import com.sagevault.kb.conversation.service.impl.ConversationServiceImpl;
-import com.sagevault.kb.conversation.service.port.ConversationAudit;
+import com.sagevault.kb.conversation.service.impl.AnswerSessionServiceImpl;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
 import com.sagevault.kb.document.service.DocumentService;
-import com.sagevault.kb.feedback.service.FeedbackService;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
@@ -35,7 +33,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
-class ConversationServiceImplTest {
+class AnswerSessionServiceImplTest {
     @Test
     void marksUnfinishedWhenStreamCompletesWithoutTerminalEvent() {
         ConversationMapper mapper = mock(ConversationMapper.class);
@@ -54,8 +52,7 @@ class ConversationServiceImplTest {
         when(rag.answer(anyLong(), anyString(), anyString(), anyString()))
                 .thenAnswer(invocation -> Flux.just(new AnswerEvent.Started(invocation.getArgument(3))));
         when(documents.hasAvailableDocuments(anyLong())).thenReturn(true);
-        ConversationService service = new ConversationServiceImpl(mapper, knowledgeBases, documents, records, rag,
-                mock(ConversationAudit.class), mock(FeedbackService.class));
+        AnswerSessionService service = new AnswerSessionServiceImpl(mapper, knowledgeBases, documents, records, rag);
 
         service.askAndStream(7L, 3L, new AskQuestionRequest("问题", "request-1")).collectList().block();
 
@@ -64,9 +61,9 @@ class ConversationServiceImplTest {
 
     @Test
     void rejectsBlankRequestIdBeforeCreatingRecord() {
-        ConversationService service = new ConversationServiceImpl(mock(ConversationMapper.class),
+        AnswerSessionService service = new AnswerSessionServiceImpl(mock(ConversationMapper.class),
                 mock(KnowledgeBaseService.class), mock(DocumentService.class), mock(QaRecordService.class),
-                mock(RagAnswerPort.class), mock(ConversationAudit.class), mock(FeedbackService.class));
+                mock(RagAnswerPort.class));
 
         assertThatThrownBy(() -> service.askAndStream(7L, 3L, new AskQuestionRequest("问题", " ")))
                 .isInstanceOf(BusinessException.class)
@@ -87,8 +84,8 @@ class ConversationServiceImplTest {
         when(mapper.selectForStreaming(3L, 7L)).thenReturn(conversation);
         when(records.hasPending(3L)).thenReturn(true);
         when(documents.hasAvailableDocuments(anyLong())).thenReturn(true);
-        ConversationService service = new ConversationServiceImpl(mapper, knowledgeBases, documents, records,
-                mock(RagAnswerPort.class), mock(ConversationAudit.class), mock(FeedbackService.class));
+        AnswerSessionService service = new AnswerSessionServiceImpl(mapper, knowledgeBases, documents, records,
+                mock(RagAnswerPort.class));
 
         assertThatThrownBy(() -> service.askAndStream(7L, 3L, new AskQuestionRequest("问题", "request-2")))
                 .isInstanceOf(BusinessException.class)
@@ -109,9 +106,8 @@ class ConversationServiceImplTest {
         record.setStatus(QaRecordStatus.COMPLETED);
         record.setAnswer("最终答案");
         when(records.findByGenerationId("gen-1")).thenReturn(record);
-        ConversationService service = new ConversationServiceImpl(mapper, mock(KnowledgeBaseService.class),
-                mock(DocumentService.class), records, mock(RagAnswerPort.class), mock(ConversationAudit.class),
-                mock(FeedbackService.class));
+        AnswerSessionService service = new AnswerSessionServiceImpl(mapper, mock(KnowledgeBaseService.class),
+                mock(DocumentService.class), records, mock(RagAnswerPort.class));
 
         AnswerStateSnapshot snapshot = service.getAnswerState(7L, 3L, "gen-1");
 
@@ -229,7 +225,7 @@ class ConversationServiceImplTest {
         when(fixture.records.findByGenerationId(generationId)).thenReturn(record);
     }
 
-    private record Fixture(ConversationService service, QaRecordService records, RagAnswerPort rag,
+    private record Fixture(AnswerSessionService service, QaRecordService records, RagAnswerPort rag,
             ArgumentCaptor<String> generationIds) {
         private static Fixture streaming() {
             ConversationMapper mapper = mock(ConversationMapper.class);
@@ -244,8 +240,8 @@ class ConversationServiceImplTest {
             when(mapper.selectForStreaming(3L, 7L)).thenReturn(conversation);
             when(records.hasPending(anyLong())).thenReturn(false);
             when(documents.hasAvailableDocuments(anyLong())).thenReturn(true);
-            ConversationService service = new ConversationServiceImpl(mapper, mock(KnowledgeBaseService.class),
-                    documents, records, rag, mock(ConversationAudit.class), mock(FeedbackService.class));
+            AnswerSessionService service = new AnswerSessionServiceImpl(mapper, mock(KnowledgeBaseService.class),
+                    documents, records, rag);
             return new Fixture(service, records, rag, ArgumentCaptor.forClass(String.class));
         }
 
@@ -275,9 +271,8 @@ class ConversationServiceImplTest {
         record.setStatus(QaRecordStatus.STARTED);
         record.setAnswer("");
         when(records.findByGenerationId("gen-2")).thenReturn(record);
-        ConversationService service = new ConversationServiceImpl(mapper, mock(KnowledgeBaseService.class),
-                mock(DocumentService.class), records, mock(RagAnswerPort.class), mock(ConversationAudit.class),
-                mock(FeedbackService.class));
+        AnswerSessionService service = new AnswerSessionServiceImpl(mapper, mock(KnowledgeBaseService.class),
+                mock(DocumentService.class), records, mock(RagAnswerPort.class));
 
         AnswerStateSnapshot snapshot = service.getAnswerState(7L, 3L, "gen-2");
 

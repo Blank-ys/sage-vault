@@ -3,7 +3,9 @@ package com.sagevault.kb.support;
 import com.sagevault.kb.conversation.domain.AnswerEvent;
 import com.sagevault.kb.conversation.domain.ConversationEntity;
 import com.sagevault.kb.conversation.mapper.ConversationMapper;
+import com.sagevault.kb.conversation.service.AnswerSessionService;
 import com.sagevault.kb.conversation.service.ConversationService;
+import com.sagevault.kb.conversation.service.impl.AnswerSessionServiceImpl;
 import com.sagevault.kb.conversation.service.impl.ConversationServiceImpl;
 import com.sagevault.kb.conversation.service.port.ConversationAudit;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
@@ -46,6 +48,7 @@ public final class InMemoryRepositories {
     private final KnowledgeBaseService knowledgeBases;
     private final KnowledgeBases knowledgeBaseMapper;
     private final ConversationService conversations;
+    private final AnswerSessionService answerSessions;
     private final FeedbackService feedbacks;
     private final List<String> conversationAuditTrail = new ArrayList<>();
     private final List<String> feedbackAuditTrail = new ArrayList<>();
@@ -91,8 +94,9 @@ public final class InMemoryRepositories {
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
         ConversationAudit audit = (conversationId, removedRecordCount) ->
                 conversationAuditTrail.add("deleted:" + conversationId + ":" + removedRecordCount);
-        conversations = new ConversationServiceImpl(new Conversations(), knowledgeBases, documents, records, emptyRag,
-                audit, feedbacks);
+        Conversations conversationsMapper = new Conversations();
+        answerSessions = new AnswerSessionServiceImpl(conversationsMapper, knowledgeBases, documents, records, emptyRag);
+        conversations = new ConversationServiceImpl(conversationsMapper, knowledgeBases, records, feedbacks, audit);
     }
 
     public KnowledgeBaseService knowledgeBases() { return knowledgeBases; }
@@ -102,6 +106,7 @@ public final class InMemoryRepositories {
         knowledgeBaseMapper.setStatus(name, status);
     }
     public ConversationService conversations() { return conversations; }
+    public AnswerSessionService answerSessions() { return answerSessions; }
 
     /** 用给定的内容清理器构造级联删除推进器，便于按脚本观察每轮推进结果。 */
     public KnowledgeBaseCascadeDeleteTask cascadeDeleteTask(KnowledgeBaseContentCleaner cleaner) {
@@ -113,18 +118,25 @@ public final class InMemoryRepositories {
     /** 记录服务层触发内容重试清理的知识库，用于断言"重试删除"确实重新驱动了清理。 */
     public List<Long> retriedContentCleanups() { return List.copyOf(retriedContentCleanups); }
 
-    /** 用自定义 RAG 端口构造一套独立的会话服务，便于观察检索入参。 */
-    public ConversationService conversationsWith(RagAnswerPort rag) {
+    /** 用自定义 RAG 端口构造一套独立的会话/回答装配，便于观察检索入参。 */
+    public ConversationRig conversationsWith(RagAnswerPort rag) {
         DocumentService documents = Mockito.mock(DocumentService.class);
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
         Feedbacks feedbackMapper = new Feedbacks();
         QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
         feedbackMapper.bindQaRecords(qaRecordMapper);
-        return new ConversationServiceImpl(new Conversations(), knowledgeBases, documents,
-                new QaRecordServiceImpl(qaRecordMapper, new Diagnostics()), rag,
-                (conversationId, removedRecordCount) -> { },
-                new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, new Diagnostics(), recordingFeedbackAudit()));
+        ConversationMapper conversationsMapper = new Conversations();
+        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper, new Diagnostics());
+        return new ConversationRig(
+                new ConversationServiceImpl(conversationsMapper, knowledgeBases, records,
+                        new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, new Diagnostics(),
+                                recordingFeedbackAudit()),
+                        (conversationId, removedRecordCount) -> { }),
+                new AnswerSessionServiceImpl(conversationsMapper, knowledgeBases, documents, records, rag));
     }
+
+    /** 一套共享会话 Mapper 的会话/回答装配，供跨用例场景同时使用两个公开 interface。 */
+    public record ConversationRig(ConversationService conversations, AnswerSessionService answerSessions) { }
 
     /** 记录审计调用，便于断言管理端操作留痕且不含正文。 */
     private FeedbackAudit recordingFeedbackAudit() {

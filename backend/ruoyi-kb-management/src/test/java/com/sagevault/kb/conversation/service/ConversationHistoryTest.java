@@ -13,6 +13,7 @@ import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import com.sagevault.kb.support.InMemoryRepositories;
+import com.sagevault.kb.support.InMemoryRepositories.ConversationRig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,12 +31,14 @@ class ConversationHistoryTest {
 
     private InMemoryRepositories repositories;
     private ConversationService conversations;
+    private AnswerSessionService answerSessions;
     private long knowledgeBaseId;
 
     @BeforeEach
     void setUp() {
         repositories = new InMemoryRepositories();
         conversations = repositories.conversations();
+        answerSessions = repositories.answerSessions();
         knowledgeBaseId = repositories.knowledgeBases()
                 .create(new CreateKnowledgeBaseRequest("产品知识库", "描述")).id();
     }
@@ -130,10 +133,12 @@ class ConversationHistoryTest {
     @Test
     void everyQuestionRetrievesTheBoundKnowledgeBaseWithoutHistoryContext() {
         RecordingRag rag = new RecordingRag();
-        ConversationService service = repositories.conversationsWith(rag);
-        ConversationResponse conversation = service.create(OWNER, new CreateConversationRequest(knowledgeBaseId));
-        service.askAndStream(OWNER, conversation.id(), new AskQuestionRequest("第一个问题", "request-1")).collectList().block();
-        service.askAndStream(OWNER, conversation.id(), new AskQuestionRequest("第二个问题", "request-2")).collectList().block();
+        ConversationRig rig = repositories.conversationsWith(rag);
+        ConversationResponse conversation = rig.conversations().create(OWNER, new CreateConversationRequest(knowledgeBaseId));
+        rig.answerSessions().askAndStream(OWNER, conversation.id(),
+                new AskQuestionRequest("第一个问题", "request-1")).collectList().block();
+        rig.answerSessions().askAndStream(OWNER, conversation.id(),
+                new AskQuestionRequest("第二个问题", "request-2")).collectList().block();
 
         assertThat(rag.knowledgeBaseIds).containsExactly(knowledgeBaseId, knowledgeBaseId);
         assertThat(rag.questions).containsExactly("第一个问题", "第二个问题");
@@ -155,7 +160,7 @@ class ConversationHistoryTest {
     }
 
     private void ask(long conversationId, String question, String requestId) {
-        conversations.askAndStream(OWNER, conversationId, new AskQuestionRequest(question, requestId))
+        answerSessions.askAndStream(OWNER, conversationId, new AskQuestionRequest(question, requestId))
                 .collectList().block();
     }
 

@@ -25,6 +25,7 @@ import com.ruoyi.common.security.service.TokenService;
 import com.ruoyi.system.api.model.LoginUser;
 import com.sagevault.kb.conversation.domain.AnswerStateSnapshot;
 import com.sagevault.kb.conversation.domain.ConversationResponse;
+import com.sagevault.kb.conversation.service.AnswerSessionService;
 import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.BusinessExceptionHandler;
@@ -45,6 +46,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ConversationAuthorizationTest {
     private MockMvc mockMvc;
     private ConversationService conversations;
+    private AnswerSessionService answerSessions;
 
     @BeforeEach
     void setUp() {
@@ -55,7 +57,9 @@ class ConversationAuthorizationTest {
         when(conversations.create(eq(7L), any()))
                 .thenReturn(new ConversationResponse(1L, 7L, 10L, "", LocalDateTime.now(), LocalDateTime.now(),
                         false, "知识库"));
-        AspectJProxyFactory proxyFactory = new AspectJProxyFactory(new ConversationController(conversations));
+        answerSessions = mock(AnswerSessionService.class);
+        AspectJProxyFactory proxyFactory = new AspectJProxyFactory(
+                new ConversationController(conversations, answerSessions));
         proxyFactory.addAspect(new PreAuthorizeAspect());
         Object controller = proxyFactory.getProxy();
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -154,13 +158,13 @@ class ConversationAuthorizationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500));
 
-        verify(conversations, never()).stopAnswer(anyLong(), anyLong(), anyString());
+        verify(answerSessions, never()).stopAnswer(anyLong(), anyLong(), anyString());
     }
 
     @Test
     void stoppingAnotherUsersAnswerIsRefused() throws Exception {
         authenticate(7L, Set.of());
-        when(conversations.stopAnswer(7L, 99L, "gen-1"))
+        when(answerSessions.stopAnswer(7L, 99L, "gen-1"))
                 .thenThrow(new BusinessException(ErrorCode.CONVERSATION_FORBIDDEN, "无权访问该会话"));
 
         mockMvc.perform(post("/conversations/99/answers/gen-1/stop")
@@ -172,7 +176,7 @@ class ConversationAuthorizationTest {
     @Test
     void stoppingAnAlreadyFinishedAnswerSurfacesTheBusinessError() throws Exception {
         authenticate(7L, Set.of());
-        when(conversations.stopAnswer(7L, 1L, "gen-1"))
+        when(answerSessions.stopAnswer(7L, 1L, "gen-1"))
                 .thenThrow(new BusinessException(ErrorCode.ANSWER_NOT_STOPPABLE, "该回答已结束，无法停止"));
 
         mockMvc.perform(post("/conversations/1/answers/gen-1/stop")
@@ -184,7 +188,7 @@ class ConversationAuthorizationTest {
     @Test
     void stoppingOwnAnswerReturnsTheStoppedSnapshot() throws Exception {
         authenticate(7L, Set.of());
-        when(conversations.stopAnswer(7L, 1L, "gen-1"))
+        when(answerSessions.stopAnswer(7L, 1L, "gen-1"))
                 .thenReturn(new AnswerStateSnapshot("gen-1", true, QaRecordStatus.STOPPED, "已经生成的部分"));
 
         mockMvc.perform(post("/conversations/1/answers/gen-1/stop")

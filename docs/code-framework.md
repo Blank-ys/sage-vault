@@ -155,7 +155,7 @@ com/sagevault/kb/
 - MyBatis Mapper 接口只声明持久化方法，SQL 统一放在 `resources/mapper/<capability>/` 的 XML 中；XML 使用完整接口名作为 namespace、显式 `resultMap` 和列清单，不混用 SQL 注解或 `SELECT *`。
 - 自增主键使用 MyBatis generated-key 映射；名称规范化等业务值由 `XxxServiceImpl` 或业务类型计算，Mapper 只持久化结果。
 - 跨能力只导入对方公开 `XxxService` interface；不得导入 Mapper、持久化对象、`XxxServiceImpl` 或 adapter。
-- `ConversationService` 同时公开创建会话与发起问题用例；`ConversationServiceImpl` 直接使用 `ConversationMapper` 访问本能力数据，并通过 `KnowledgeBaseService`、`QaRecordService` 和 RAG port 完成回答编排，不创建重复的回答 Service，也不进行 Service 自调用。
+- 会话能力通过两个公开 application interface 暴露：`ConversationService` 承载会话 CRUD 与历史投影，`AnswerSessionService` 承载回答生命周期（开始并流式返回、状态查询、显式停止）。`ConversationServiceImpl` 直接使用 `ConversationMapper` 访问本能力数据，并通过 `QaRecordService`、`FeedbackService` 完成历史投影；`AnswerSessionServiceImpl` 收敛发起事务、SSE 事件流、停止信号、RAG 取消与终态裁决，通过 `ConversationMapper` 校验归属、`KnowledgeBaseService` 校验可用性、`QaRecordService` 创建和裁决记录、RAG port 发起和取消回答。两者都不进行 Service 自调用。
 - `AnswerEvent` 是会话回答流程的 Java-owned domain model，放在 `conversation/domain`；RAG adapter 将 Python wire event 映射为它。问答记录能力只接收明确的状态裁决，不依赖流事件类型；不创建根级 `model`、`event` 或 `shared` 包。
 - 领域状态使用带不可变 `desc` 描述的 enum；MyBatis 按 enum `name()` 持久化，`desc` 不参与状态判断或数据库存储。Issue 01 不自动把描述扩展到 HTTP Response；有真实展示需求时由 Response 显式映射。
 - Issue 01 保持单一 `KnowledgeBaseService`，并以 `requireAvailable(knowledgeBaseId)` 等意图化窄方法服务跨能力协作；消费者不得取得完整 Response 后自行复制可用性规则。出现真实且稳定的权限或消费者分化前不预拆 Query/Management Service。

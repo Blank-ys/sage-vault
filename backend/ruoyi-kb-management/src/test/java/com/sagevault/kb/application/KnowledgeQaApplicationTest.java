@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.sagevault.kb.conversation.domain.AskQuestionRequest;
 import com.sagevault.kb.conversation.domain.CreateConversationRequest;
 import com.sagevault.kb.conversation.domain.AnswerEvent;
+import com.sagevault.kb.conversation.service.AnswerSessionService;
 import com.sagevault.kb.conversation.service.ConversationService;
 import com.sagevault.kb.knowledgebase.domain.CreateKnowledgeBaseRequest;
 import com.sagevault.kb.knowledgebase.domain.KnowledgeBaseStatus;
@@ -21,12 +22,14 @@ class KnowledgeQaApplicationTest {
     private InMemoryRepositories repositories;
     private KnowledgeBaseService knowledgeBases;
     private ConversationService conversations;
+    private AnswerSessionService answerSessions;
 
     @BeforeEach
     void setUp() {
         repositories = new InMemoryRepositories();
         knowledgeBases = repositories.knowledgeBases();
         conversations = repositories.conversations();
+        answerSessions = repositories.answerSessions();
     }
 
     @Test
@@ -85,7 +88,7 @@ class KnowledgeQaApplicationTest {
         var conversation = conversations.create(7L,
                 new CreateConversationRequest(knowledgeBase.id()));
 
-        List<AnswerEvent> events = conversations.askAndStream(7L, conversation.id(),
+        List<AnswerEvent> events = answerSessions.askAndStream(7L, conversation.id(),
                 new AskQuestionRequest("这里有什么内容？", "req-1")).collectList().block();
 
         assertThat(events).containsExactly(
@@ -98,7 +101,7 @@ class KnowledgeQaApplicationTest {
         var knowledgeBase = knowledgeBases.create(new CreateKnowledgeBaseRequest("隔离知识", ""));
         var conversation = conversations.create(7L, new CreateConversationRequest(knowledgeBase.id()));
 
-        assertThatThrownBy(() -> conversations.askAndStream(8L, conversation.id(),
+        assertThatThrownBy(() -> answerSessions.askAndStream(8L, conversation.id(),
                 new AskQuestionRequest("问题", "req-2")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("无权访问");
@@ -110,7 +113,7 @@ class KnowledgeQaApplicationTest {
         var conversation = conversations.create(7L, new CreateConversationRequest(knowledgeBase.id()));
         repositories.setKnowledgeBaseStatus("待删除知识", KnowledgeBaseStatus.DELETING);
 
-        assertThatThrownBy(() -> conversations.askAndStream(7L, conversation.id(),
+        assertThatThrownBy(() -> answerSessions.askAndStream(7L, conversation.id(),
                 new AskQuestionRequest("问题", "req-3")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("知识库当前不可用");
