@@ -124,9 +124,18 @@ export function useQaSession() {
 
   // 用户显式停止：调用 Java 停止接口裁决终态，不断开浏览器连接，
   // 后端裁决后由流上的 'stopped' 事件自然收尾，已收内容保持展示。
+  // 若尚未拿到 generationId（started 事件未到达），无法定位生成，只本地中断连接并清理，
+  // 不发后端请求，避免畸形 POST 与 GET 端点碰撞。
   async function stop(conversationId) {
     stopping.value = true
     try {
+      if (!streamingGenerationId.value) {
+        controller?.abort()
+        streamingGenerationId.value = ''
+        qaGuard.setStreaming(false)
+        resetStream()
+        return
+      }
       await stopAnswer(conversationId, streamingGenerationId.value)
       // 停止接口已成功：立即清空 generationId，避免离开保护在 'stopped' 事件到达前重复触发
       streamingGenerationId.value = ''
@@ -157,7 +166,15 @@ export function useQaSession() {
         return false
       }
       try {
-        await stopAnswer(conversationId, streamingGenerationId.value)
+        // 尚未拿到 generationId 时无法定位生成，只本地中断连接并清理，不发后端请求
+        if (!streamingGenerationId.value) {
+          controller?.abort()
+          streamingGenerationId.value = ''
+          qaGuard.setStreaming(false)
+          resetStream()
+        } else {
+          await stopAnswer(conversationId, streamingGenerationId.value)
+        }
       } catch (error) {
         ElMessage.error(error.message || '停止失败，已留在当前页面')
         return false

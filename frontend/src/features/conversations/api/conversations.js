@@ -22,7 +22,12 @@ export function deleteConversation(conversationId) {
 }
 
 // 停止是业务命令：必须走 Java 接口裁决终态，仅在浏览器侧中断连接只会得到"未完成"。
+// generationId 为空（如 started 事件尚未到达）时无法定位具体生成，直接拦截，
+// 避免拼出 /answers//stop 畸形路径被网关归一后与 GET 的 answerState 端点碰撞（报"不支持 POST"）。
 export function stopAnswer(conversationId, generationId) {
+  if (!generationId) {
+    return Promise.reject(new Error('缺少生成标识，无法调用停止接口'))
+  }
   return request({
     url: `/ruoyi-kb-management/conversations/${conversationId}/answers/${generationId}/stop`,
     method: 'post'
