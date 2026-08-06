@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>架构评审 — sage-vault</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" });
+</script>
+<style>
+  .seam { stroke: #94a3b8; stroke-dasharray: 4 4; fill: none; }
+  .leak { stroke: #dc2626; stroke-width: 2px; fill: none; }
+  .arrow { stroke: #475569; stroke-width: 1.5px; fill: none; }
+  .label { font: 10px ui-monospace, Menlo, monospace; letter-spacing: 0.05em; text-transform: uppercase; }
+</style>
+</head>
+<body class="bg-stone-50 text-slate-900 font-sans">
+<main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+<header>
+  <p class="text-xs uppercase tracking-widest text-slate-400">sage-vault · 2026-08-06</p>
+  <h1 class="font-serif text-4xl mt-2">架构评审 — 加深机会（deepening opportunities）</h1>
+  <div class="mt-6 flex flex-wrap gap-4 text-xs text-slate-600">
+    <span class="inline-flex items-center gap-2"><span class="inline-block w-5 h-3 border border-slate-300 bg-white"></span> module</span>
+    <span class="inline-flex items-center gap-2"><svg width="20" height="10"><line x1="0" y1="5" x2="20" y2="5" class="seam"/></svg> seam</span>
+    <span class="inline-flex items-center gap-2"><svg width="20" height="10"><line x1="0" y1="5" x2="20" y2="5" class="leak"/></svg> 泄漏（leakage）</span>
+    <span class="inline-flex items-center gap-2"><span class="inline-block w-5 h-3 bg-slate-900"></span> 深模块（deep module）</span>
+    <span class="inline-flex items-center gap-2"><span class="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">Strong</span><span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">Worth exploring</span><span class="rounded-full bg-slate-200 text-slate-700 px-2 py-0.5">Speculative</span></span>
+  </div>
+</header>
+
+<section id="candidates" class="space-y-14">
+
+<!-- ============ CANDIDATE 1 ============ -->
+<article class="space-y-4">
+  <div class="flex items-center gap-3 flex-wrap">
+    <h2 class="font-serif text-2xl">1 · 给问答工作台一个深流式生命周期模块</h2>
+  </div>
+  <div class="flex flex-wrap gap-2 text-xs">
+    <span class="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1">Strong</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 px-2.5 py-1">in-process</span>
+  </div>
+  <p class="font-mono text-sm text-slate-600 break-words">frontend/src/features/conversations/pages/WorkspacePage.vue · store/qaSession.js · store/qaGuard.js · api/conversations.js · index.js</p>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <!-- BEFORE -->
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">before — 状态机埋在页面里</p>
+      <div class="space-y-2">
+        <div class="rounded border border-slate-300 bg-white p-2">
+          <p class="label text-slate-500 mb-1">WorkspacePage.vue · 897 行</p>
+          <div class="space-y-1 pl-2 border-l-2 border-slate-200">
+            <div class="rounded bg-red-50 border border-red-200 px-2 py-1 text-[11px]">onAnswerEvent reducer（started/delta/refused/failed/stopped）</div>
+            <div class="rounded bg-red-50 border border-red-200 px-2 py-1 text-[11px]">9 个流式 ref · AbortController · 停止后离开编排</div>
+            <div class="rounded bg-red-50 border border-red-200 px-2 py-1 text-[11px]">statusBadgeText / statusBadgeClass 文案映射</div>
+            <div class="rounded bg-slate-100 border border-slate-200 px-2 py-1 text-[11px]">渲染 + 接线</div>
+          </div>
+        </div>
+        <div class="flex justify-center"><svg width="220" height="18"><line x1="10" y1="9" x2="210" y2="9" class="arrow"/><path d="M210 9 l-6 -4 m6 4 l-6 4" class="arrow"/></svg></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="rounded border border-slate-300 bg-white px-2 py-2 text-center"><p class="label text-slate-500">qaGuard.js · 30</p><p class="text-[11px] text-slate-500">streaming 布尔旗标</p></div>
+          <div class="rounded border border-slate-300 bg-white px-2 py-2 text-center"><p class="label text-slate-500">qaSession.js · 30</p><p class="text-[11px] text-slate-500">sidebarCollapsed</p></div>
+        </div>
+        <p class="text-[11px] text-slate-500">空壳 store 只向上透传一个旗标；真正的生命周期在页面里，不可测。</p>
+      </div>
+    </div>
+    <!-- AFTER -->
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">after — 小 interface 后的深模块</p>
+      <div class="space-y-2">
+        <div class="rounded border border-slate-300 bg-white p-2">
+          <p class="label text-slate-500 mb-1">WorkspacePage.vue · 变薄</p>
+          <div class="pl-2 border-l-2 border-slate-200"><div class="rounded bg-slate-100 border border-slate-200 px-2 py-1 text-[11px]">渲染 + 接线到 composable</div></div>
+        </div>
+        <div class="flex justify-center"><svg width="220" height="18"><line x1="10" y1="9" x2="210" y2="9" class="arrow"/><path d="M210 9 l-6 -4 m6 4 l-6 4" class="arrow"/></svg></div>
+        <div class="rounded-lg deepbox p-2">
+          <p class="label text-emerald-300 mb-1">useQaSession（composable）· 小 interface</p>
+          <div class="space-y-1 pl-2 border-l-2 border-slate-700">
+            <div class="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300">onAnswerEvent reducer · 流式 ref · ask / stop / cancel</div>
+            <div class="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300">SSE 帧解析 · 状态 → 文案映射</div>
+            <div class="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300">离开保护状态机</div>
+          </div>
+        </div>
+        <div class="flex justify-center"><svg width="220" height="18"><line x1="10" y1="9" x2="210" y2="9" class="arrow"/><path d="M210 9 l-6 -4 m6 4 l-6 4" class="arrow"/></svg></div>
+        <div class="rounded border border-slate-300 bg-white px-2 py-2 text-center"><p class="label text-slate-500">features/conversations/index.js</p><p class="text-[11px] text-slate-500">公开入口导出该 composable</p></div>
+        <p class="text-[11px] text-slate-500">一个 interface——start/stop/select + 状态快照——承载整个生命周期。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 text-sm">
+    <div><p class="label text-slate-400 mb-1">Problem</p><p class="text-slate-700">流式生命周期状态机——reducer、9 个流式 ref、abort 编排、状态映射——挤在 427 行的 <code>&lt;script setup&gt;</code> 里；两个 store 只是影子旗标。仓库里改动最频繁的文件恰恰最不可测，而且前端目前完全没有测试设施。</p></div>
+    <div><p class="label text-slate-400 mb-1">Solution</p><p class="text-slate-700">抽一个深模块 <code>useQaSession</code>，用一个小 interface 承载完整流生命周期，并经由 feature 的 <code>index.js</code> 公开；页面只保留渲染。</p></div>
+  </div>
+
+  <div class="text-sm">
+    <p class="label text-slate-400 mb-1">Wins</p>
+    <ul class="list-disc list-inside text-slate-700 space-y-0.5">
+      <li>测试命中一个 interface——正是文档规定的前端测试 seam（<code>code-framework.md:290</code>）</li>
+      <li>reducer 离开 <code>.vue</code> 文件</li>
+      <li>9 个流式 ref 收敛一处；流相关 bug 的 locality 集中</li>
+      <li><code>index.js</code> 成为真正的公开入口；页面不再直接 import 内部实现</li>
+    </ul>
+  </div>
+</article>
+
+<!-- ============ CANDIDATE 2 ============ -->
+<article class="space-y-4">
+  <h2 class="font-serif text-2xl">2 · 加深问答记录 seam——隐藏持久化模型</h2>
+  <div class="flex flex-wrap gap-2 text-xs">
+    <span class="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1">Strong</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 px-2.5 py-1">in-process</span>
+  </div>
+  <p class="font-mono text-sm text-slate-600 break-words">qarecord/service/QaRecordService.java · feedback/service/impl/FeedbackServiceImpl.java · feedback/domain/AdminFeedbackDetail.java · conversation/service/impl/ConversationServiceImpl.java</p>
+
+  <div class="rounded-lg border border-slate-200 bg-white p-4 overflow-x-auto">
+    <pre class="mermaid">
+flowchart LR
+  FB[FeedbackServiceImpl] -->|直接 import Mapper| QM[QaRecordMapper + RetrievalDiagnosticMapper]
+  CV[ConversationServiceImpl] -->|findByGenerationId 返回 Entity| QR[QaRecordService]
+  QR -.->|QaRecordEntity 泄漏出去| CV
+  AD[AdminFeedbackDetail.from] -->|逐字段读取| RD[RetrievalDiagnosticEntity]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class QM,RD,QR leak
+    </pre>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 text-sm">
+    <div><p class="label text-slate-400 mb-1">Problem</p><p class="text-slate-700">问答记录能力没有自己的窗口，持久化模型却越界：<code>FeedbackServiceImpl</code> 是全模块唯一跨能力直接 import Mapper 的类；<code>findByGenerationId</code> 返回 <code>QaRecordEntity</code>；<code>RetrievalDiagnosticEntity</code> 被反馈 DTO 逐字段读取；共享诊断类型归属错了能力。</p></div>
+    <div><p class="label text-slate-400 mb-1">Solution</p><p class="text-slate-700">加深 seam：<code>QaRecordService</code> 提供意图化窄查询（<code>requirePending</code>、诊断快照值对象）；共享诊断类型归一个 owner；feedback 不再碰 Mapper 与 Entity。</p></div>
+  </div>
+
+  <div class="text-sm">
+    <p class="label text-slate-400 mb-1">Wins</p>
+    <ul class="list-disc list-inside text-slate-700 space-y-0.5">
+      <li>唯一一处跨能力 Mapper import 消失</li>
+      <li>状态推导（<code>status != STARTED</code>）收敛进 qarecord</li>
+      <li>持久化模型留在 seam 后，由 adapter 映射</li>
+      <li>测试不再 <code>new QaRecordEntity()</code>；seam 成为测试面</li>
+    </ul>
+  </div>
+</article>
+
+<!-- ============ CANDIDATE 3 ============ -->
+<article class="space-y-4">
+  <h2 class="font-serif text-2xl">3 · 把组合根从 Python transport 拆出去</h2>
+  <div class="flex flex-wrap gap-2 text-xs">
+    <span class="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-1">Strong</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 px-2.5 py-1">ports &amp; adapters</span>
+  </div>
+  <p class="font-mono text-sm text-slate-600 break-words">ai-modules/services/rag/src/sage_vault_rag/transport/http/app.py · bootstrap/settings.py · adapters/milvus/store.py · adapters/bge_m3/embedder.py</p>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">before — app.py 同时是 transport + 安全 + 组合根</p>
+      <div class="rounded border border-red-300 bg-red-50 p-2">
+        <p class="label text-red-500 mb-1">transport/http/app.py · 450 行</p>
+        <div class="space-y-1 pl-2 border-l-2 border-red-200">
+          <div class="rounded bg-white border border-red-200 px-2 py-1 text-[11px]">路由 + SSE 映射</div>
+          <div class="rounded bg-white border border-red-200 px-2 py-1 text-[11px]">4× verify_*（HMAC + 重放）— 复制粘贴</div>
+          <div class="rounded bg-white border border-red-200 px-2 py-1 text-[11px]">build_indexing / build_answering / build_cleanup</div>
+        </div>
+      </div>
+      <div class="flex justify-center"><svg width="220" height="18"><line x1="10" y1="9" x2="210" y2="9" class="leak"/><path d="M210 9 l-6 -4 m6 4 l-6 4" class="leak"/></svg></div>
+      <div class="grid grid-cols-2 gap-2 text-[11px]">
+        <div class="rounded border border-red-300 bg-red-50 px-2 py-2 text-center">单进程 3× MilvusVectorStore</div>
+        <div class="rounded border border-red-300 bg-red-50 px-2 py-2 text-center">2× BgeM3Embedder — 模型加载两次</div>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-2">每个 builder 各自 new 依赖；GPU/内存翻倍。</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">after — bootstrap 拥有资源，transport 变薄</p>
+      <div class="space-y-2">
+        <div class="rounded border border-slate-300 bg-white p-2"><p class="label text-slate-500">app.py</p><p class="text-[11px] text-slate-500">只留路由 + SSE 映射</p></div>
+        <div class="flex justify-center"><svg width="220" height="18"><line x1="10" y1="9" x2="210" y2="9" class="arrow"/><path d="M210 9 l-6 -4 m6 4 l-6 4" class="arrow"/></svg></div>
+        <div class="rounded-lg deepbox p-2">
+          <p class="label text-emerald-300 mb-1">bootstrap/composition.py · 深</p>
+          <div class="space-y-1 pl-2 border-l-2 border-slate-700">
+            <div class="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300">拥有共享单例：1 embedder · 1 vector store · 1 generator</div>
+            <div class="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300">装配 indexing / answering / cleanup</div>
+          </div>
+        </div>
+        <div class="rounded border border-slate-300 bg-white p-2"><p class="label text-slate-500">verification.py</p><p class="text-[11px] text-slate-500">统一签名模块（见候选 4）</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 text-sm">
+    <div><p class="label text-slate-400 mb-1">Problem</p><p class="text-slate-700"><code>app.py</code> 把组合根和安全层塞进 transport 层，违背其文档定位（"transport + contract mapping only"）。后果：单进程建 3 个 vector store 实例、bge-m3 模型加载两次——资源所有权散落在各 builder 函数里。</p></div>
+    <div><p class="label text-slate-400 mb-1">Solution</p><p class="text-slate-700">组合根挪到 <code>bootstrap/composition.py</code>，拥有共享单例；4 份 verifier 收进一个模块；<code>app.py</code> 只保留路由与 SSE 映射。</p></div>
+  </div>
+
+  <div class="text-sm">
+    <p class="label text-slate-400 mb-1">Wins</p>
+    <ul class="list-disc list-inside text-slate-700 space-y-0.5">
+      <li>bge-m3 只加载一次，不再翻倍</li>
+      <li>资源所有权单点——locality</li>
+      <li>签名校验有唯一归属</li>
+      <li>transport/http 回归 transport-only</li>
+    </ul>
+  </div>
+</article>
+
+<!-- ============ CANDIDATE 4 ============ -->
+<article class="space-y-4">
+  <h2 class="font-serif text-2xl">4 · 每端一个请求签名模块</h2>
+  <div class="flex flex-wrap gap-2 text-xs">
+    <span class="rounded-full bg-amber-100 text-amber-800 px-2.5 py-1">Worth exploring</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 px-2.5 py-1">ports &amp; adapters</span>
+  </div>
+  <p class="font-mono text-sm text-slate-600 break-words">Java：DiscoveredRagAnswerAdapter · DiscoveredRagIndexingAdapter · DiscoveredRagCleanupAdapter · IndexingCallbackController · CleanupCallbackController · Python：transport/http/app.py（4× verify_*）</p>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">before — 同一契约事实的 9 份拷贝</p>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="space-y-2">
+          <p class="label text-slate-500">Java ×5</p>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">HMAC canonical + sign</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">HMAC canonical + sign</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">HMAC canonical + sign</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">HMAC canonical + verify</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">HMAC canonical + verify + constantTimeEquals</div>
+        </div>
+        <div class="space-y-2">
+          <p class="label text-slate-500">Python ×4</p>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">verify_signature</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">verify_cancel_signature</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">verify_cleanup_signature</div>
+          <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">verify_indexing_signature</div>
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-2">签名方案一改 = 9 处联动修改才能跨契约保持一致。</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">after — 每端一个模块</p>
+      <div class="space-y-3">
+        <div class="rounded-lg deepbox p-2"><p class="label text-emerald-300 mb-1">Java · RequestSigner</p><p class="text-[11px] text-slate-300">sign(secret, method, path, body, ts) — 所有 adapter 与回调 controller 共用</p></div>
+        <div class="rounded-lg deepbox p-2"><p class="label text-emerald-300 mb-1">Python · verification.py</p><p class="text-[11px] text-slate-300">一个 verifier 供四条路由复用</p></div>
+        <p class="text-[11px] text-slate-500">契约测试指向该模块，而不是各调用点。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 text-sm">
+    <div><p class="label text-slate-400 mb-1">Problem</p><p class="text-slate-700">HMAC canonical/签名方案在 Java 复制 5 份、Python 复制 4 份（外加 2 份 <code>constantTimeEquals</code>）。它是跨端契约事实——今天格式一变需要 9 处联动改，漂移直到上线断链才暴露。</p></div>
+    <div><p class="label text-slate-400 mb-1">Solution</p><p class="text-slate-700">每端一个深签名模块，极简 interface，所有 adapter 与回调 controller 引用它；契约测试指向它。</p></div>
+  </div>
+
+  <div class="text-sm">
+    <p class="label text-slate-400 mb-1">Wins</p>
+    <ul class="list-disc list-inside text-slate-700 space-y-0.5">
+      <li>契约改动只改每端一处——locality</li>
+      <li>constantTimeEquals 去重</li>
+      <li>签名可隔离测试</li>
+    </ul>
+  </div>
+</article>
+
+<!-- ============ CANDIDATE 5 ============ -->
+<article class="space-y-4">
+  <h2 class="font-serif text-2xl">5 · 答案状态词表只有一个 owner</h2>
+  <div class="flex flex-wrap gap-2 text-xs">
+    <span class="rounded-full bg-amber-100 text-amber-800 px-2.5 py-1">Worth exploring</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 px-2.5 py-1">in-process</span>
+  </div>
+  <p class="font-mono text-sm text-slate-600 break-words">frontend/src/features/conversations/pages/WorkspacePage.vue（statusBadgeText · answerStatusText · displayTitle）· frontend/src/features/feedback/api/adminFeedback.js（ANSWER_STATUS_LABELS）</p>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">before — 两份拷贝、两套键集</p>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="rounded border border-red-300 bg-red-50 p-2 text-[11px]"><p class="label text-red-500 mb-1">WorkspacePage</p>FAILED ✓<br/>STARTED ✗ · COMPLETED ✗<br/>UNFINISHED ✗</div>
+        <div class="rounded border border-red-300 bg-red-50 p-2 text-[11px]"><p class="label text-red-500 mb-1">adminFeedback.js</p>STARTED ✓ · COMPLETED ✓<br/>UNFINISHED ✓ · STOPPED ✓<br/>FAILED ✗</div>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-2">同一后端 <code>QaRecordStatus</code> 枚举；其中一份必然相对 wire 落后。</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">after — 一个模块、一个同步点</p>
+      <div class="space-y-2">
+        <div class="rounded-lg deepbox p-2"><p class="label text-emerald-300 mb-1">conversations · answerStatus.js</p><p class="text-[11px] text-slate-300">单一 status → 文案 / 标签映射，经 index.js 导出</p></div>
+        <div class="flex justify-center"><svg width="220" height="16"><line x1="10" y1="8" x2="100" y2="8" class="arrow"/><path d="M100 8 l-6 -4 m6 4 l-6 4" class="arrow"/></svg><svg width="220" height="16"><line x1="10" y1="8" x2="100" y2="8" class="arrow"/><path d="M100 8 l-6 -4 m6 4 l-6 4" class="arrow"/></svg></div>
+        <div class="grid grid-cols-2 gap-2 text-center">
+          <div class="rounded border border-slate-300 bg-white px-2 py-2"><p class="label text-slate-500">WorkspacePage</p></div>
+          <div class="rounded border border-slate-300 bg-white px-2 py-2"><p class="label text-slate-500">feedback 页面</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 text-sm">
+    <div><p class="label text-slate-400 mb-1">Problem</p><p class="text-slate-700">同一后端枚举经两份互相矛盾的前端副本渲染（<code>FAILED</code> 系 vs <code>STARTED/COMPLETED</code> 系）；<code>displayTitle</code> 也在两个文件重复。按 AGENTS.md，前端不得再保留一套会漂移的领域状态副本。</p></div>
+    <div><p class="label text-slate-400 mb-1">Solution</p><p class="text-slate-700">conversations feature 内一个 status → 文案映射模块，经公开入口导出，两个页面共用。</p></div>
+  </div>
+
+  <div class="text-sm">
+    <p class="label text-slate-400 mb-1">Wins</p>
+    <ul class="list-disc list-inside text-slate-700 space-y-0.5">
+      <li>单一词表、单点同步——locality</li>
+      <li>删掉陈旧副本</li>
+      <li>跨 feature 读取只走 feature seam</li>
+    </ul>
+  </div>
+</article>
+
+<!-- ============ CANDIDATE 6 ============ -->
+<article class="space-y-4">
+  <h2 class="font-serif text-2xl">6 · RAG 失败分类统一一种语义</h2>
+  <div class="flex flex-wrap gap-2 text-xs">
+    <span class="rounded-full bg-amber-100 text-amber-800 px-2.5 py-1">Worth exploring</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 px-2.5 py-1">ports &amp; adapters</span>
+  </div>
+  <p class="font-mono text-sm text-slate-600 break-words">application/indexing/service.py · application/cleanup/service.py · application/answering/service.py · model/privacy.py</p>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">before — 三套方案、两套语义</p>
+      <div class="space-y-2">
+        <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">indexing → <code>type(exc).__name__</code> → Java 诊断 <span class="text-red-600">（Python 类名跨契约泄漏）</span></div>
+        <div class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px]">cleanup → <code>type(exc).__name__</code> → Java 诊断 <span class="text-red-600">（同样泄漏）</span></div>
+        <div class="rounded border border-slate-300 bg-white px-2 py-1 text-[11px]">answering → 受控 <code>privacy.classify_failure</code> 词表</div>
+      </div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">after — 一个分类器守在 seam</p>
+      <div class="space-y-2">
+        <div class="rounded-lg deepbox p-2"><p class="label text-emerald-300 mb-1">model/failure.py · classify</p><p class="text-[11px] text-slate-300">只输出注册错误码 + 安全的脱敏详情</p></div>
+        <div class="flex justify-center"><svg width="260" height="16"><line x1="10" y1="8" x2="130" y2="8" class="arrow"/><path d="M130 8 l-6 -4 m6 4 l-6 4" class="arrow"/></svg><svg width="260" height="16"><line x1="10" y1="8" x2="130" y2="8" class="arrow"/><path d="M130 8 l-6 -4 m6 4 l-6 4" class="arrow"/></svg></div>
+        <div class="grid grid-cols-2 gap-2 text-center">
+          <div class="rounded border border-slate-300 bg-white px-2 py-2"><p class="label text-slate-500">indexing</p></div>
+          <div class="rounded border border-slate-300 bg-white px-2 py-2"><p class="label text-slate-500">cleanup</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4 text-sm">
+    <div><p class="label text-slate-400 mb-1">Problem</p><p class="text-slate-700">失败分类有三套实现、两种语义：indexing 和 cleanup 把 Python 异常类名明文写进发给 Java 的诊断，answering 却用受控词表。adapter 内部细节跨 wire contract 泄漏。</p></div>
+    <div><p class="label text-slate-400 mb-1">Solution</p><p class="text-slate-700">一个使用受控词表的失败分类模块，三条 application 路径共用；adapter 负责翻译，application 永不输出原始类名。</p></div>
+  </div>
+
+  <div class="text-sm">
+    <p class="label text-slate-400 mb-1">Wins</p>
+    <ul class="list-disc list-inside text-slate-700 space-y-0.5">
+      <li>Python 内部细节不再跨契约泄漏</li>
+      <li>统一一种可测的分类语义</li>
+      <li>locality：失败词表集中在一个模块</li>
+    </ul>
+  </div>
+</article>
+
+</section>
+
+<section id="top-recommendation" class="rounded-xl border-2 border-slate-900 bg-white p-6 space-y-2">
+  <p class="text-xs uppercase tracking-widest text-slate-400">Top recommendation</p>
+  <h2 class="font-serif text-2xl">先做 #1 —— 问答工作台流式生命周期模块</h2>
+  <p class="text-slate-700 text-sm">它位于仓库最热区域（近两个月每个迭代都改动 <code>WorkspacePage.vue</code>），是产品招牌行为，且目前前端零测试设施、完全不可测。它也正对应文档声明的目标结构（<code>code-framework.md:239</code>：conversations feature 拥有单活跃流生命周期）——所以这是在恢复既定意图，而不是发明新形状。加深后，下一次 UI 改动就会落在可测的 seam 上，回报持续累积。</p>
+  <a href="#candidates" class="text-sm text-emerald-700 underline">返回候选列表 →</a>
+</section>
+
+</main>
+</body>
+</html>

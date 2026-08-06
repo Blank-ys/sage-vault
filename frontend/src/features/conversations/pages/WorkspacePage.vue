@@ -141,8 +141,8 @@
           @keydown="onQuestionKeydown"
         />
         <div class="qa-input-actions">
-          <el-button v-if="canStop" type="warning" :loading="stopping" @click="stop">停止生成</el-button>
-          <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="ask">提问</el-button>
+          <el-button v-if="canStop" type="warning" :loading="stopping" @click="onStop">停止生成</el-button>
+          <el-button v-else type="primary" :loading="asking" :disabled="!canAsk" @click="onAsk">提问</el-button>
         </div>
       </div>
 
@@ -157,15 +157,13 @@ import { useWindowSize } from '@vueuse/core'
 import { Collection, ChatDotRound, CircleCheck, Menu } from '@element-plus/icons-vue'
 import { listAvailableKnowledgeBases } from '@/features/knowledge-bases'
 import { FeedbackDialog } from '@/features/feedback'
-import { useQaGuardStore, useQaSessionStore } from '@/features/conversations'
+import { useQaGuardStore, useQaSessionStore, useQaSession } from '@/features/conversations'
 import {
-  askQuestion,
   createConversation,
   deleteConversation,
   listConversations,
   listQuestions,
-  renameConversation,
-  stopAnswer
+  renameConversation
 } from '../api/conversations'
 import { renderMarkdown } from '../composables/useMarkdown'
 import usePermissionStore from '@/store/modules/permission'
@@ -177,6 +175,25 @@ const permissionStore = usePermissionStore()
 const qaGuard = useQaGuardStore()
 const qaSession = useQaSessionStore()
 
+const {
+  streaming,
+  streamingQuestion,
+  streamingAnswer,
+  asking,
+  stopping,
+  canStop,
+  streamingHasContent,
+  streamingBubbleClass,
+  answerStatusText,
+  answerBubbleClass,
+  statusBadgeText,
+  statusBadgeClass,
+  ask,
+  stop,
+  confirmLeave,
+  resetStream
+} = useQaSession()
+
 const knowledgeBases = ref([])
 const knowledgeBaseId = ref()
 const conversations = ref([])
@@ -184,21 +201,10 @@ const activeId = ref()
 const searchKey = ref('')
 const history = ref([])
 const question = ref('')
-const streamingQuestion = ref('')
-const streamingAnswer = ref('')
-const streaming = ref(false)
-const refused = ref(false)
-const streamingFailed = ref(false)
 const loading = ref(false)
 const historyLoading = ref(false)
-const asking = ref(false)
-const stopping = ref(false)
-const streamingGenerationId = ref('')
 const feedbackVisible = ref(false)
 const feedbackQaId = ref()
-let controller
-// 离开确认串行化标志：避免路由守卫与 UI 守卫同时触发时弹出两个确认框
-let leaveConfirming = false
 
 // 响应式断点：与 RuoYi layout 一致使用 992px 区分桌面/移动
 const { width: windowWidth } = useWindowSize()
@@ -217,12 +223,6 @@ const activeConversation = computed(() => conversations.value.find(item => item.
 const activeKnowledgeBaseDeleted = computed(() => Boolean(activeConversation.value?.knowledgeBaseDeleted))
 const canAsk = computed(() => Boolean(knowledgeBaseId.value) && Boolean(question.value.trim())
   && !asking.value && !activeKnowledgeBaseDeleted.value)
-const canStop = computed(() => asking.value && Boolean(streamingGenerationId.value))
-
-// 生成是否处于"用户尚未显式停止"的活跃状态：路由守卫和 UI 守卫都依赖该信号。
-// asking 单独为 true（请求已发出但 started 未到达）不足以触发离开保护，因为没有 generationId 无法调用停止接口。
-const isGenerating = computed(() => asking.value && Boolean(streamingGenerationId.value) && !stopping.value)
-watch(isGenerating, (val) => qaGuard.setStreaming(val))
 
 // 记录最后活跃会话，供管理后台"返回问答"时恢复
 watch(activeId, (id) => {
@@ -240,20 +240,6 @@ const inputPlaceholder = computed(() => {
   if (activeKnowledgeBaseDeleted.value) return '知识库已删除，无法继续提问'
   if (!activeId.value && !knowledgeBaseId.value) return '请先在上方选择知识库，再输入你的问题'
   return '请输入你的问题（Enter 发送，Shift+Enter 换行）'
-})
-
-// 流式回答只有非占位、非拒绝、非失败的正文才走 Markdown 渲染
-const streamingHasContent = computed(() =>
-  Boolean(streamingAnswer.value)
-  && streamingAnswer.value !== '正在处理问题…'
-  && !refused.value
-  && !streamingFailed.value
-)
-
-const streamingBubbleClass = computed(() => {
-  if (refused.value) return 'bubble-refused'
-  if (streamingFailed.value) return 'bubble-failed'
-  return ''
 })
 
 function goAdmin() {
@@ -289,33 +275,6 @@ function displayTitle(conversation) {
   return conversation.title?.trim() || '未命名会话'
 }
 
-// 已停止与未完成都保留残缺正文，只有完全没有正文时才提示中断原因
-function answerStatusText(record) {
-  if (record.status === 'STOPPED') return '本次回答已停止'
-  if (record.status === 'FAILED') return '本次回答生成失败'
-  if (record.status === 'REFUSED') return '本次回答已拒答'
-  return '本次回答未完成'
-}
-
-function answerBubbleClass(record) {
-  if (record.status === 'REFUSED') return 'bubble-refused'
-  if (record.status === 'FAILED') return 'bubble-failed'
-  return ''
-}
-
-function statusBadgeText(record) {
-  if (record.status === 'REFUSED') return '已拒答'
-  if (record.status === 'FAILED') return '生成失败'
-  if (record.status === 'STOPPED') return '已停止'
-  return '未完成'
-}
-
-function statusBadgeClass(record) {
-  if (record.status === 'FAILED') return 'badge-error'
-  if (record.status === 'REFUSED' || record.status === 'STOPPED') return 'badge-warning'
-  return 'badge-info'
-}
-
 async function load() {
   loading.value = true
   try {
@@ -341,7 +300,7 @@ async function select(conversationId) {
 
 async function doSelect(conversationId) {
   activeId.value = conversationId
-  resetStreaming()
+  resetStream()
   const conversation = conversations.value.find(item => item.id === conversationId)
   // 知识库已删除的会话不回填选择器，避免把已消失的知识库当作可提问目标
   if (conversation && !conversation.knowledgeBaseDeleted) knowledgeBaseId.value = conversation.knowledgeBaseId
@@ -366,7 +325,7 @@ function doStartNew() {
   knowledgeBaseId.value = undefined
   history.value = []
   question.value = ''
-  resetStreaming()
+  resetStream()
 }
 
 async function rename(conversationId) {
@@ -396,50 +355,15 @@ async function remove(conversationId) {
 }
 
 // 统一的离开保护：UI 触发的切换会话、新建会话和进入管理后台都经过这里。
-// 生成未活跃时直接执行 action；生成活跃时先弹"停止生成并离开"确认，
-// 确认后调用现有显式停止接口，停止成功才执行 action，失败则留在原页。
+// 生成未活跃时直接执行 action；生成活跃时弹"停止生成并离开"确认，
+// 确认后调用显式停止接口，停止成功才执行 action，失败则留在原页。
 async function guardNavigate(action) {
   if (!qaGuard.needsLeaveConfirm) {
     action()
     return
   }
-  if (await confirmStopAndLeave()) {
+  if (await confirmLeave(activeId.value)) {
     action()
-  }
-}
-
-// 返回 true 表示可以继续导航（已停止或本来就没有活跃生成）；false 表示应留在原页（取消或停止失败）。
-// 路由守卫写入 qaGuard.pendingLeave 后由 watch 消费，复用同一份确认逻辑。
-async function confirmStopAndLeave() {
-  // 生成已自然结束（generationId 被清空），无需停止
-  if (!streamingGenerationId.value) return true
-  if (leaveConfirming) return false
-  leaveConfirming = true
-  try {
-    try {
-      await ElMessageBox.confirm(
-        '当前正在生成回答，离开会先停止生成。是否停止生成并离开？',
-        '停止生成并离开',
-        { confirmButtonText: '停止生成并离开', cancelButtonText: '取消', type: 'warning' }
-      )
-    } catch {
-      return false
-    }
-    try {
-      await stopAnswer(activeId.value, streamingGenerationId.value)
-    } catch (error) {
-      ElMessage.error(error.message || '停止失败，已留在当前页面')
-      return false
-    }
-    // 停止成功：中断 SSE 读取并立即清理本地活跃状态，避免后续 router.push 触发二次守卫
-    controller?.abort()
-    streamingGenerationId.value = ''
-    qaGuard.setStreaming(false)
-    resetStreaming()
-    ElMessage.success('已停止生成')
-    return true
-  } finally {
-    leaveConfirming = false
   }
 }
 
@@ -448,7 +372,7 @@ async function confirmStopAndLeave() {
 watch(() => qaGuard.pendingLeave, async (target) => {
   if (!target) return
   qaGuard.clearLeave()
-  if (await confirmStopAndLeave()) {
+  if (await confirmLeave(activeId.value)) {
     router.push(target.fullPath)
   }
 })
@@ -461,10 +385,10 @@ function onQuestionKeydown(event) {
   if (event.shiftKey) return
   // Enter：阻止默认换行并发送
   event.preventDefault()
-  if (canAsk.value) ask()
+  if (canAsk.value) onAsk()
 }
 
-async function ask() {
+async function onAsk() {
   // 新会话必须先在右侧主区域选择知识库
   if (!activeId.value && !knowledgeBaseId.value) {
     ElMessage.warning('请先在上方选择知识库')
@@ -474,28 +398,15 @@ async function ask() {
     ElMessage.warning('知识库已删除，无法继续提问')
     return
   }
-  asking.value = true
-  refused.value = false
-  streamingFailed.value = false
-  streaming.value = true
-  streamingQuestion.value = question.value.trim()
-  streamingAnswer.value = '正在处理问题…'
+  const questionText = question.value.trim()
   question.value = ''
-  controller = new AbortController()
   try {
     const conversationId = activeId.value ?? (await createNewConversation())
-    await askQuestion(conversationId, streamingQuestion.value, onAnswerEvent, controller.signal)
-    await refreshAfterAnswer(conversationId)
-  } catch (error) {
-    if (error.name !== 'AbortError') {
-      streamingFailed.value = true
-      const message = error.message || '提问失败'
-      streamingAnswer.value = message
-      ElMessage.error(message)
+    if (await ask(conversationId, questionText)) {
+      await refreshAfterAnswer(conversationId)
     }
-  } finally {
-    asking.value = false
-    controller = undefined
+  } catch (error) {
+    if (error.name !== 'AbortError') ElMessage.error(error.message || '提问失败')
   }
 }
 
@@ -507,36 +418,12 @@ async function createNewConversation() {
   return conversation.id
 }
 
-function onAnswerEvent(event) {
-  if (event.type === 'started') {
-    streamingGenerationId.value = event.generationId
-  } else if (event.type === 'delta') {
-    streamingAnswer.value = streamingAnswer.value === '正在处理问题…' ? event.delta : streamingAnswer.value + event.delta
-  } else if (event.type === 'refused') {
-    refused.value = true
-    streamingAnswer.value = event.message
-  } else if (event.type === 'failed') {
-    // Python 生成中途失败：detail 已是脱敏后的受控失败类别，不暴露原始异常/知识库 id。
-    streamingFailed.value = true
-    streamingAnswer.value = '回答生成失败，请稍后重试。' + (event.detail ? `（${event.detail}）` : '')
-  } else if (event.type === 'stopped') {
-    // 已经收到的内容保持展示，终态由后端裁决后在历史里体现为"已停止"
-    streamingGenerationId.value = ''
-  }
-}
-
-async function stop() {
-  stopping.value = true
+async function onStop() {
   try {
-    await stopAnswer(activeId.value, streamingGenerationId.value)
-    // 停止接口已成功：立即清空 generationId，避免离开保护在 SSE 'stopped' 事件到达前重复触发
-    streamingGenerationId.value = ''
-    qaGuard.setStreaming(false)
+    await stop(activeId.value)
     ElMessage.success('已停止生成')
   } catch (error) {
     ElMessage.error(error.message || '停止失败')
-  } finally {
-    stopping.value = false
   }
 }
 
@@ -544,7 +431,7 @@ async function refreshAfterAnswer(conversationId) {
   conversations.value = await listConversations()
   activeId.value = conversationId
   history.value = await listQuestions(conversationId)
-  resetStreaming()
+  resetStream()
 }
 
 function openFeedback(record) {
@@ -558,18 +445,7 @@ function markFeedbackSubmitted(qaId) {
   )
 }
 
-function resetStreaming() {
-  streaming.value = false
-  refused.value = false
-  streamingFailed.value = false
-  streamingQuestion.value = ''
-  streamingAnswer.value = ''
-  streamingGenerationId.value = ''
-}
-
 onBeforeUnmount(() => {
-  controller?.abort()
-  qaGuard.setStreaming(false)
   qaGuard.clearLeave()
 })
 // 一次性消费无管理权限提示：用 watch 覆盖组件复用（同路径不同 query）场景
