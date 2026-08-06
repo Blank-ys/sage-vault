@@ -1,6 +1,6 @@
 package com.sagevault.kb.conversation.domain;
 
-import com.sagevault.kb.feedback.domain.RetrievedChunkDiagnostic;
+import com.sagevault.kb.qarecord.domain.RetrievedChunkDiagnostic;
 
 public sealed interface AnswerEvent
         permits AnswerEvent.Started, AnswerEvent.Delta, AnswerEvent.Completed, AnswerEvent.Refused,

@@ -1,8 +1,8 @@
 package com.sagevault.kb.qarecord.service;
 
-import com.sagevault.kb.feedback.domain.RetrievedChunkDiagnostic;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordResponse;
+import com.sagevault.kb.qarecord.domain.RetrievedChunkDiagnostic;
 import java.util.List;
 import java.util.Map;
 import org.springframework.lang.Nullable;

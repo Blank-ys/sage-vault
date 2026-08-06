@@ -30,7 +30,9 @@ import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
 import com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper;
 import com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity;
+import com.sagevault.kb.qarecord.service.QaRecordEvidenceService;
 import com.sagevault.kb.qarecord.service.QaRecordService;
+import com.sagevault.kb.qarecord.service.impl.QaRecordEvidenceServiceImpl;
 import com.sagevault.kb.qarecord.service.impl.QaRecordServiceImpl;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -87,9 +89,10 @@ public final class InMemoryRepositories {
         };
         Feedbacks feedbackMapper = new Feedbacks();
         QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
-        feedbackMapper.bindQaRecords(qaRecordMapper);
-        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper, new Diagnostics());
-        feedbacks = new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, new Diagnostics(), recordingFeedbackAudit());
+        Diagnostics diagnostics = new Diagnostics();
+        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper, diagnostics);
+        feedbacks = new FeedbackServiceImpl(feedbackMapper,
+                new QaRecordEvidenceServiceImpl(qaRecordMapper, diagnostics), recordingFeedbackAudit());
         DocumentService documents = Mockito.mock(DocumentService.class);
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
         ConversationAudit audit = (conversationId, removedRecordCount) ->
@@ -124,12 +127,13 @@ public final class InMemoryRepositories {
         Mockito.when(documents.hasAvailableDocuments(Mockito.anyLong())).thenReturn(true);
         Feedbacks feedbackMapper = new Feedbacks();
         QaRecords qaRecordMapper = new QaRecords(feedbackMapper);
-        feedbackMapper.bindQaRecords(qaRecordMapper);
         ConversationMapper conversationsMapper = new Conversations();
-        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper, new Diagnostics());
+        Diagnostics diagnostics = new Diagnostics();
+        QaRecordService records = new QaRecordServiceImpl(qaRecordMapper, diagnostics);
         return new ConversationRig(
                 new ConversationServiceImpl(conversationsMapper, knowledgeBases, records,
-                        new FeedbackServiceImpl(feedbackMapper, qaRecordMapper, new Diagnostics(),
+                        new FeedbackServiceImpl(feedbackMapper,
+                                new QaRecordEvidenceServiceImpl(qaRecordMapper, diagnostics),
                                 recordingFeedbackAudit()),
                         (conversationId, removedRecordCount) -> { }),
                 new AnswerSessionServiceImpl(conversationsMapper, knowledgeBases, documents, records, rag));
@@ -313,10 +317,6 @@ public final class InMemoryRepositories {
     private static final class Feedbacks implements FeedbackMapper {
         private final AtomicLong ids = new AtomicLong();
         private final Map<Long, FeedbackEntity> byQaId = new LinkedHashMap<>();
-        private QaRecords qaRecords;
-
-        /** 详情查询需要联查问答表，构造顺序上晚于本对象，这里回填。 */
-        void bindQaRecords(QaRecords records) { this.qaRecords = records; }
 
         public int insert(FeedbackEntity value) {
             // 镜像 uk_sv_qa_feedback_qa 唯一键。
@@ -359,11 +359,7 @@ public final class InMemoryRepositories {
             if (feedback == null) {
                 return null;
             }
-            // 镜像 INNER JOIN：没有反馈就没有结果行，问答正文不会被取出。
-            QaRecordEntity record = qaRecords == null ? null : qaRecords.findById(feedback.getQaId());
-            if (record == null) {
-                return null;
-            }
+            // 只返回反馈自身字段；问答正文由 qarecord 证据读取 seam 提供。
             AdminFeedbackDetailRow row = new AdminFeedbackDetailRow();
             row.setId(feedback.getId());
             row.setQaId(feedback.getQaId());
@@ -373,10 +369,6 @@ public final class InMemoryRepositories {
             row.setAdminNote(feedback.getAdminNote());
             row.setCreatedAt(feedback.getCreatedAt());
             row.setUpdatedAt(feedback.getUpdatedAt());
-            row.setRequestId(record.getRequestId());
-            row.setQuestion(record.getQuestion());
-            row.setAnswer(record.getAnswer());
-            row.setAnswerStatus(record.getStatus());
             return row;
         }
 

@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sagevault.kb.platform.error.BusinessException;
-import com.sagevault.kb.feedback.domain.RetrievedChunkDiagnostic;
 import com.sagevault.kb.qarecord.domain.QaRecordEntity;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
 import com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity;
+import com.sagevault.kb.qarecord.domain.RetrievedChunkDiagnostic;
 import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
 import com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper;
 import com.sagevault.kb.qarecord.service.impl.QaRecordServiceImpl;

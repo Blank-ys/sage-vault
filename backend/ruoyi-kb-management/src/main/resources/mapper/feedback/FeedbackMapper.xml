@@ -68,23 +68,16 @@
         <result property="adminNote" column="admin_note"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
-        <result property="requestId" column="request_id"/>
-        <result property="question" column="question"/>
-        <result property="answer" column="answer"/>
-        <result property="answerStatus" column="answer_status"/>
     </resultMap>
 
     <!--
-      从反馈表出发 INNER JOIN 问答表：没有反馈行就没有结果行，
-      未授权共享的问答正文无法通过该查询取出。
+      只返回反馈自身字段；问答正文由 qarecord 的证据读取 seam 提供。
+      反馈行存在即是用户已授权共享的标记，未提交反馈的问答没有对应反馈 ID。
     -->
     <select id="findDetailForAdmin" resultMap="adminDetailResult">
-        SELECT f.id, f.qa_id, f.category, f.comment, f.status, f.admin_note,
-               f.created_at, f.updated_at,
-               q.request_id, q.question, q.answer, q.status AS answer_status
-        FROM sv_qa_feedback f
-        INNER JOIN sv_qa_record q ON q.id = f.qa_id
-        WHERE f.id = #{id}
+        SELECT <include refid="columns"/>
+        FROM sv_qa_feedback
+        WHERE id = #{id}
     </select>
 
     <update id="updateStatus">

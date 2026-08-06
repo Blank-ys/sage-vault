@@ -129,18 +129,17 @@ class FeedbackMapperMySqlIntegrationTest {
     }
 
     @Test
-    void joinsTheQuestionAndAnswerOnlyForRecordsThatHaveFeedback() {
+    void returnsTheFeedbackRowForAdminDetailWithoutCarryingQaContent() {
         long withFeedback = insertRecord("detail-with");
         mapper.insert(feedback(withFeedback, FeedbackCategory.WRONG_ANSWER, "答案不对"));
         long feedbackId = mapper.findByQaId(withFeedback).getId();
 
         var detail = mapper.findDetailForAdmin(feedbackId);
 
+        // 反馈行只承载反馈自身字段；问答正文与状态由 qarecord 证据读取 seam 提供
         assertThat(detail.getQaId()).isEqualTo(withFeedback);
-        assertThat(detail.getQuestion()).isEqualTo("question");
-        assertThat(detail.getAnswer()).isEqualTo("answer");
-        assertThat(detail.getRequestId()).isEqualTo(prefix + "-request-detail-with");
-        assertThat(detail.getAnswerStatus()).isEqualTo(QaRecordStatus.COMPLETED);
+        assertThat(detail.getStatus()).isEqualTo(FeedbackStatus.PENDING);
+        assertThat(detail.getCategory()).isEqualTo(FeedbackCategory.WRONG_ANSWER);
     }
 
     @Test

@@ -111,11 +111,11 @@ flowchart LR
 
 ## 3. 在读取 seam 后封装反馈证据
 
-**状态：`pending`**
+**状态：`resolved`**
 
 依赖类别：进程内 · mock
 
-涉及文件：`feedback/service/impl/FeedbackServiceImpl.java` · `qarecord/mapper/QaRecordMapper.java` · `qarecord/mapper/RetrievalDiagnosticMapper.java`
+涉及文件：`feedback/service/impl/FeedbackServiceImpl.java` · `qarecord/service/QaRecordEvidenceService.java` · `qarecord/service/impl/QaRecordEvidenceServiceImpl.java` · `qarecord/domain/QaRecordEvidence.java` · `qarecord/domain/RetrievedChunkDiagnostic.java`
 
 ### 现状：Feedback 跨 seam 读取持久化
 
@@ -151,6 +151,8 @@ Feedback implementation 直接注入问答和检索诊断 Mapper，泄漏持久�
 ### 方案
 
 建立 Feedback Evidence read module，返回已授权的问答快照与诊断；隐私、同意和脱敏规则与证据组装放进该 implementation。
+
+> 落地：证据读取 seam 由数据拥有者 qarecord 提供为公开 `QaRecordEvidenceService`（返回不可变 `QaRecordEvidence`，诊断在实现内组装）。`RetrievedChunkDiagnostic` 从 `feedback/domain` 移入 `qarecord/domain`，修复 qarecord 反向依赖 feedback 的倒置。Feedback 只调用该 interface；`FeedbackMapper.findDetailForAdmin` 不再联查 `sv_qa_record`，反馈行存在即授权标记，正文经证据 seam 取得。
 
 ### 收益
 

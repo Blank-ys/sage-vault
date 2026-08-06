@@ -21,10 +21,10 @@ public interface FeedbackMapper {
     long countForAdmin(@Param("query") AdminFeedbackQuery query);
 
     /**
-     * 按反馈 ID 联查问答正文。
+     * 按反馈 ID 返回管理端详情的反馈行。
      *
-     * <p>用 INNER JOIN 从反馈表出发，未提交反馈的问答在查询层就不可达，
-     * 隐私边界由 SQL 保证而不是依赖调用方过滤。
+     * <p>只返回反馈自身字段，不含问答正文；问答快照经 qarecord 的证据读取 seam 取得。
+     * 反馈行存在本身即是用户已授权共享的标记，未提交反馈的问答没有对应反馈 ID，正文无从取出。
      */
     AdminFeedbackDetailRow findDetailForAdmin(@Param("id") long id);
 

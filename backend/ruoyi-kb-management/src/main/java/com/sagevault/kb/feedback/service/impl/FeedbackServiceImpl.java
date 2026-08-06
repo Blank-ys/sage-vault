@@ -16,11 +16,9 @@ import com.sagevault.kb.feedback.service.FeedbackService;
 import com.sagevault.kb.feedback.service.port.FeedbackAudit;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
-import com.sagevault.kb.qarecord.domain.QaRecordEntity;
+import com.sagevault.kb.qarecord.domain.QaRecordEvidence;
 import com.sagevault.kb.qarecord.domain.QaRecordStatus;
-import com.sagevault.kb.qarecord.domain.RetrievalDiagnosticEntity;
-import com.sagevault.kb.qarecord.mapper.QaRecordMapper;
-import com.sagevault.kb.qarecord.mapper.RetrievalDiagnosticMapper;
+import com.sagevault.kb.qarecord.service.QaRecordEvidenceService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -36,16 +34,13 @@ public class FeedbackServiceImpl implements FeedbackService {
     private static final int ADMIN_NOTE_MAX_LENGTH = 1000;
 
     private final FeedbackMapper feedbacks;
-    private final QaRecordMapper qaRecords;
-    private final RetrievalDiagnosticMapper diagnostics;
+    private final QaRecordEvidenceService qaRecordEvidence;
     private final FeedbackAudit audit;
 
     public FeedbackServiceImpl(
-            FeedbackMapper feedbacks, QaRecordMapper qaRecords,
-            RetrievalDiagnosticMapper diagnostics, FeedbackAudit audit) {
+            FeedbackMapper feedbacks, QaRecordEvidenceService qaRecordEvidence, FeedbackAudit audit) {
         this.feedbacks = feedbacks;
-        this.qaRecords = qaRecords;
-        this.diagnostics = diagnostics;
+        this.qaRecordEvidence = qaRecordEvidence;
         this.audit = audit;
     }
 
@@ -55,8 +50,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (request == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "反馈请求不能为空");
         }
-        QaRecordEntity record = requireOwnedRecord(userId, qaId);
-        requireAnswered(record);
+        requireFeedbackEligible(userId, qaId);
         requireConsent(request);
 
         FeedbackEntity entity = new FeedbackEntity();
@@ -109,7 +103,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     public AdminFeedbackDetail findDetailForAdmin(long adminUserId, long feedbackId) {
         AdminFeedbackDetailRow row = requireDetail(feedbackId);
         AdminFeedbackDetail detail =
-                AdminFeedbackDetail.from(row, diagnostics.findByQaRecordId(row.getQaId()));
+                AdminFeedbackDetail.from(row, requireEvidence(row.getQaId()));
         // 审计是远程调用，放在事务外；查看行为本身不改状态，无需事务。
         audit.recordViewed(detail.id(), detail.qaId());
         return detail;
@@ -129,7 +123,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
         audit.recordResolved(feedbackId, request.status().name());
         AdminFeedbackDetailRow row = requireDetail(feedbackId);
-        return AdminFeedbackDetail.from(row, diagnostics.findByQaRecordId(row.getQaId()));
+        return AdminFeedbackDetail.from(row, requireEvidence(row.getQaId()));
     }
 
     private AdminFeedbackDetailRow requireDetail(long feedbackId) {
@@ -138,6 +132,11 @@ public class FeedbackServiceImpl implements FeedbackService {
             throw new BusinessException(ErrorCode.FEEDBACK_NOT_FOUND, "反馈不存在");
         }
         return row;
+    }
+
+    private QaRecordEvidence requireEvidence(long qaId) {
+        return qaRecordEvidence.findEvidence(qaId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.QA_RECORD_NOT_FOUND, "问答记录不存在"));
     }
 
     private static String normalizeAdminNote(String adminNote) {
@@ -152,21 +151,18 @@ public class FeedbackServiceImpl implements FeedbackService {
     }
 
     /**
-     * 反馈只能由问答的归属者提交。
+     * 反馈只能由问答的归属者提交，且问答必须已产生终态。
      *
      * <p>问答不存在与不属于当前用户返回同一个错误，避免通过错误码探测他人问答是否存在。
      */
-    private QaRecordEntity requireOwnedRecord(long userId, long qaId) {
-        QaRecordEntity record = qaRecords.findById(qaId);
-        if (record == null || record.getUserId() == null || record.getUserId() != userId) {
+    private void requireFeedbackEligible(long userId, long qaId) {
+        QaRecordEvidence evidence = qaRecordEvidence.findEvidence(qaId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FEEDBACK_FORBIDDEN, "无权对该问答提交反馈"));
+        if (evidence.userId() != userId) {
             throw new BusinessException(ErrorCode.FEEDBACK_FORBIDDEN, "无权对该问答提交反馈");
         }
-        return record;
-    }
-
-    /** 生成中的问答还没有最终答案，此时反馈内容无法对应稳定的问答快照。 */
-    private static void requireAnswered(QaRecordEntity record) {
-        if (record.getStatus() == QaRecordStatus.STARTED) {
+        // 生成中的问答还没有最终答案，此时反馈内容无法对应稳定的问答快照。
+        if (evidence.answerStatus() == QaRecordStatus.STARTED) {
             throw new BusinessException(ErrorCode.FEEDBACK_ANSWER_NOT_READY, "回答尚未结束，暂不能提交反馈");
         }
     }

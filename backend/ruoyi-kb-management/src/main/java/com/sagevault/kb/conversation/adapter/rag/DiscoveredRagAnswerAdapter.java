@@ -3,7 +3,7 @@ package com.sagevault.kb.conversation.adapter.rag;
 import com.sagevault.kb.bootstrap.RagProperties;
 import com.sagevault.kb.conversation.domain.AnswerEvent;
 import com.sagevault.kb.conversation.service.port.RagAnswerPort;
-import com.sagevault.kb.feedback.domain.RetrievedChunkDiagnostic;
+import com.sagevault.kb.qarecord.domain.RetrievedChunkDiagnostic;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.net.URI;
