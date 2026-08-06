@@ -301,6 +301,8 @@ async function select(conversationId) {
 async function doSelect(conversationId) {
   activeId.value = conversationId
   resetStream()
+  // 切换会话时丢弃上一个会话的草稿输入，避免内容串台
+  question.value = ''
   const conversation = conversations.value.find(item => item.id === conversationId)
   // 知识库已删除的会话不回填选择器，避免把已消失的知识库当作可提问目标
   if (conversation && !conversation.knowledgeBaseDeleted) knowledgeBaseId.value = conversation.knowledgeBaseId
