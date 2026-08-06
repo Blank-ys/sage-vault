@@ -3,11 +3,16 @@ package com.sagevault.kb.document.service.impl;
 import com.sagevault.kb.document.domain.DocumentEntity;
 import com.sagevault.kb.document.domain.DocumentFilename;
 import com.sagevault.kb.document.domain.DocumentStatus;
+import com.sagevault.kb.document.domain.IndexingTaskEntity;
+import com.sagevault.kb.document.domain.IndexingTaskStatus;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
+import com.sagevault.kb.document.mapper.IndexingTaskMapper;
+import com.sagevault.kb.document.service.DocumentRecordWriter;
 import com.sagevault.kb.knowledgebase.service.KnowledgeBaseService;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,13 +24,21 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 企业文档生命周期持久化的深实现：文档记录创建、批次校验、入库/清理任务创建、重试与清理
+ * 的状态迁移、幂等与尝试次数，以及残留清理 FAILSAFE 裁决全部集中于此。业务状态变更与持久化
+ * 任务创建在同一本地事务提交，提交后才由编排方派发外部 HTTP 命令。
+ */
 @Component
 public class DocumentRecordWriterImpl implements DocumentRecordWriter {
     private final DocumentMapper mapper;
+    private final IndexingTaskMapper indexingTaskMapper;
     private final KnowledgeBaseService knowledgeBases;
 
-    public DocumentRecordWriterImpl(DocumentMapper mapper, KnowledgeBaseService knowledgeBases) {
+    public DocumentRecordWriterImpl(DocumentMapper mapper, IndexingTaskMapper indexingTaskMapper,
+            KnowledgeBaseService knowledgeBases) {
         this.mapper = mapper;
+        this.indexingTaskMapper = indexingTaskMapper;
         this.knowledgeBases = knowledgeBases;
     }
 
@@ -81,6 +94,142 @@ public class DocumentRecordWriterImpl implements DocumentRecordWriter {
             throw new BusinessException(ErrorCode.DOCUMENT_FILENAME_CONFLICT,
                     "以下文件名在知识库内或本批中已存在：" + String.join("、", conflicts));
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public IndexingTaskEntity createIndexingTask(DocumentEntity document) {
+        IndexingTaskEntity task = new IndexingTaskEntity();
+        task.setDocumentId(document.getId());
+        task.setTaskId(UUID.randomUUID().toString());
+        task.setAttempt(1);
+        task.setStatus(IndexingTaskStatus.PROCESSING);
+        task.setErrorMessage("");
+        indexingTaskMapper.insert(task);
+        return task;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public IndexingTaskEntity beginRetry(long documentId) {
+        DocumentEntity document = mapper.findById(documentId);
+        if (document == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
+        }
+        int updated = mapper.updateStatusIfCurrentStatus(documentId,
+                DocumentStatus.PROCESSING.name(), "", DocumentStatus.FAILED.name());
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
+                    "仅处理失败的文档可以重试");
+        }
+        document.setStatus(DocumentStatus.PROCESSING);
+        document.setErrorMessage("");
+        IndexingTaskEntity latest = indexingTaskMapper.findLatestByDocumentId(documentId);
+        int nextAttempt = (latest == null ? 0 : latest.getAttempt()) + 1;
+        IndexingTaskEntity task = new IndexingTaskEntity();
+        task.setDocumentId(documentId);
+        task.setTaskId(UUID.randomUUID().toString());
+        task.setAttempt(nextAttempt);
+        task.setStatus(IndexingTaskStatus.PROCESSING);
+        task.setErrorMessage("");
+        indexingTaskMapper.insert(task);
+        return task;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public IndexingTaskEntity beginCleanupRetry(long documentId) {
+        DocumentEntity document = mapper.findById(documentId);
+        if (document == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
+        }
+        DocumentStatus status = document.getStatus();
+        if (status != DocumentStatus.DELETING && status != DocumentStatus.CLEANUP_FAILED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
+                    "仅处于 DELETING 或 CLEANUP_FAILED 的文档可以重试清理");
+        }
+
+        // 基于最近一次清理任务推算下一次尝试序号
+        IndexingTaskEntity latest = indexingTaskMapper.findLatestCleanupByDocumentId(documentId);
+        int nextAttempt = (latest == null ? 0 : latest.getAttempt()) + 1;
+        String phase = document.getCleanupPhase() == null ? "" : document.getCleanupPhase();
+
+        int updated;
+        if (status == DocumentStatus.CLEANUP_FAILED) {
+            // CAS 更新：CLEANUP_FAILED → DELETING，递增尝试次数并保留诊断阶段
+            updated = mapper.incrementCleanupAttempt(documentId, nextAttempt, phase);
+        } else {
+            // 已是 DELETING：幂等确认，并递增尝试次数（不重置诊断阶段）
+            updated = mapper.incrementCleanupAttemptWhileDeleting(documentId, nextAttempt);
+            if (updated == 0) {
+                updated = mapper.updateStatusIdempotent(documentId, DocumentStatus.DELETING.name(), "");
+            }
+        }
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT,
+                    "文档状态已变更，清理重试无法继续");
+        }
+
+        // 创建新的清理任务记录
+        IndexingTaskEntity task = new IndexingTaskEntity();
+        task.setDocumentId(documentId);
+        task.setTaskId("cleanup-retry-" + UUID.randomUUID());
+        task.setAttempt(nextAttempt);
+        task.setStatus(IndexingTaskStatus.PROCESSING);
+        task.setErrorMessage("");
+        task.setTaskType("CLEANUP");
+        indexingTaskMapper.insert(task);
+
+        return task;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean beginDelete(long documentId) {
+        return mapper.updateStatusIfCurrentStatus(documentId,
+                DocumentStatus.DELETING.name(), "", DocumentStatus.AVAILABLE.name()) > 0;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void restoreAfterDeleteDispatchFailure(long documentId) {
+        mapper.updateStatusIfCurrentStatus(documentId,
+                DocumentStatus.AVAILABLE.name(), "", DocumentStatus.DELETING.name());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void failCleanupRetry(long documentId, String errorMessage) {
+        mapper.updateStatusIfCurrentStatus(documentId,
+                DocumentStatus.CLEANUP_FAILED.name(), errorMessage, DocumentStatus.DELETING.name());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void failTask(IndexingTaskEntity task, String errorMessage) {
+        indexingTaskMapper.updateTerminalState(task.getTaskId(), task.getAttempt(),
+                IndexingTaskStatus.FAILED.name(), errorMessage, LocalDateTime.now());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void failDocument(long documentId, String errorMessage) {
+        mapper.updateStatus(documentId, DocumentStatus.FAILED.name(), errorMessage);
+    }
+
+    @Override
+    public int failStuckCleaning(int attemptThreshold) {
+        List<DocumentEntity> stuck = mapper.findStuckCleaningDocuments(attemptThreshold);
+        if (stuck.isEmpty()) {
+            return 0;
+        }
+        int marked = 0;
+        for (DocumentEntity document : stuck) {
+            String message = "FAILSAFE：清理在达到尝试阈值 " + attemptThreshold
+                    + " 后仍停留在 DELETING（阶段=" + document.getCleanupPhase() + "）";
+            marked += mapper.markCleanupFailed(document.getId(), message);
+        }
+        return marked;
     }
 
     private void ensureUnique(long knowledgeBaseId, String normalizedName) {

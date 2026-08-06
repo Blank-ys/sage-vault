@@ -1,6 +1,5 @@
 package com.sagevault.kb.document.service.impl;
 
-import com.sagevault.kb.document.adapter.MinioDocumentStorage;
 import com.sagevault.kb.document.domain.DocumentEntity;
 import com.sagevault.kb.document.domain.DocumentFilename;
 import com.sagevault.kb.document.domain.DocumentResponse;
@@ -8,22 +7,29 @@ import com.sagevault.kb.document.domain.DocumentStatus;
 import com.sagevault.kb.document.domain.IndexingTaskEntity;
 import com.sagevault.kb.document.domain.UploadDocumentRequest;
 import com.sagevault.kb.document.mapper.DocumentMapper;
+import com.sagevault.kb.document.service.DocumentRecordWriter;
 import com.sagevault.kb.document.service.DocumentService;
 import com.sagevault.kb.document.service.port.CleanupCommandDispatcher;
 import com.sagevault.kb.document.service.port.DocumentAudit;
+import com.sagevault.kb.document.service.port.DocumentStorage;
 import com.sagevault.kb.document.service.port.IndexingCommandDispatcher;
 import com.sagevault.kb.platform.error.BusinessException;
 import com.sagevault.kb.platform.error.ErrorCode;
 import java.io.IOException;
-import lombok.RequiredArgsConstructor;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 企业文档生命周期的深实现：只负责编排（校验前置条件、派发外部命令、审计与响应组装）。
+ * 全部状态迁移、幂等、尝试次数与 FAILSAFE 裁决委托给 {@link DocumentRecordWriter}；
+ * MinIO、Python 命令与审计都经 port/adapter 进入。
+ */
 @Service
 @RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
@@ -31,10 +37,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentMapper mapper;
     private final DocumentRecordWriter recordWriter;
-    private final IndexingTaskRecordWriter indexingTaskRecordWriter;
-    private final RetryRecordWriter retryRecordWriter;
-    private final CleanupRecordWriter cleanupRecordWriter;
-    private final MinioDocumentStorage storage;
+    private final DocumentStorage storage;
     private final IndexingCommandDispatcher dispatcher;
     private final CleanupCommandDispatcher cleanupDispatcher;
     private final DocumentAudit audit;
@@ -47,7 +50,7 @@ public class DocumentServiceImpl implements DocumentService {
                     "读取上传文件失败");
             return response(entity);
         }
-        IndexingTaskEntity task = indexingTaskRecordWriter.create(entity);
+        IndexingTaskEntity task = recordWriter.createIndexingTask(entity);
         dispatcher.dispatch(entity, task);
         audit.record(DocumentAudit.Operation.UPLOAD, entity.getId(), entity.getKbId());
         return response(entity);
@@ -77,7 +80,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     private void dispatchIndexing(DocumentEntity entity) {
         try {
-            IndexingTaskEntity task = indexingTaskRecordWriter.create(entity);
+            IndexingTaskEntity task = recordWriter.createIndexingTask(entity);
             dispatcher.dispatch(entity, task);
         } catch (RuntimeException exception) {
             log.error("Failed to create or dispatch indexing task for document {}", entity.getObjectKey(), exception);
@@ -99,7 +102,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public DocumentResponse retry(long documentId) {
-        IndexingTaskEntity task = retryRecordWriter.beginRetry(documentId);
+        IndexingTaskEntity task = recordWriter.beginRetry(documentId);
         DocumentEntity entity = mapper.findById(documentId);
         try {
             dispatcher.dispatch(entity, task);
@@ -107,7 +110,7 @@ public class DocumentServiceImpl implements DocumentService {
         } catch (RuntimeException exception) {
             log.error("Failed to dispatch retry indexing task for document {}", documentId, exception);
             String message = "重试派发失败：" + exception.getMessage();
-            retryRecordWriter.failTask(task, message);
+            recordWriter.failTask(task, message);
             markFailed(entity, message);
             audit.recordFailure(DocumentAudit.Operation.RETRY, documentId, entity.getKbId(), message);
         }
@@ -137,9 +140,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         // 仅 AVAILABLE 状态可以进入删除流程
-        int updated = mapper.updateStatusIfCurrentStatus(documentId,
-                DocumentStatus.DELETING.name(), "", DocumentStatus.AVAILABLE.name());
-        if (updated == 0) {
+        if (!recordWriter.beginDelete(documentId)) {
             audit.recordFailure(DocumentAudit.Operation.DELETE, documentId, entity.getKbId(),
                     "文档当前状态不允许删除");
             throw new BusinessException(ErrorCode.DOCUMENT_STATE_CONFLICT, "文档当前状态不允许删除");
@@ -149,8 +150,7 @@ public class DocumentServiceImpl implements DocumentService {
             cleanupDispatcher.dispatch(entity);
         } catch (RuntimeException exception) {
             log.error("Failed to dispatch cleanup for document {}", documentId, exception);
-            mapper.updateStatusIfCurrentStatus(documentId,
-                    DocumentStatus.AVAILABLE.name(), "", DocumentStatus.DELETING.name());
+            recordWriter.restoreAfterDeleteDispatchFailure(documentId);
             audit.recordFailure(DocumentAudit.Operation.DELETE, documentId, entity.getKbId(),
                     "清理命令派发失败，请稍后重试");
             throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, "清理命令派发失败，请稍后重试");
@@ -161,7 +161,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public DocumentResponse cleanupRetry(long documentId) {
-        IndexingTaskEntity task = cleanupRecordWriter.beginCleanupRetry(documentId);
+        IndexingTaskEntity task = recordWriter.beginCleanupRetry(documentId);
         DocumentEntity entity = mapper.findById(documentId);
         try {
             cleanupDispatcher.dispatch(entity);
@@ -169,10 +169,9 @@ public class DocumentServiceImpl implements DocumentService {
         } catch (RuntimeException exception) {
             log.error("Failed to dispatch retry cleanup for document {}", documentId, exception);
             String message = "清理重试派发失败：" + exception.getMessage();
-            cleanupRecordWriter.failTask(task, message);
+            recordWriter.failTask(task, message);
             // 回退到 CLEANUP_FAILED
-            mapper.updateStatusIfCurrentStatus(documentId,
-                    DocumentStatus.CLEANUP_FAILED.name(), message, DocumentStatus.DELETING.name());
+            recordWriter.failCleanupRetry(documentId, message);
             audit.recordFailure(DocumentAudit.Operation.CLEANUP_RETRY, documentId, entity.getKbId(), message);
             throw new BusinessException(ErrorCode.CLEANUP_DISPATCH_FAILED, message);
         }
@@ -195,7 +194,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private void markFailed(DocumentEntity entity, String message) {
-        mapper.updateStatus(entity.getId(), DocumentStatus.FAILED.name(), message);
+        recordWriter.failDocument(entity.getId(), message);
         entity.setStatus(DocumentStatus.FAILED);
         entity.setErrorMessage(message);
     }

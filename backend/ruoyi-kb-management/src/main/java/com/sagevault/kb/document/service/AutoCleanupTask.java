@@ -1,21 +1,15 @@
 package com.sagevault.kb.document.service;
 
-import com.sagevault.kb.document.domain.DocumentEntity;
-import com.sagevault.kb.document.domain.DocumentStatus;
-import com.sagevault.kb.document.mapper.DocumentMapper;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 残留检测 FAILSAFE。
+ * 残留检测 FAILSAFE 的调度触发入口。
  *
- * <p>定时扫描已进入清理阶段、仍处于 DELETING 且清理尝试次数达到阈值的文档，
- * 将其置为 {@link DocumentStatus#CLEANUP_FAILED} 终态，避免清理命令永久丢失导致
- * 文档卡在 DELETING 且不可检索也不可删除。该组件不依赖外部清理端口的回调，
- * 仅作为最后的兜底保护。
+ * <p>只持有扫描节奏与阈值策略；具体的残留检测、终态裁决与幂等 CAS 由
+ * {@link DocumentRecordWriter#failStuckCleaning(int)} 拥有，scheduler 不直接接触 Mapper。
  */
 @Component
 public class AutoCleanupTask {
@@ -24,26 +18,17 @@ public class AutoCleanupTask {
     /** 清理尝试次数阈值：达到该值仍未完成则判定为残留。 */
     public static final int FAILSAFE_ATTEMPT_THRESHOLD = 5;
 
-    private final DocumentMapper documentMapper;
+    private final DocumentRecordWriter recordWriter;
 
-    public AutoCleanupTask(DocumentMapper documentMapper) {
-        this.documentMapper = documentMapper;
+    public AutoCleanupTask(DocumentRecordWriter recordWriter) {
+        this.recordWriter = recordWriter;
     }
 
     @Scheduled(fixedDelay = 30000)
     public void detectStuckCleaning() {
-        List<DocumentEntity> stuck = documentMapper.findStuckCleaningDocuments(FAILSAFE_ATTEMPT_THRESHOLD);
-        if (stuck.isEmpty()) {
-            return;
-        }
-        log.warn("Auto-cleanup FAILSAFE detected {} stuck DELETING document(s)", stuck.size());
-        for (DocumentEntity document : stuck) {
-            String message = "FAILSAFE：清理在达到尝试阈值 " + FAILSAFE_ATTEMPT_THRESHOLD
-                    + " 后仍停留在 DELETING（阶段=" + document.getCleanupPhase() + "）";
-            int updated = documentMapper.markCleanupFailed(document.getId(), message);
-            if (updated > 0) {
-                log.warn("Auto-cleanup FAILSAFE marked document {} as CLEANUP_FAILED", document.getId());
-            }
+        int marked = recordWriter.failStuckCleaning(FAILSAFE_ATTEMPT_THRESHOLD);
+        if (marked > 0) {
+            log.warn("Auto-cleanup FAILSAFE marked {} stuck DELETING document(s) as CLEANUP_FAILED", marked);
         }
     }
 }
