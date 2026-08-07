@@ -5,17 +5,10 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from sage_vault_rag.bootstrap.settings import Settings
+from sage_vault_rag.bootstrap.dependencies import IndexingRunner
 from sage_vault_rag.model.indexing_command import IndexingCommand
-from sage_vault_rag.transport.http.app import IndexingRunner, create_app
-
-
-class NoOpRegistration:
-    async def register(self) -> None:
-        pass
-
-    async def close(self) -> None:
-        pass
+from sage_vault_rag.transport.http.app import create_app
+from tests.contract._fakes import NoOpRegistration, dependencies_for_test, settings_for_test
 
 
 class CapturingIndexingRunner(IndexingRunner):
@@ -24,14 +17,6 @@ class CapturingIndexingRunner(IndexingRunner):
 
     async def run(self, command: IndexingCommand) -> None:
         self.commands.append(command)
-
-
-def settings_for_test() -> Settings:
-    return Settings(
-        signing_key="test-key",
-        nacos_server_address="nacos.test:8848",
-        embedding_model_path="/dev/null/model",
-    )
 
 
 def _sign(payload: dict[str, Any], timestamp: str, key: str = "test-key") -> str:
@@ -44,7 +29,7 @@ def _sign(payload: dict[str, Any], timestamp: str, key: str = "test-key") -> str
 
 def test_signed_indexing_command_returns_202_and_runs_in_background() -> None:
     runner = CapturingIndexingRunner()
-    client = TestClient(create_app(settings_for_test(), indexing=runner, registration=NoOpRegistration()))
+    client = TestClient(create_app(settings_for_test(), dependencies=dependencies_for_test(indexing=runner), registration=NoOpRegistration()))
     timestamp = str(int(time.time()))
     payload = {
         "taskId": "task-1",
@@ -72,7 +57,7 @@ def test_signed_indexing_command_returns_202_and_runs_in_background() -> None:
 
 
 def test_unsigned_indexing_command_is_rejected() -> None:
-    client = TestClient(create_app(settings_for_test(), registration=NoOpRegistration()))
+    client = TestClient(create_app(settings_for_test(), dependencies=dependencies_for_test(indexing=CapturingIndexingRunner()), registration=NoOpRegistration()))
     response = client.post(
         "/internal/v1/indexing",
         headers={"X-Sage-Timestamp": str(int(time.time())), "X-Sage-Signature": "wrong"},
@@ -90,7 +75,7 @@ def test_unsigned_indexing_command_is_rejected() -> None:
 
 
 def test_signed_indexing_command_cannot_be_replayed() -> None:
-    client = TestClient(create_app(settings_for_test(), registration=NoOpRegistration()))
+    client = TestClient(create_app(settings_for_test(), dependencies=dependencies_for_test(indexing=CapturingIndexingRunner()), registration=NoOpRegistration()))
     timestamp = str(int(time.time()))
     payload = {
         "taskId": "task-1",

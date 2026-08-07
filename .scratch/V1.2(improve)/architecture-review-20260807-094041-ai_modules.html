@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Sage Vault RAG 架构深挖报告</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+mermaid.initialize({startOnLoad:true,theme:"neutral",securityLevel:"loose"});
+</script>
+<style>
+body{font-family:ui-sans-serif,system-ui,"Microsoft YaHei",sans-serif}
+.seam{border-style:dashed}.leak{color:#b91c1c}.deep{background:#172033;color:#fff}
+.diagram{min-height:250px}
+</style>
+</head>
+<body class="bg-stone-50 text-slate-900">
+<main class="max-w-6xl mx-auto px-6 py-10 space-y-10">
+<header class="border-b border-slate-300 pb-6">
+<div class="text-xs uppercase tracking-wider text-emerald-700">SAGE VAULT / AI-MODULES / SERVICES / RAG</div>
+<h1 class="text-4xl font-semibold mt-2">RAG 模块架构深挖候选</h1>
+<p class="mt-2 text-slate-600">2026-08-07 · 范围：<code>ai-modules/services/rag</code></p>
+<div class="mt-4 flex gap-5 text-xs text-slate-600"><span>实线框 = module</span><span class="seam px-2 border">虚线 = seam</span><span class="leak">红色 = 泄漏</span><span class="px-2 py-1 deep">深色 = deep module</span></div>
+</header>
+
+<section id="candidates" class="space-y-8">
+<article id="candidate-1" class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+<div class="flex items-center justify-between"><h2 class="text-2xl font-semibold">1. 收拢 HTTP transport 与 bootstrap 组装</h2><span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm">Strong</span></div>
+<div class="text-sm"><b>Files</b> <code>src/sage_vault_rag/transport/http/app.py</code>（约 450 行）、<code>bootstrap/settings.py</code>、<code>tests/contract/test_answer_transport.py</code>、<code>tests/contract/test_indexing_transport.py</code></div>
+<div class="grid md:grid-cols-2 gap-4">
+<div><h3 class="font-semibold mb-2">Before · 浅 interface</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart LR
+R[FastAPI routes] --> S[4套 HMAC/replay 校验]
+R --> E[SSE event mapping]
+R --> B[BackgroundTasks]
+R --> A[adapter object graph]
+A --> M[Milvus/BGE/DashScope/Nacos]
+classDef leak fill:#fee2e2,stroke:#dc2626;
+class S,E,B,A leak;</pre></div></div>
+<div><h3 class="font-semibold mb-2">After · 深 module</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart LR
+T[HTTP transport adapter] -.seam.-> I[Application interfaces]
+T --> W[wire/event mapping]
+T --> H[Replay-auth module]
+X[Bootstrap assembly] -.seam.-> P[Ports]
+X --> D[validated object graph]
+classDef deep fill:#172033,color:#fff,stroke:#172033;
+class T,X deep;</pre></div></div>
+</div>
+<p><b>Problem</b> 路由、SSE 映射、4 套鉴权、后台任务和所有 adapter 组装共处一个 module；interface 几乎等于 implementation，修改任一变化轴都穿透同一文件，locality 差。</p>
+<p><b>Solution</b> 保持现有公开 HTTP seam，把 wire/event mapping、replay-auth 和 bootstrap assembly 收拢为内部 deep module；transport 只依赖 application interface，组装只依赖 ports。</p>
+<ul class="list-disc pl-5 text-sm space-y-1"><li>locality：契约变化、鉴权变化、adapter 替换各自集中。</li><li>leverage：contract tests 直接击中 transport interface，组装可用 in-memory adapters 验证。</li><li>删除测试：删掉任一块不会让复杂度消失，说明当前确有浅 module；深挖后可让测试跨更小 seam。</li></ul>
+</article>
+
+<article id="candidate-2" class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+<div class="flex items-center justify-between"><h2 class="text-2xl font-semibold">2. 深化 Answering execution module</h2><span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm">Worth exploring</span></div>
+<div class="text-sm"><b>Files</b> <code>application/answering/service.py</code>、<code>application/answering/cancellation.py</code>、<code>model/events.py</code>、<code>transport/http/app.py</code>、<code>tests/unit/application/test_answering.py</code></div>
+<div class="grid md:grid-cols-2 gap-4">
+<div><h3 class="font-semibold mb-2">Before</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart TD
+Q[answer()] --> E[embedding]
+Q --> R[retrieval + threshold]
+Q --> G[async generation]
+Q --> C[cancellation polling]
+Q --> D[timing/diagnostics]
+Q --> L[logging/privacy]
+Q --> K[close generator]
+classDef leak fill:#fee2e2,stroke:#dc2626;
+class C,D,L,K leak;</pre></div></div>
+<div><h3 class="font-semibold mb-2">After</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart TD
+E[Answer execution interface] -.seam.-> T[retrieve evidence]
+E --> F[refusal policy]
+E --> G[generation lifecycle]
+E --> C[cancellation mechanism]
+T --> O[AnswerEvent stream]
+F --> O
+G --> O
+classDef deep fill:#172033,color:#fff,stroke:#172033;
+class E deep;</pre></div></div>
+</div>
+<p><b>Problem</b> 一个 async generator 同时承担检索、拒答、流式生成、取消、诊断、脱敏和资源关闭；retrieval 异常与 generation 异常的语义还不一致。</p>
+<p><b>Solution</b> 以“检索-证据判定-生成生命周期”为 deep execution module，保留单一事件 interface；HTTP 仅做事件到 wire 的 adapter，CancellationRegistry 留在内部 seam。</p>
+<ul class="list-disc pl-5 text-sm space-y-1"><li>locality：停止、拒答、失败和 generator 关闭的规则集中。</li><li>leverage：Java/Python contract 与 unit tests 共用一个事件 interface。</li><li>风险：不能复制 Java 状态机，仍由 Java 拥有最终 QA Record 状态。</li></ul>
+</article>
+
+<article id="candidate-3" class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+<div class="flex items-center justify-between"><h2 class="text-2xl font-semibold">3. 深化 Milvus vector-store adapter 的内部 seam</h2><span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm">Strong</span></div>
+<div class="text-sm"><b>Files</b> <code>adapters/milvus/store.py</code>、<code>ports/vector_store.py</code>、<code>tests/unit/adapters/test_milvus_store.py</code>、<code>tests/integration/milvus/test_milvus_writer.py</code></div>
+<div class="grid md:grid-cols-2 gap-4">
+<div><h3 class="font-semibold mb-2">Before</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart LR
+P[VectorStorePort] --> M[Milvus adapter]
+M --> C[connection/cache]
+M --> S[schema/drop-recreate]
+M --> I[index]
+M --> X[entity codec]
+M --> Q[query escaping]
+classDef leak fill:#fee2e2,stroke:#dc2626;
+class S,X,Q leak;</pre></div></div>
+<div><h3 class="font-semibold mb-2">After</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart LR
+P[VectorStorePort] -.seam.-> M[Milvus adapter]
+M --> L[collection lifecycle]
+M --> C[record codec]
+M --> Q[query builder]
+L --> SDK[Milvus SDK]
+C --> SDK
+classDef deep fill:#172033,color:#fff,stroke:#172033;
+class M deep;</pre></div></div>
+</div>
+<p><b>Problem</b> 一个 adapter 同时处理连接缓存、schema 校验与 drop/recreate、索引、实体编码、表达式转义和结果映射；变化轴多，locality 不足。</p>
+<p><b>Solution</b> 保持单一 <code>VectorStorePort</code>，在 adapter 内部形成 collection lifecycle、record codec、query builder 三个 internal seam；不改变 ADR-0001 的单 Collection + <code>knowledgeBaseId</code> 过滤决策。</p>
+<ul class="list-disc pl-5 text-sm space-y-1"><li>leverage：application 不学习 Milvus 细节，替换或升级 SDK 的影响集中。</li><li>locality：schema 与编码故障在一个 adapter 内定位。</li><li>测试：增加 schema migration、并发初始化和连接恢复的 seam tests。</li></ul>
+</article>
+
+<article id="candidate-4" class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+<div class="flex items-center justify-between"><h2 class="text-2xl font-semibold">4. 收拢 Indexing publication 与失败补偿</h2><span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm">Worth exploring</span></div>
+<div class="text-sm"><b>Files</b> <code>application/indexing/service.py</code>、<code>model/indexing_result.py</code>、<code>ports/callback.py</code>、<code>tests/unit/application/test_indexing.py</code>、<code>tests/integration/test_*_indexing_end_to_end.py</code></div>
+<div class="grid md:grid-cols-2 gap-4">
+<div><h3 class="font-semibold mb-2">Before</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart LR
+I[index()] --> D[先删旧向量]
+I --> W[下载/解析/切块/嵌入/写入]
+I --> E[任意异常]
+E --> C[再次清理]
+E --> CB[失败回调]
+CB -.leak.-> C</pre></div></div>
+<div><h3 class="font-semibold mb-2">After</h3><div class="diagram border rounded p-3"><pre class="mermaid">flowchart LR
+W[publication module] --> R[prepare vectors]
+R --> P[publish]
+P --> O[success result]
+P -.failure seam.-> C[compensation]
+O --> CB[callback adapter]
+C --> CB
+classDef deep fill:#172033,color:#fff,stroke:#172033;
+class W deep;</pre></div></div>
+</div>
+<p><b>Problem</b> 发布、补偿清理和回调都在一个浅 interface；回调失败也可能触发清理，且 <code>_cleanup</code> 的 <code>chunks</code> 参数未使用，原子发布语义不够清晰。</p>
+<p><b>Solution</b> 将“准备/发布/补偿”内聚为 publication module，明确成功写入与失败清理的 seam；callback 只报告结果，不参与补偿决策。保持 Java authoritative task 状态，不在 Python 复制状态机。</p>
+<ul class="list-disc pl-5 text-sm space-y-1"><li>locality：重试、部分写入和回调失败的规则集中。</li><li>leverage：一次定义发布语义，多个文档格式与 adapter 复用。</li><li>验证：补充 callback-after-success failure、同文档并发 attempt、部分写入测试。</li></ul>
+</article>
+</section>
+
+<section id="top-recommendation" class="bg-slate-900 text-white rounded-lg p-7">
+<div class="text-xs uppercase tracking-wider text-emerald-300">Top recommendation</div>
+<h2 class="text-2xl font-semibold mt-2">优先选择候选 1：HTTP transport 与 bootstrap 组装</h2>
+<p class="mt-2 text-slate-300">它位于最高公开 seam，能同时改善契约测试、鉴权变更和 adapter 替换的 locality；改动可保持现有 application interface 与 ADR，不会重新设计业务状态。</p>
+<p class="mt-4 text-sm text-emerald-200">请回复候选编号（1-4），我再进入 grilling loop，讨论约束、深 module 形状、seam 和可保留测试。</p>
+</section>
+</main>
+</body>
+</html>
