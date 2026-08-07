@@ -78,7 +78,7 @@ Python RAG、根级契约和 V1 项目级 compose 仍是目标结构；对应清
 
 - Backend: RuoYi Cloud 3.6.8 / Java 17 / Spring Boot 4.0.6 / Spring Cloud 2025.1.1 / MyBatis。
 - Frontend: Vue 3 / JavaScript / Vite / Element Plus / Pinia，代码在 `frontend/`。
-- AI/RAG: Python 3.12 / FastAPI / LangChain / `bge-m3` / Milvus / DashScope `qwen-plus`。
+- AI/RAG: Python 3.12 / FastAPI / `bge-m3` / Milvus / DashScope `qwen-plus`。
 - Data & infrastructure: MySQL 8 / Redis 7 / MinIO / Nacos / Sentinel；异步任务由 Java MySQL 记录和模块内 scheduler 驱动。
 
 完整依赖版本、锁定状态、基础设施 tag、模型制品、运行 profile 和升级规则见 `docs/technology-stack.md`。机器清单与该文档冲突时必须停止并同时修正，不得自行选择其一。

@@ -51,7 +51,7 @@ V1 不使用 PostgreSQL、pgvector、Redisson 或 Redis Stream。异步任务由
 | --- | --- | --- |
 | Python | `>=3.12,<3.13` | V1 目标；试点使用 Python 3.12 |
 | HTTP/SSE | FastAPI `>=0.139,<0.140`、Uvicorn `>=0.51,<0.52` | V1 目标 |
-| RAG 编排 | LangChain `>=1.3.14,<2` | V1 目标；只用于内部实现 |
+| RAG 编排 | 项目自有 application services（indexing/answering/cleanup）；不使用编排框架 | 已实现 |
 | 配置/transport model | Pydantic `>=2.13,<3`、pydantic-settings `>=2.14,<3` | V1 目标 |
 | Milvus 客户端 | PyMilvus `>=2.4.10,<2.5` | V1 目标；与 Milvus 2.4.x 同代 |
 | MinIO 客户端 | MinIO `>=7.2,<8` | V1 目标 |

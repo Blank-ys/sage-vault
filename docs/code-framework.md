@@ -210,9 +210,9 @@ services/rag/
 ```
 
 - FastAPI 与 Pydantic transport 类型停留在 `transport/http`。
-- LangChain 只存在于 application 实现或内部 adapter，不进入 port、执行模型或 wire contract。
+- RAG 编排由 application services 手写实现，不引入 LangChain 等外部编排框架；第三方 SDK 类型不进入 port、执行模型或 wire contract。
 - application 只依赖项目自有 model 与 ports；adapter 依赖方向指向 ports。
-- 解析步骤和 LangChain chain 默认是内部实现，不因测试方便扩展公开 interface。
+- 解析步骤和 RAG 编排内部步骤默认是内部实现，不因测试方便扩展公开 interface。
 - 每个 AI 发布单元独立锁依赖和构建，服务间禁止源码导入。V1 不预建 Python `shared` 或 `common`。
 - `bge_m3` adapter 封装模型目录、Torch、设备、精度、batch、队列和健康状态；application 只看文本用途、归一化向量和分类资源错误。
 - `dashscope` adapter 把供应商流转换为项目自有生成结果；SDK 类型和凭据不得离开 adapter。
@@ -296,7 +296,7 @@ Nacos Data ID 的实际配置在 `deploy/dev/nacos-config/` 保留本地副本�
 | 日志脱敏 | 两端就近测试 + 跨系统唯一探针扫描 |
 | 真实百炼 | 部署后的人工 smoke，不进入自动化 |
 
-测试断言外部行为，不断言 Controller/Mapper 调用顺序、Vue 私有方法、Pinia 内部实现、LangChain chain 或第三方 SDK 对象。仓库当前没有 Sage Vault 自动化测试先例；新套件优先建立少量高 seam 验证，不扩散浅层实现测试。
+测试断言外部行为，不断言 Controller/Mapper 调用顺序、Vue 私有方法、Pinia 内部实现或第三方 SDK 对象。仓库当前没有 Sage Vault 自动化测试先例；新套件优先建立少量高 seam 验证，不扩散浅层实现测试。
 
 MyBatis 改动以 Service 行为测试和真实 MySQL Mapper 集成测试互补验证。Mapper 集成测试复用生产 SQL，至少覆盖 XML 扫描与绑定、显式映射、自增主键回填、知识库名称唯一约束、会话字段映射，以及问答记录条件更新与迟到事件保护；它不能替代 Java/Python 契约测试或浏览器经 Gateway 到 Java、由 Java 分别协作 MySQL 与 Python 的系统验收。Python 不访问 MySQL。
 

@@ -18,8 +18,8 @@
 
 <!-- 决策在对应票据解决后以“要点 + 链接”追加于此，不在地图中重复详情。 -->
 
-- [调研 Python 框架与版本兼容基线](issues/07-research-python-framework-version-baseline.md) — 已核实 Python 3.12、FastAPI/LangChain 稳定线、Milvus 2.4.23 与 PyMilvus 2.4.x 同代约束及 lockfile/镜像验证风险。
-- [确定 ai-modules 多服务框架与 RAG 服务布局](issues/02-ai-modules-service-and-rag-layout.md) — `ai-modules/services/rag` 独立构建部署，采用 Python 3.12、FastAPI 0.139.x、LangChain 1.3.x 与 uv lock，框架类型不越过自有 application interface 和 adapters。
+- [调研 Python 框架与版本兼容基线](issues/07-research-python-framework-version-baseline.md) — 已核实 Python 3.12、FastAPI 稳定线、Milvus 2.4.23 与 PyMilvus 2.4.x 同代约束及 lockfile/镜像验证风险；LangChain 仅评估未采用。
+- [确定 ai-modules 多服务框架与 RAG 服务布局](issues/02-ai-modules-service-and-rag-layout.md) — `ai-modules/services/rag` 独立构建部署，采用 Python 3.12、FastAPI 0.139.x 与 uv lock，不使用 LangChain，框架类型不越过自有 application interface 和 adapters。
 - [确定知识库管理 Java 模块的 interface 与包布局](issues/01-java-module-interface-and-package-layout.md) — 单一 Java 发布单元按业务能力组织并独占业务状态，以窄 application interface、平台 adapters、持久化任务和内容安全的审计/日志 seam 协作。
 - [确定前端业务切片与后端 interface 落点](issues/03-frontend-feature-slices-and-interface.md) — 四个 feature 就近拥有页面、状态、Java adapters 与专用 UI，复用 RuoYi 平台，并以 `fetch` SSE 加显式取消区分停止与断流。
 - [确定 Java-Python 契约所有权与运行时 seam](issues/04-java-python-contract-ownership.md) — 根级版本化 schema 约束双向 wire contract，异步采用至少一次幂等收敛，流与取消保持实例亲和，并以签名、数值错误码和双向契约测试隔离两端实现。

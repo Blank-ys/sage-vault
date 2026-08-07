@@ -12,7 +12,7 @@ Sage Vault 已确定产品范围和 Java/Python 职责，但当前代码仍以 R
 
 在现有 RuoYi/Vue 系统旁建立清晰的 Sage Vault 业务模块：`ruoyi-kb-management` 作为与 RuoYi 模块容器同级的单一 Java 发布单元，拥有知识库、企业文档、异步任务、会话、问答记录和反馈的业务状态；独立 Python RAG 服务拥有解析、切块、嵌入、检索、拒答和生成实现；前端按业务能力组织。浏览器仍只访问 Java；Java 与 Python 经 Nacos 发现的内部 HTTP/SSE interface 协作。
 
-Java 发布单元内部按知识库、企业文档、会话、问答记录和反馈聚合代码，每个业务能力内部保留 RuoYi 开发者熟悉的技术角色。前端以 `conversations`、`knowledge-bases`、`enterprise-documents` 和 `feedback` 四个 feature 就近组织页面、状态、Java adapters 与专用 UI。各模块采用小 interface、深实现和明确 adapter；跨业务能力只经过公开 interface，不直接访问对方实现。跨发布单元只传项目自有契约，不传 LangChain、Milvus、DashScope 或其他供应商类型。
+Java 发布单元内部按知识库、企业文档、会话、问答记录和反馈聚合代码，每个业务能力内部保留 RuoYi 开发者熟悉的技术角色。前端以 `conversations`、`knowledge-bases`、`enterprise-documents` 和 `feedback` 四个 feature 就近组织页面、状态、Java adapters 与专用 UI。各模块采用小 interface、深实现和明确 adapter；跨业务能力只经过公开 interface，不直接访问对方实现。跨发布单元只传项目自有契约，不传 Milvus、DashScope 或其他供应商类型。
 
 配置、SQL、测试和运维资产默认随 owner 就近存放；只有跨多个发布单元、owner 明确且只通过公开 interface 工作的资产才能进入仓库级目录。正式架构文档分别拥有系统关系和完整代码结构，根 Agent 规则强制新会话先读取这两份文档，再按改动范围读取各端规则。每张实施工单以权威状态或关键不变量确定唯一主落点，并独立列出协作与验证落点。
 
@@ -25,7 +25,7 @@ Java 发布单元内部按知识库、企业文档、会话、问答记录和反
 5. 作为 Python 开发者，我希望 RAG 服务只接收幂等命令并返回执行结果，以便专注于高频演进的 AI 链路。
 6. 作为 Python 开发者，我希望入库、回答和清理分别由深模块承接，以便复杂流水线不泄漏到 HTTP 路由。
 7. 作为 Python 开发者，我希望 FastAPI 只处理 transport，以便业务行为能脱离 Web 框架测试。
-8. 作为 Python 开发者，我希望 LangChain 只用于内部编排，以便升级或替换它时不改变跨进程契约。
+8. 作为 Python 开发者，我希望 RAG 编排由项目自有 application services 实现且不依赖外部编排框架，以便升级或替换实现时不改变跨进程契约。
 9. 作为 Python 开发者，我希望每个 AI 服务独立构建和锁定依赖，以便未来服务可以独立演进。
 10. 作为维护者，我希望只有两个真实服务出现稳定复用后才创建共享模块，以便避免假想抽象。
 11. 作为维护者，我希望 AI 服务禁止源码互相导入，以便发布单元保持独立。
@@ -120,14 +120,14 @@ Java 发布单元内部按知识库、企业文档、会话、问答记录和反
 - `v1` 内只允许向后兼容的可选字段、可忽略事件和新错误码；破坏性变更进入新版本目录。未知必需事件、未知错误码、非法状态组合和签名失败必须拒绝，不能猜测处理。
 - Python AI 代码归独立的 `ai-modules` 多服务容器；V1 只有 RAG 服务。每个 AI 服务是独立 Python 项目、发布单元、依赖图和镜像，禁止服务间源码导入。
 - V1 不预建 `shared` 或 `common`。共享模块需同时满足：至少两个真实消费者、稳定需求、明确 owner、小 interface 和跨服务兼容测试。
-- RAG 服务使用 Python `3.12.x`、FastAPI `0.139.x`、Uvicorn `0.51.x` 和 LangChain `1.3.x`。FastAPI 只负责 HTTP/SSE transport，LangChain 只存在于应用实现或专用 adapter。
+- RAG 服务使用 Python `3.12.x`、FastAPI `0.139.x`、Uvicorn `0.51.x`。FastAPI 只负责 HTTP/SSE transport，RAG 编排由项目自有 application services 实现，不使用 LangChain。
 - 版本范围的唯一规范如下；具体解析结果由 lockfile 固化，不在其他决策票中复制版本表：
 
 | 能力 | 直接依赖基线 |
 | --- | --- |
 | 运行时 | Python `>=3.12,<3.13` |
 | HTTP / SSE | FastAPI `>=0.139,<0.140`、Uvicorn `>=0.51,<0.52`；SSE 使用内置 `StreamingResponse` |
-| 编排与配置 | LangChain `>=1.3.14,<2`、Pydantic `>=2.13,<3`、pydantic-settings `>=2.14,<3` |
+| 配置 | Pydantic `>=2.13,<3`、pydantic-settings `>=2.14,<3` |
 | 存储客户端 | PyMilvus `>=2.4.10,<2.5`、MinIO `>=7.2,<8` |
 | 模型客户端 | FlagEmbedding `>=1.4,<1.5`、DashScope `>=1.26.4,<2` |
 | 文档解析 | pypdf `>=6.14,<7`、python-docx `>=1.2,<2`、markdown-it-py `>=4.2,<5`、charset-normalizer `>=3.4,<4` |
@@ -136,7 +136,7 @@ Java 发布单元内部按知识库、企业文档、会话、问答记录和反
 | 工程工具 | uv `0.11.32`、Ruff `0.16.0`、mypy `2.3.0` |
 
 - RAG 应用分为入库、回答和清理三个深模块；transport 只做协议转换，执行模型不复制 Java 业务状态机。
-- MinIO、Milvus、`bge-m3`、百炼、Java 回调和 Nacos 是真实 seam，均使用项目自有 port、生产 adapter 和测试替身。格式解析与 LangChain 内部步骤默认保留为内部 seam。
+- MinIO、Milvus、`bge-m3`、百炼、Java 回调和 Nacos 是真实 seam，均使用项目自有 port、生产 adapter 和测试替身。格式解析与 RAG 编排内部步骤默认保留为内部 seam。
 - Python 使用进程内有界执行器处理长任务。Java 持久化任务状态并负责超时、重试和崩溃后重发；V1 不引入 Celery、Python 业务数据库或第二套持久化任务状态。
 - 首个试点的前端、Java 和 Python 在 Windows 宿主机原生运行，Ubuntu 24 VMware 虚拟机只运行中间件。已核实的嵌入硬件是 RTX 4060 Laptop GPU（8 GB 显存）；GPU profile 使用 Python 3.12、FP16、单进程、单 worker、单模型实例、batch 4 和嵌入 semaphore 1，CUDA 不可用时保持 not ready，不允许静默降级。
 - 显式 `cpu-dev` profile 使用 FP32、单 worker、batch 1 和 semaphore 1，仅供排障。Linux CPU 镜像只证明离线安装、启动和中文嵌入可移植性，不承担试点性能承诺。Ollama 不进入首个 profile，未来只有出现真实第二种实现时才通过既有嵌入 port 增加 adapter。
@@ -184,7 +184,7 @@ Java 发布单元内部按知识库、企业文档、会话、问答记录和反
 - 恢复测试经过持久化任务与恢复触发 interface，验证事务提交后派发、崩溃后重发、多实例抢占、超时重试、重复回调和乱序回调；不绑定 Spring scheduler 或未来 XXL-JOB adapter 的内部实现。
 - 审计测试经过 `ManagementAudit` interface 验证只发送白名单字段、任何正文均不进入操作审计或技术日志，以及审计 adapter 失败不会改变已经确定的业务结果。
 - 前端系统验收经过浏览器到 Java 的真实 HTTP/SSE interface，覆盖动态菜单与权限、四个 feature 的关键路径、显式取消与意外断流的区别，以及反馈正文的授权可见性。少量前端测试只经过 feature 公开 composable/store interface 与 Java adapter seam，验证状态转换、DTO 映射和流事件归约。
-- Python 单元测试只经过入库、回答和清理的 application interface，观察命令结果、流事件和外部调用，不断言 LangChain chain、内部步骤或 SDK 对象。
+- Python 单元测试只经过入库、回答和清理的 application interface，观察命令结果、流事件和外部调用，不断言内部编排步骤或 SDK 对象。
 - HTTP/SSE 契约测试覆盖校验、错误映射、事件顺序、断连、取消、慢消费者和 Java 转发。
 - Java与Python CI共同校验 schema、标准样例和本端序列化模型，并分别运行对方 provider/callback 的 consumer contract tests。所有假 provider、callback receiver 与受控流 provider 必须实现同一 wire contract，禁止测试专用捷径。
 - 真实 Milvus 2.4.23 集成测试只由 Python RAG 模块拥有，并通过项目自有入库/检索 interface 覆盖 `knowledgeBaseId` 强制过滤、collection schema、整篇发布、即时检索排除和幂等删除；Java 与系统验收不直连 Milvus。

@@ -91,7 +91,7 @@ RAG 内部有三个深模块：
 - **回答**：查询嵌入、知识库内检索、拒答判断和流式生成。
 - **清理**：幂等清理解析产物与 Milvus 向量。
 
-FastAPI 只承担 HTTP/SSE transport，LangChain 只存在于内部编排或专用 adapter。MinIO、Milvus、`bge-m3`、百炼、Java 回调与 Nacos 都通过项目自有 port 接入；第三方 SDK 类型不得进入 application interface 或跨端契约。
+FastAPI 只承担 HTTP/SSE transport，RAG 编排由项目自有 application services 手写实现，不使用 LangChain。MinIO、Milvus、`bge-m3`、百炼、Java 回调与 Nacos 都通过项目自有 port 接入；第三方 SDK 类型不得进入 application interface 或跨端契约。
 
 ### 前端业务切片
 
@@ -186,7 +186,7 @@ liveness 只检查进程和事件循环。完整 readiness 在启动或模型重
 - Windows GPU、Linux CPU 模型 smoke，以及部署后真实百炼人工 smoke。
 - 两端日志单测和通过完整链路的正文泄漏探针。
 
-测试断言公开行为和状态，不断言 Controller、Mapper、组件私有方法、LangChain chain 或 adapter 内部调用顺序。
+测试断言公开行为和状态，不断言 Controller、Mapper、组件私有方法或 adapter 内部调用顺序。
 
 ## 文档所有权
 

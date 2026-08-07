@@ -15,8 +15,8 @@ paths:
 
 - RAG 的入库、回答和清理是三个深 application 模块；FastAPI 只承担 HTTP/SSE transport。
 - application 只依赖项目自有 model 和 ports。MinIO、Milvus、`bge-m3`、DashScope、Java callback 与 Nacos 都通过 adapter 接入。
-- Pydantic transport 类型停留在 `transport/http`；第三方 SDK、LangChain、Torch 和供应商类型不得进入 port、执行模型或 wire contract。
-- LangChain 只用于 application 内部编排或专用 adapter；不要因测试方便公开 chain、解析步骤或第三方对象。
+- Pydantic transport 类型停留在 `transport/http`；第三方 SDK、Torch 和供应商类型不得进入 port、执行模型或 wire contract。
+- RAG 编排由 application services 手写实现，不引入 LangChain；不要因测试方便公开内部步骤或第三方对象。
 - 每个 AI 服务独立构建、锁依赖和部署，禁止服务间源码导入；至少两个真实消费者形成稳定需求前不创建 Python `shared` 或 `common`。
 
 ## RAG 与向量

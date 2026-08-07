@@ -26,7 +26,7 @@
 - `adapters/document_storage/http_client.py`：通过 Java 下发的限时 URL 下载原文件。
 - `ports/`：定义了 `DocumentStoragePort`、`TextParserPort`、`ChunkerPort`、`EmbeddingPort`、`VectorStorePort`、`CallbackPort`。
 - `transport/http/app.py` 暂未暴露入库 endpoint；`IndexingService` 组装与 HTTP 协议转换由 02c 异步入库契约确定后接入。
-- `pyproject.toml`：已引入 `langchain>=1.3.14,<2` 作为后续 RAG 编排依赖；Milvus 写入/清理仍直接使用 PyMilvus，以保留 02b 要求的独立标量字段 schema。
+- `pyproject.toml`：未引入 langchain，RAG 编排由手写 application services 承担；Milvus 写入/清理直接使用 PyMilvus，以保留 02b 要求的独立标量字段 schema。
 - `tests/`：新增单元测试与集成测试；在本地 Milvus `192.168.150.100:19530` 与本地 `bge-m3` 模型路径可用时，全量测试可全部通过。
 
 验证：

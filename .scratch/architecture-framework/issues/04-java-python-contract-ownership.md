@@ -15,7 +15,7 @@ Blocked by: 01, 02
 - 根目录 `contracts/java-python-rag/v1/` 是 Java-Python HTTP、回调和 SSE wire contract 的唯一权威来源。实际机器可读契约不得放入 `.agents/rules/`；`.agents/rules/backend.md` 与 `.agents/rules/ai-modules.md` 只记录修改权限、兼容规则、必跑验证并链接该目录，根 `AGENTS.md` 继续只做规则地图。
 - 契约由 Java 与 Python 共同维护，但语义所有权分开：Java 定义业务身份、任务与尝试、允许的业务状态转换、重试裁决和取消语义；Python 定义 RAG 执行结果、流事件能力与安全诊断元数据。任何一方不得单独把本端实现细节提升为跨进程事实。
 - `openapi.yaml` 描述命令受理、结果回调、流式问答、取消和健康 interface；具名 SSE 事件使用独立 JSON Schema；`errors.yaml` 注册数值错误码、含义、可重试性与建议 HTTP 映射。契约目录同时保存最小成功、失败和边界样例。
-- Java transport DTO 与 Python Pydantic transport 模型在各自 adapter 内手写，不从 schema 生成代码。application interface 只使用本端项目类型；Spring、Feign、FastAPI、Pydantic、LangChain、Milvus、MinIO 或供应商 SDK 类型不得越过 adapter seam。
+- Java transport DTO 与 Python Pydantic transport 模型在各自 adapter 内手写，不从 schema 生成代码。application interface 只使用本端项目类型；Spring、Feign、FastAPI、Pydantic、Milvus、MinIO 或供应商 SDK 类型不得越过 adapter seam。
 
 ### 异步命令、回调与企业文档传递
 
