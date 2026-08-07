@@ -1,6 +1,6 @@
 import logging
 
-from sage_vault_rag.model.chunk import Chunk
+from sage_vault_rag.application.indexing.publication import DocumentPublisher
 from sage_vault_rag.model.indexing_command import IndexingCommand
 from sage_vault_rag.model.indexing_result import IndexingResult
 from sage_vault_rag.ports.callback import CallbackPort
@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 class IndexingService:
-    """单文档入库流程编排：下载、解析、切块、嵌入、写入 Milvus、回调。
+    """单文档入库流程编排：读取文档、原子发布、失败补偿、回调报告。
 
-    使用 `DocumentParserPort` 获取结构化文档（自然段列表 + 可选标题/页码元数据），
-    再交给 `ChunkerPort` 切块。任意步骤失败仍走既有清理与回调路径，
-    失败原因记录在 `IndexingResult.diagnostics`，不向 Java 暴露异常细节。
+    发布（prepare/publish/补偿）收敛在内部 ``DocumentPublisher`` publication module；
+    callback 只报告结果，不参与补偿决策。任意步骤失败仍走补偿与失败回调路径，
+    失败原因记录在 ``IndexingResult.diagnostics``，不向 Java 暴露异常细节。
     """
 
     def __init__(
@@ -32,31 +32,20 @@ class IndexingService:
     ) -> None:
         self._document_storage = document_storage
         self._document_parser = document_parser
-        self._chunker = chunker
-        self._embedder = embedder
-        self._vector_store = vector_store
+        self._publisher = DocumentPublisher(chunker, embedder, vector_store)
         self._callback = callback
 
     async def index(self, command: IndexingCommand) -> IndexingResult:
-        chunks: list[Chunk] = []
         try:
-            await self._vector_store.delete_by_document(command.document_id)
             content = await self._document_storage.download(command.source_url)
             document = await self._document_parser.parse(content, command.filename)
-            chunks = self._chunker.split(
-                document,
-                command.knowledge_base_id,
-                command.document_id,
-                command.filename,
-            )
-            vectors = await self._embedder.embed([chunk.text for chunk in chunks])
-            await self._vector_store.save_chunks(chunks, vectors)
+            chunks_count = await self._publisher.publish(command, document)
             result = IndexingResult(
                 task_id=command.task_id,
                 attempt=command.attempt,
                 document_id=command.document_id,
                 success=True,
-                chunks_count=len(chunks),
+                chunks_count=chunks_count,
                 diagnostics={"filename": command.filename},
             )
         except Exception as exception:
@@ -66,7 +55,7 @@ class IndexingService:
                 command.attempt,
                 command.document_id,
             )
-            await self._cleanup(command.document_id, chunks)
+            await self._publisher.compensate(command.document_id)
             result = IndexingResult(
                 task_id=command.task_id,
                 attempt=command.attempt,
@@ -77,9 +66,3 @@ class IndexingService:
             )
         await self._callback.report(result)
         return result
-
-    async def _cleanup(self, document_id: str, chunks: list[Chunk]) -> None:
-        try:
-            await self._vector_store.delete_by_document(document_id)
-        except Exception:
-            logger.exception("清理 Milvus 向量失败: document_id=%s", document_id)

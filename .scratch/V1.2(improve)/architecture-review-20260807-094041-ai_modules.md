@@ -191,6 +191,8 @@ AnswerEvent stream
 
 ## 3. 深化 Milvus vector-store adapter 的内部 seam
 
+**状态：`resolved`**
+
 **推荐强度：Strong**
 
 ### Files
@@ -249,6 +251,8 @@ Milvus SDK
 
 ## 4. 收拢 Indexing publication 与失败补偿
 
+**状态：`resolved`**
+
 **推荐强度：Worth exploring**
 
 ### Files
@@ -298,6 +302,24 @@ publication module
 - **leverage**：一次定义发布语义，多个文档格式与 adapter 复用。
 - **测试改进**：补充 callback-after-success failure、同文档并发 attempt、部分写入测试。
 - **约束**：Python 不复制 Java 拥有的业务状态机。
+
+深入探讨：收拢 Indexing publication 与失败补偿
+
+### 结论
+
+候选 #4 已实施。发布、补偿清理与回调从 `index()` 浅流程中分离，收敛为 `application/indexing/publication.py` 的 `DocumentPublisher` deep module；`IndexingService` 保持原有公开接口（六个 port 的构造器与 `index(command) -> IndexingResult`）不变，内部组合 publisher。
+
+### 实施内容
+
+- **publication module**：`DocumentPublisher` 拥有"准备向量（切块 + 嵌入）-> 原子发布（清旧向量 + 写入）-> 失败补偿"三条 seam；`publish()` 失败抛出异常，由调用方进入 `compensate()` 幂等清理，确保失败后文档不可检索。
+- **回调只报告**：`index()` 在 try/except 之外调用 `callback.report(result)`；回调失败向上传播、不触发补偿，已成功发布内容保持不变。`CallbackPort` 与 `IndexingResult` 文档显式声明 report-only。
+- **删除冗余**：移除未使用 `chunks` 参数的 `_cleanup`；失败路径统一由 publisher 补偿，删除计数从"发布前 + 清理时各一次"变为"补偿一次"。
+- **并发 attempt 防护**：同文档的 delete+save 由每文档 `asyncio.Lock` 串行，避免并发 attempt 把两套片段混入同一文档；该锁只保护向量库临界区，不复制 Java 任务状态机。
+- **公开 seam 不变**：`VectorStorePort`、`CallbackPort`、`IndexingResult` 与 HTTP wire contract 均未改变。
+
+### 验证
+
+`uv run ruff check .`、`uv run mypy .`、`uv run pytest` 全部通过（145 passed，39 skipped 为真实 Milvus / GPU 集成测试按环境跳过）。新增单测覆盖 callback-after-success failure、同文档并发 attempt、部分写入补偿；未运行真实 Milvus 与部署验证。
 
 ---
 

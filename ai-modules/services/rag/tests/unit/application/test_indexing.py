@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 
 import pytest
@@ -101,6 +102,43 @@ class FailingEmbedder:
 
     async def ready(self) -> bool:
         return True
+
+
+class FailingCallback:
+    """回调阶段抛出异常，用于验证回调失败不触发补偿清理。"""
+
+    async def report(self, result: IndexingResult) -> None:
+        raise RuntimeError("回调失败")
+
+
+class PartialWriteVectorStore(InMemoryVectorStore):
+    """save_chunks 先写入部分片段再抛异常，模拟部分写入失败。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._save_count = 0
+
+    async def save_chunks(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
+        self.saved.extend(zip(chunks, vectors, strict=True))
+        self._save_count += 1
+        if self._save_count == 1:
+            raise RuntimeError("部分写入失败")
+
+
+class BarrierEmbedder(FakeEmbedder):
+    """两个并发 attempt 在嵌入阶段汇合，强制同时进入发布临界区。"""
+
+    def __init__(self, barrier: asyncio.Event, dim: int = 4) -> None:
+        super().__init__(dim)
+        self._barrier = barrier
+        self._reached = 0
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self._reached += 1
+        if self._reached == 2:
+            self._barrier.set()
+        await self._barrier.wait()
+        return await super().embed(texts)
 
 
 @dataclass
@@ -239,7 +277,7 @@ async def test_index_md_failure_triggers_cleanup_and_callback(command: IndexingC
     assert result.diagnostics["error"] == "ValueError"
     assert result.diagnostics["filename"] == "empty.md"
     assert vector_store.saved == []
-    assert vector_store.deleted == ["doc-md", "doc-md"]
+    assert vector_store.deleted == ["doc-md"]
     assert callback.results == [result]
 
 
@@ -280,7 +318,7 @@ async def test_index_pdf_failure_triggers_cleanup_and_callback() -> None:
     assert result.diagnostics["error"] == "ValueError"
     assert result.diagnostics["filename"] == "secret.pdf"
     assert vector_store.saved == []
-    assert vector_store.deleted == ["doc-pdf", "doc-pdf"]
+    assert vector_store.deleted == ["doc-pdf"]
     assert callback.results == [result]
 
 
@@ -339,9 +377,8 @@ async def test_index_clears_stale_vectors_before_retry() -> None:
 async def test_index_chunk_failure_triggers_cleanup_and_callback(command: IndexingCommand) -> None:
     """切块阶段失败应触发清理与失败回调，不写入任何片段。
 
-    验证 05 各阶段失败覆盖：切块失败时 IndexingService 走失败路径，
-    先删除残留向量（入库前 + 清理时各一次），回调 success=False，
-    diagnostics 包含异常类型与文件名。
+    验证 05 各阶段失败覆盖：切块失败发生在发布之前，IndexingService 走失败路径，
+    由补偿路径清理残留向量，回调 success=False，diagnostics 包含异常类型与文件名。
     """
     callback = InMemoryCallback()
     vector_store = InMemoryVectorStore()
@@ -362,7 +399,7 @@ async def test_index_chunk_failure_triggers_cleanup_and_callback(command: Indexi
     assert result.diagnostics["error"] == "RuntimeError"
     assert result.diagnostics["filename"] == "test.txt"
     assert vector_store.saved == []
-    assert vector_store.deleted == ["doc-1", "doc-1"]
+    assert vector_store.deleted == ["doc-1"]
     assert callback.results == [result]
 
 
@@ -370,8 +407,8 @@ async def test_index_chunk_failure_triggers_cleanup_and_callback(command: Indexi
 async def test_index_embed_failure_triggers_cleanup_and_callback(command: IndexingCommand) -> None:
     """嵌入阶段失败应触发清理与失败回调，不写入任何片段。
 
-    验证 05 各阶段失败覆盖：嵌入失败时 IndexingService 走失败路径，
-    先删除残留向量（入库前 + 清理时各一次），回调 success=False。
+    验证 05 各阶段失败覆盖：嵌入失败发生在发布之前，IndexingService 走失败路径，
+    由补偿路径清理残留向量，回调 success=False。
     """
     callback = InMemoryCallback()
     vector_store = InMemoryVectorStore()
@@ -392,5 +429,112 @@ async def test_index_embed_failure_triggers_cleanup_and_callback(command: Indexi
     assert result.diagnostics["error"] == "RuntimeError"
     assert result.diagnostics["filename"] == "test.txt"
     assert vector_store.saved == []
+    assert vector_store.deleted == ["doc-1"]
+    assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_callback_failure_after_success_does_not_compensate(command: IndexingCommand) -> None:
+    """成功发布后回调失败不应触发补偿，已发布内容保持不变。
+
+    回调只报告结果、不参与补偿决策：回调抛出的异常向上传播，
+    向量库中的成功写入不被清理，也不会再次触发删除。
+    """
+    vector_store = InMemoryVectorStore()
+    callback = FailingCallback()
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage("第一段。".encode()),
+        document_parser=TxtParser(),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+
+    with pytest.raises(RuntimeError, match="回调失败"):
+        await service.index(command)
+
+    assert len(vector_store.saved) == 1
+    assert vector_store.deleted == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_index_partial_write_compensates_and_leaves_no_vectors(command: IndexingCommand) -> None:
+    """部分写入失败应触发补偿清理，最终不留下任何该文档的片段。
+
+    模拟向量库写入到一半失败：补偿路径删除部分写入，回调 success=False，
+    文档不可检索。
+    """
+    vector_store = PartialWriteVectorStore()
+    callback = InMemoryCallback()
+    service = IndexingService(
+        document_storage=InMemoryDocumentStorage("第一段。".encode()),
+        document_parser=TxtParser(),
+        chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+        embedder=FakeEmbedder(),
+        vector_store=vector_store,
+        callback=callback,
+    )
+
+    result = await service.index(command)
+
+    assert result.success is False
+    assert result.chunks_count == 0
+    assert result.diagnostics["error"] == "RuntimeError"
+    assert vector_store.saved == []
     assert vector_store.deleted == ["doc-1", "doc-1"]
     assert callback.results == [result]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_attempts_for_same_document_stay_coherent() -> None:
+    """同一文档并发 attempt 不会把两套片段混入向量库。
+
+    两个 attempt 在嵌入阶段汇合后同时发布：每文档锁串行 delete+save，
+    最终只保留最后一次完整写入的一套片段。
+    """
+    barrier = asyncio.Event()
+    embedder = BarrierEmbedder(barrier)
+    vector_store = InMemoryVectorStore()
+    callback = InMemoryCallback()
+
+    def build_service(content: bytes) -> IndexingService:
+        return IndexingService(
+            document_storage=InMemoryDocumentStorage(content),
+            document_parser=TxtParser(),
+            chunker=ParagraphChunker(chunk_size=512, chunk_overlap=64),
+            embedder=embedder,
+            vector_store=vector_store,
+            callback=callback,
+        )
+
+    command_a = IndexingCommand(
+        task_id="task-a",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-concurrent",
+        filename="a.txt",
+        source_url="http://minio/a.txt",
+        request_id="req-a",
+    )
+    command_b = IndexingCommand(
+        task_id="task-b",
+        attempt=1,
+        knowledge_base_id=1,
+        document_id="doc-concurrent",
+        filename="b.txt",
+        source_url="http://minio/b.txt",
+        request_id="req-b",
+    )
+
+    result_a, result_b = await asyncio.gather(
+        build_service("第一段 A。".encode()).index(command_a),
+        build_service("第一段 B。".encode()).index(command_b),
+    )
+
+    assert result_a.success is True
+    assert result_b.success is True
+    saved_for_document = [chunk for chunk, _ in vector_store.saved if chunk.document_id == "doc-concurrent"]
+    assert saved_for_document
+    assert {chunk.filename for chunk in saved_for_document} in ({"a.txt"}, {"b.txt"})
+    assert len(callback.results) == 2
