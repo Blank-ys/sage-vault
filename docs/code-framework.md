@@ -27,9 +27,10 @@ sage-vault/
 │   │   └── other existing RuoYi modules...
 │   ├── ruoyi-kb-management/
 │   │   ├── pom.xml
-│   │   ├── sql/
+│   │   ├── sql/                   # 增量编号脚本，已追加至 011_schema.sql
 │   │   │   ├── 001_schema.sql
-│   │   │   └── 002_seed.sql
+│   │   │   ├── 002_seed.sql
+│   │   │   └── ...
 │   │   └── src/
 │   │       ├── main/
 │   │       │   ├── java/com/sagevault/kb/
@@ -49,30 +50,38 @@ sage-vault/
 │       └── rag/
 │           ├── pyproject.toml
 │           ├── uv.lock
-│           ├── Dockerfile
-│           ├── config/
 │           ├── src/sage_vault_rag/
 │           └── tests/
 ├── contracts/
-│   └── java-python-rag/
-│       ├── v1/
-│       └── tests/
-├── deploy/
+│   ├── java-python-rag/
+│   │   └── v1/
+│   ├── rest/
+│   │   └── documents/
+│   │       └── admin.v1.yaml        # 管理端文档 REST 契约
+│   └── tests/                       # language-neutral schema/example checks
+├── system-tests/
+│   ├── check_ports.py
+│   ├── get_tokens.py
+│   └── knowledge-qa/
+│       └── test_*.py                 # 浏览器经 Gateway 到 Java/Python 的系统验收
+├── deploy/                           # V1 目标结构，尚未落地
 │   ├── dev/
 │   │   ├── docker-compose-base.yml
 │   │   └── nacos-config/
 │   └── smoke/
-├── evaluation/
+├── evaluation/                       # V1 目标结构，尚未落地
 │   └── knowledge-qa/
 │       ├── datasets/
 │       ├── configs/
 │       ├── runner/
 │       └── reports/
 └── .agents/
-    └── rules/
-        ├── backend.md
-        ├── frontend.md
-        └── ai-modules.md
+    ├── rules/
+    │   ├── backend.md
+    │   ├── frontend.md
+    │   ├── ai-modules.md
+    │   └── async-and-rate-limit.md
+    └── skills/                       # 项目级 agent skills（agent-browser、frontend-design）
 ```
 
 ## 根级准入规则
@@ -96,7 +105,7 @@ sage-vault/
 
 ```text
 com/sagevault/kb/
-├── bootstrap/                   # Spring 启动与发布单元装配
+├── bootstrap/                   # 发布单元级基础设施装配（MyBatisConfiguration、Properties、健康检查）
 ├── knowledgebase/
 │   ├── controller/
 │   ├── service/                 # public XxxService interfaces
@@ -124,9 +133,8 @@ com/sagevault/kb/
 ├── qarecord/
 │   ├── service/
 │   │   └── impl/
-│   │   └── port/
 │   ├── domain/
-│   └── mapper/
+│   └── mapper/                  # 需要时再引入 service/port 窄接口
 ├── feedback/
 │   ├── controller/
 │   ├── service/
@@ -136,10 +144,9 @@ com/sagevault/kb/
 │   ├── mapper/
 │   └── adapter/
 └── platform/
-    ├── security/                 # RuoYi security context adapter
     ├── audit/                    # ManagementAudit adapter
-    ├── error/                    # BusinessException, ErrorCode and HTTP handler
-    └── observability/            # safe technical logging mechanisms
+    └── error/                    # BusinessException, ErrorCode and HTTP handler
+    # security（RuoYi 安全上下文 adapter）与 observability（安全日志机制）为 V1 目标，尚未落地
 ```
 
 异步任务随 `document` 或 `knowledgebase` 能力存放，不创建可容纳任意任务的公共包。只有发布单元级平台机制可进入 `platform`；领域规则、业务状态机和业务 DTO 不得进入其中。
@@ -147,7 +154,7 @@ com/sagevault/kb/
 ### Java 依赖规则
 
 - Controller 只调用所属能力的 `XxxService` interface；该 interface 是本能力的公开 application interface。
-- 有真实 HTTP 入口的类命名为 `XxxController`，公开接口命名为 `XxxService`，实现命名为 `XxxServiceImpl`，MyBatis 持久化接口命名为 `XxxMapper`；不保留 `XxxApplication` 或无 owner 的 Service 命名，也不为无 HTTP 入口的能力创建空 Controller。
+- 有真实 HTTP 入口的类命名为 `XxxController`，公开接口命名为 `XxxService`，实现命名为 `XxxServiceImpl`，MyBatis 持久化接口命名为 `XxxMapper`；发布单元唯一 Spring Boot 启动类 `KnowledgeBaseManagementApplication` 位于 `com.sagevault.kb` 根包，`bootstrap` 子包只放发布单元级基础设施装配，不为无 HTTP 入口的能力创建空 Controller，也不保留无 owner 的 Service 命名。
 - 浏览器与 Java 之间的 Request/Response 随所属能力放在 `service`，作为公开 `XxxService` 契约；只有 HTTP 契约与 Service 契约真实分化时才增加 controller-private DTO。
 - `XxxServiceImpl` 拥有流程。模块内 MySQL 持久化直接通过本能力的 MyBatis Mapper 产生副作用；外部系统通过 port/adapter 接入。
 - Mapper 只使用独立的 `XxxEntity` 持久化模型；Request/Response 不得作为 Mapper 参数或返回值，Entity 也不得作为 HTTP 或跨进程契约。公开 Request/Response 保持不可变，Entity 可为 MyBatis generated-key 回填提供可写属性，但不承载业务行为。
@@ -182,8 +189,6 @@ V1 不使用 Flyway。业务 SQL 是人工执行、不可变的增量编号脚�
 services/rag/
 ├── pyproject.toml
 ├── uv.lock
-├── Dockerfile
-├── config/                       # committable, non-secret templates
 ├── src/sage_vault_rag/
 │   ├── bootstrap/                # settings, validation, assembly, profiles
 │   ├── transport/http/           # HTTP/SSE and contract mapping only
@@ -192,21 +197,29 @@ services/rag/
 │   │   ├── answering/
 │   │   └── cleanup/
 │   ├── model/                    # project-owned execution types
-│   ├── ports/                    # MinIO, vector, embedding, generation, callback...
+│   ├── ports/                    # vector, embedding, generation, storage, callback...
 │   └── adapters/
-│       ├── minio/
-│       ├── milvus/
-│       ├── bge_m3/
-│       ├── dashscope/
-│       ├── java_callback/
-│       └── nacos/
+│       ├── bge_m3/               # 本地嵌入（模型目录、Torch、设备、精度、batch、队列）
+│       ├── chunker/              # 切块
+│       ├── dashscope/            # OpenAI 兼容客户端访问百炼
+│       ├── document_parser/      # 解析器分发
+│       ├── document_storage/     # 经 Java 预签名 URL 读取原文件
+│       ├── java_callback/        # Java 入库/清理回调
+│       ├── milvus/               # 向量检索与原子发布
+│       ├── nacos/                # 服务注册
+│       ├── txt_parser/
+│       ├── pdf_parser/
+│       ├── docx_parser/
+│       ├── markdown_parser/      # 项目自有正则解析
+│       ├── fake_generation/      # 确定性假生成（自动化与本地默认）
+│       └── failure_injection/    # 测试用故障注入
 └── tests/
     ├── unit/
     ├── contract/
-    ├── integration/
-    │   ├── parsers/
-    │   └── milvus/
-    └── smoke/
+    └── integration/
+        ├── (e2e)                  # 根级端到端：txt/pdf/md/docx 入库、检索+回答
+        ├── parsers/
+        └── milvus/
 ```
 
 - FastAPI 与 Pydantic transport 类型停留在 `transport/http`。
@@ -215,7 +228,9 @@ services/rag/
 - 解析步骤和 RAG 编排内部步骤默认是内部实现，不因测试方便扩展公开 interface。
 - 每个 AI 发布单元独立锁依赖和构建，服务间禁止源码导入。V1 不预建 Python `shared` 或 `common`。
 - `bge_m3` adapter 封装模型目录、Torch、设备、精度、batch、队列和健康状态；application 只看文本用途、归一化向量和分类资源错误。
-- `dashscope` adapter 把供应商流转换为项目自有生成结果；SDK 类型和凭据不得离开 adapter。
+- `dashscope` adapter 通过 OpenAI 兼容客户端访问百炼，把供应商流转换为项目自有生成结果；供应商类型和凭据不得离开 adapter。`fake_generation` adapter 是自动化与本地默认的确定性假生成。
+- 原文件经 `document_storage` adapter 通过 Java 限时预签名 URL 读取，不使用 MinIO SDK。
+- `txt_parser`、`pdf_parser`、`docx_parser`、`markdown_parser` 输出项目自有 `ParsedDocument`；Markdown 使用项目自有正则解析，不依赖第三方解析库。
 
 ## 前端 feature
 
@@ -238,21 +253,24 @@ features/<feature>/
 - 跨 feature 只能从公开入口导入。`conversations` 可以消费 `knowledge-bases` 的只读选择 interface，不得读取其私有 store 或 adapter。
 - 默认使用页面/composable 局部状态。只有真实跨页面生命周期才创建 feature store；`conversations` 拥有当前会话、记录和单活跃流的前端生命周期。
 - 普通 HTTP、分页、上传和命令由所属 feature 的 `api` adapter 封装。SSE 使用 `fetch` 和 `AbortController`，显式取消命令不能被连接中断替代。
-- 动态路由同时扫描现有 `views/**/*.vue` 与目标 `features/**/pages/*.vue`，菜单记录直接引用稳定页面路径。
+- 问答工作台由 `frontend/src/router/index.js` 静态注册；管理页面组件位于 `features/**/pages/*.vue`，由菜单记录引用稳定路径、经 `permission.js` 动态扫描 `views/**/*.vue` 与 `features/**/pages/*.vue` 加载。
 
 ## 跨端契约
 
 ```text
-contracts/java-python-rag/
-├── v1/
-│   ├── openapi.yaml
-│   ├── events/                    # named SSE event schemas
-│   ├── errors.yaml
-│   └── examples/
-└── tests/                         # language-neutral schema/example checks
+contracts/
+├── java-python-rag/
+│   └── v1/
+│       ├── openapi.yaml
+│       ├── events/                  # named SSE event schemas
+│       ├── errors.yaml
+│       └── examples/
+└── tests/                           # language-neutral schema/example checks
 ```
 
 Java 和 Python 共同维护该契约，但分别在本端 transport adapter 内手写模型。两端 consumer/provider 测试随各自发布单元存放并引用根契约，禁止复制 schema、样例或建立绕过契约的测试 interface。
+
+此外，`contracts/rest/documents/admin.v1.yaml` 登记 Sage Vault 管理端文档 REST 契约（网关前缀 `/api/v1`），作为删除幂等与清理失败接口的跨端验收权威源。
 
 兼容性规则：`v1` 只允许增加兼容性可选字段、声明可忽略事件和新注册错误码；删除、改名、语义改变或收紧校验属于破坏性变更，必须进入新版本。
 
@@ -283,7 +301,7 @@ Nacos Data ID 的实际配置在 `deploy/dev/nacos-config/` 保留本地副本�
 
 | 目标 | Owner 与 seam |
 | --- | --- |
-| 完整用户行为 | 浏览器到 Java 的真实 HTTP/SSE 系统验收 |
+| 完整用户行为 | `system-tests/knowledge-qa/` 浏览器经 Gateway 到 Java 的真实 HTTP/SSE 系统验收 |
 | Java 业务规则 | 各能力 application interface |
 | Java 持久化与恢复 | 真实 MySQL、业务 SQL、任务恢复 interface |
 | 企业文档原文件 | 企业文档 application interface + 真实 MinIO |
@@ -296,7 +314,7 @@ Nacos Data ID 的实际配置在 `deploy/dev/nacos-config/` 保留本地副本�
 | 日志脱敏 | 两端就近测试 + 跨系统唯一探针扫描 |
 | 真实百炼 | 部署后的人工 smoke，不进入自动化 |
 
-测试断言外部行为，不断言 Controller/Mapper 调用顺序、Vue 私有方法、Pinia 内部实现或第三方 SDK 对象。仓库当前没有 Sage Vault 自动化测试先例；新套件优先建立少量高 seam 验证，不扩散浅层实现测试。
+测试断言外部行为，不断言 Controller/Mapper 调用顺序、Vue 私有方法、Pinia 内部实现或第三方 SDK 对象。系统验收（`system-tests/`）、跨端契约测试和两端模块测试套件已落地；新增测试优先建立少量高 seam 验证，不扩散浅层实现测试。
 
 MyBatis 改动以 Service 行为测试和真实 MySQL Mapper 集成测试互补验证。Mapper 集成测试复用生产 SQL，至少覆盖 XML 扫描与绑定、显式映射、自增主键回填、知识库名称唯一约束、会话字段映射，以及问答记录条件更新与迟到事件保护；它不能替代 Java/Python 契约测试或浏览器经 Gateway 到 Java、由 Java 分别协作 MySQL 与 Python 的系统验收。Python 不访问 MySQL。
 

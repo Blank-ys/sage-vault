@@ -46,3 +46,7 @@
 - 若联调仍报 `url error`，按该 MaaS 实例实际 chat completions 路径调整 `.env` 的 base_url（去掉或补 `/api/v1`）。
 - 第 5 项冒烟（真实百炼通道端到端问答）仍属部署后人工动作，本次修复后应执行一次确认 `stage=generate` 不再失败。
 
+## 后续更正 — dashscope 依赖已移除
+
+上文的"`dashscope` 依赖保留不移除（其余模块仍声明）"已过时：`pyproject.toml` 已从 dependencies 中删除 `dashscope`，生成通道仅保留 `openai>=1.40,<2` 客户端访问百炼 OpenAI 兼容接口；对应 `uv.lock` 与 `docs/technology-stack.md` 的依赖行已同步更新。
+

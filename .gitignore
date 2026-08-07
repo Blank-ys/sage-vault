@@ -47,6 +47,7 @@ _shared
 .env.local
 .env.development
 .env.production
+.env.staging
 .env.*.local
 
 # 日志

@@ -48,7 +48,7 @@ yarn --cwd frontend dev
 yarn --cwd frontend build:prod
 ```
 
-Python RAG、根级契约和 V1 项目级 compose 仍是目标结构；对应清单或脚本不存在时，不得虚构命令。现有 `backend/docker/docker-compose*.yml` 是待迁移入口，不得当作 V1 唯一 base 编排。
+Python RAG（`ai-modules/services/rag`）、根级契约（`contracts/`）和系统验收（`system-tests/`）已落地；评测资产（`evaluation/`）与 V1 项目级唯一编排（`deploy/`）仍是目标结构，对应清单或脚本不存在时，不得虚构命令。现有 `backend/docker/docker-compose*.yml` 是待迁移入口，不得当作 V1 唯一 base 编排。
 
 ## Backend Rules
 

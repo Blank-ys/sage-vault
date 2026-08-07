@@ -2,7 +2,7 @@
 
 本文是 Sage Vault 完整技术栈、版本状态、运行 profile 和升级规则的唯一权威。根 [AGENTS.md](../AGENTS.md#技术栈) 只保留高频摘要；系统职责和运行关系见 [系统架构](architecture.md)。
 
-状态分为：**当前锁定**（仓库清单已固定）、**V1 目标**（允许范围已确定，精确版本待 lock 验证）、**候选待验证**和**未锁定**。机器真相是 Maven 清单、`frontend/package.json` 与 `yarn.lock`、未来 Python `pyproject.toml` 与 `uv.lock`，以及项目 compose 的镜像 tag/digest。若机器清单与本文冲突，停止并同时修正，不得自行选择其一。
+状态分为：**当前锁定**（仓库清单已固定）、**V1 目标**（允许范围已确定，精确版本待 lock 验证）、**候选待验证**和**未锁定**。机器真相是 Maven 清单、`frontend/package.json` 与 `yarn.lock`、Python `ai-modules/services/rag/pyproject.toml` 与 `uv.lock`，以及项目 compose 的镜像 tag/digest。`ai-modules/requirements.txt` 是历史冗余清单，可能与 `pyproject.toml` 漂移，不作为真相，待清理。若机器清单与本文冲突，停止并同时修正，不得自行选择其一。
 
 ## Backend: Java、Spring 与 RuoYi
 
@@ -49,26 +49,26 @@ V1 不使用 PostgreSQL、pgvector、Redisson 或 Redis Stream。异步任务由
 
 | 功能 | 技术与版本 | 状态 |
 | --- | --- | --- |
-| Python | `>=3.12,<3.13` | V1 目标；试点使用 Python 3.12 |
-| HTTP/SSE | FastAPI `>=0.139,<0.140`、Uvicorn `>=0.51,<0.52` | V1 目标 |
+| Python | `>=3.12,<3.13` | 已锁定；试点使用 Python 3.12 |
+| HTTP/SSE | FastAPI `>=0.139,<0.140`、Uvicorn `>=0.51,<0.52` | 已锁定 |
 | RAG 编排 | 项目自有 application services（indexing/answering/cleanup）；不使用编排框架 | 已实现 |
-| 配置/transport model | Pydantic `>=2.13,<3`、pydantic-settings `>=2.14,<3` | V1 目标 |
-| Milvus 客户端 | PyMilvus `>=2.4.10,<2.5` | V1 目标；与 Milvus 2.4.x 同代 |
-| MinIO 客户端 | MinIO `>=7.2,<8` | V1 目标 |
+| 配置/transport model | pydantic-settings `>=2.14,<3`（Pydantic `>=2.13,<3` 由传递依赖解析） | 已锁定 |
+| Milvus 客户端 | PyMilvus `>=2.4.10,<2.5` | 已锁定；与 Milvus 2.4.x 同代 |
+| MinIO 访问 | 经 Java 限时预签名 URL 走 HTTP，不使用 MinIO SDK | 已实现 |
 | 本地嵌入 | FlagEmbedding `1.4.0`、`BAAI/bge-m3` | FlagEmbedding 已固定；模型 commit SHA 待锁定 |
-| Transformers | `>=4.44.2,<6` | 兼容范围；最终由 `uv.lock` 固定 |
-| Windows GPU Torch | `2.7.1+cu128` | 候选待验证，不是基线 |
+| Transformers | `>=4.44.2,<6` | 传递依赖，由 FlagEmbedding 解析；最终由 `uv.lock` 固定 |
+| Windows GPU Torch | `2.7.1+cu128` | 候选待验证，不是基线；当前 `uv.lock` 解析为 pypi `torch 2.12.1`，与 pyproject 的 cu128 index 声明漂移，需重建 lock 后再定基线 |
 | Linux CPU Torch | 与最终 Windows Torch 同版本 | 候选待验证；wheel/hash 未锁定 |
 | 传递依赖 | Starlette、AnyIO、Hugging Face Hub client | 由 `uv.lock` 固定；Hub client 只用于联网制品准备 |
-| 生成 | DashScope `>=1.26.4,<2`、默认模型标识 `qwen-plus` | V1 目标 |
-| PDF 解析 | pypdf `>=6.14,<7` | V1 目标 |
-| DOCX 解析 | python-docx `>=1.2,<2` | V1 目标 |
-| Markdown 解析 | markdown-it-py `>=4.2,<5` | V1 目标 |
-| 编码识别 | charset-normalizer `>=3.4,<4` | V1 目标 |
-| 服务发现 | nacos-sdk-python `>=3.2,<4` | V1 目标 |
-| 测试 | pytest `>=9.1,<10`、pytest-asyncio `>=1.4,<2`、HTTPX `>=0.28,<0.29`、jsonschema `>=4.26,<5` | V1 目标；jsonschema 校验根级 SSE 契约样例 |
-| 依赖工具 | uv `0.11.32` | V1 精确目标 |
-| Lint / 类型检查 | Ruff `0.16.0`、mypy `2.3.0` | V1 精确目标 |
+| 生成 | openai `>=1.40,<2` 访问百炼 OpenAI 兼容接口；默认模型标识 `qwen-plus` | 已实现 |
+| PDF 解析 | pypdf `>=6.14,<7` | 已锁定 |
+| DOCX 解析 | python-docx `>=1.2,<2` | 已锁定 |
+| Markdown 解析 | 项目自有 `MarkdownParser`（正则解析），不使用第三方解析库 | 已实现 |
+| 编码识别 | charset-normalizer `>=3.4,<4` | 已锁定 |
+| 服务发现 | nacos-sdk-python `>=3.2,<4` | 已锁定 |
+| 测试 | pytest `>=9.1,<10`、pytest-asyncio `>=1.4,<2`、HTTPX `>=0.28,<0.29`、jsonschema `>=4.26,<5` | 已锁定；jsonschema 校验根级 SSE 契约样例 |
+| 依赖工具 | uv `0.11.32`；构建后端 hatchling；`setuptools>=60,<71` 在 `pyproject.toml` dependencies 中声明 | V1 精确目标 |
+| Lint / 类型检查 | Ruff `0.16.0`、mypy `2.3.0` | 已锁定 |
 
 `bge-m3` 必须固定实际 40 位 Hugging Face commit SHA；`main`、tag 或只有模型名不算版本。Ollama 不属于 V1 技术基线。
 
@@ -89,6 +89,7 @@ V1 不使用 PostgreSQL、pgvector、Redisson 或 Redis Stream。异步任务由
 | Vue 工具 | VueUse `14.1.0` | 当前锁定 |
 | 图表 | ECharts `5.6.0` | 当前锁定 |
 | 富文本 | `@vueup/vue-quill` `1.2.0`、Quill `2.0.2` | 当前锁定 |
+| Markdown 渲染 | `markdown-it` `14.1.0` | 当前锁定 |
 | 交互组件 | Vue Cropper `1.1.1`、Vue Draggable `4.1.0` | 当前锁定 |
 | 搜索/文件/剪贴板 | Fuse.js `7.1.0`、FileSaver.js `2.0.5`、Clipboard.js `2.0.11` | 当前锁定 |
 | 浏览器辅助 | js-cookie `3.0.5`、JSEncrypt `3.3.2`、NProgress `0.2.0` | 当前锁定 |
@@ -120,7 +121,7 @@ V1 不使用 React、TypeScript 或 TailwindCSS。
 | GPU | NVIDIA GeForce RTX 4060 Laptop，8,188 MiB | 当前硬件基线 |
 | NVIDIA Driver | `591.86` | 当前已核实 |
 | CUDA runtime | PyTorch `cu128` wheel 自带 CUDA 12.8 runtime | 候选待验证 |
-| GPU profile | FP16、单进程、单 worker、单模型、batch `4`、semaphore `1` | V1 已确认 |
+| GPU profile | FP16、单进程、单 worker、单模型已实现；batch `4`、共享 GPU 执行槽、查询/入库队列（上限 5 / 1 批次）为 V1 目标尚未落地 | V1 目标：batch/队列/共享槽未实现 |
 | CPU dev profile | FP32、单 worker、batch `1`、semaphore `1` | V1 已确认；仅排障/可移植性 |
 
 ## 版本升级规则

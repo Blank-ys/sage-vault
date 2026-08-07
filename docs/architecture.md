@@ -21,7 +21,7 @@
 - Java 服务通过 Nacos 获取配置和服务发现，MySQL 与 Redis 提供底座存储。
 - 前端复用 RuoYi 的动态菜单、路由、布局、认证拦截、全局通知和基础 UI。
 - MinIO、Milvus、etcd 与 Attu 已有独立开发编排，但尚未与 RuoYi 基础组件形成项目级唯一入口。
-- Sage Vault 专用 Java 发布单元、Python RAG 服务、跨端契约、评测和系统测试尚属 V1 目标结构。
+- Sage Vault 专用 Java 发布单元（`backend/ruoyi-kb-management`）、Python RAG 服务（`ai-modules/services/rag`）、根级跨端契约（`contracts/`）和浏览器到 Java 的系统验收（`system-tests/`）已落地；评测资产（`evaluation/`）与 V1 项目级唯一编排（`deploy/`）仍属 V1 目标结构。
 
 现有 RuoYi 模块保持原状；V1 不为统一目录外观而重构与 Sage Vault 无关的底座代码。
 
@@ -166,9 +166,9 @@ Nacos 只负责发现和配置，不构成认证机制。
 
 首个试点中，前端、Java 与 Python 在 Windows 宿主机原生运行；Ubuntu 24 VMware 虚拟机只运行 MySQL、Redis、Nacos、MinIO、Milvus 等中间件。基础组件由项目级唯一开发编排启动。
 
-本地嵌入使用 RTX 4060 Laptop GPU（8 GB 显存）：Python 3.12、FlagEmbedding、FP16、单进程、单 worker、单模型实例、batch 4、嵌入 semaphore 1。CUDA 不可用时 GPU profile 保持 not ready，禁止静默降级。显式 `cpu-dev` 使用 FP32、batch 1、semaphore 1，只用于排障；Linux CPU 镜像只证明可移植性。
+本地嵌入目标 profile 使用 RTX 4060 Laptop GPU（8 GB 显存）：Python 3.12、FlagEmbedding、FP16、单进程、单 worker、单模型实例、batch 4、嵌入 semaphore 1；其中 batch 与共享执行槽为 V1 目标，当前代码未按 profile 切换 batch（单一 `embedding_batch_size` 默认 1）。CUDA 不可用时 GPU profile 保持 not ready，禁止静默降级。显式 `cpu-dev` 使用 FP32、batch 1、semaphore 1，只用于排障；Linux CPU 镜像只证明可移植性。
 
-问答查询与企业文档入库共享一个 GPU 执行槽。查询队列优先且上限为 5，入库队列上限为 1 个批次；溢出返回可重试忙碌错误。五路并发回答仍由完整系统验收证明，不等同于五路并行嵌入。
+问答查询与企业文档入库共享一个 GPU 执行槽是 V1 目标，尚未实现：当前 indexing 与 answering 各创建独立 `BgeM3Embedder` 实例，未共享执行槽。查询队列优先且上限为 5、入库队列上限为 1 个批次、溢出返回可重试忙碌错误同为 V1 目标；代码仅预留 `embedding_max_queue_size` 设置且默认禁用，`errors.yaml` 也未注册忙碌错误码。五路并发回答仍由完整系统验收证明，不等同于五路并行嵌入。
 
 程序与模型分开发布。模型以 Hugging Face 40 位 commit SHA、逐文件 SHA-256 清单和 MinIO 不可变版本共同标识；运行时只从校验通过的显式本地目录加载并禁止联网。Windows CUDA 与 Linux CPU 依赖使用各自 PyTorch 官方索引和冻结离线 wheelhouse。
 

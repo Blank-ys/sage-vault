@@ -18,7 +18,7 @@ errors:
     name: INDEXING_DISPATCH_FAILED
     retryable: true
   - code: 510005
-    name: INDEXING_CALLBACK_FAILED
+    name: CLEANUP_DISPATCH_FAILED
     retryable: true
   - code: 510006
     name: RAG_INTERNAL_ERROR

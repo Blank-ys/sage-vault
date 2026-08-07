@@ -1,43 +1,30 @@
 # Sage Vault RAG — Python 依赖清单
 # 对应服务: ai-modules/services/rag
 # Python: >=3.12,<3.13
-# 版本范围来源: pyproject.toml（已声明）+ docs/technology-stack.md（V1 目标）
-# 精确版本由 uv.lock 固定；部署现场禁止重新求解
+# 版本范围与 pyproject.toml 保持一致；精确版本由 uv.lock 固定；部署现场禁止重新求解
 
-# ── HTTP / 传输层 ──────────────────────────────────────────────────────────────
+# ── 运行依赖（pyproject.toml [project].dependencies）─────────────────────────
+charset-normalizer>=3.4,<4
 fastapi>=0.139,<0.140
-uvicorn>=0.51,<0.52
-
-# ── 配置与数据模型 ─────────────────────────────────────────────────────────────
-pydantic>=2.13,<3
-pydantic-settings>=2.14,<3
-
-# ── 服务注册 ───────────────────────────────────────────────────────────────────
+flagembedding==1.4.0
+httpx>=0.28,<0.29
 nacos-sdk-python>=3.2,<4
-
-# ── 向量数据库客户端 ────────────────────────────────────────────────────────────
+openai>=1.40,<2
+pydantic-settings>=2.14,<3
 pymilvus>=2.4.10,<2.5
-
-# ── 对象存储客户端 ─────────────────────────────────────────────────────────────
-minio>=7.2,<8
-
-# ── 本地嵌入模型（bge-m3）─────────────────────────────────────────────────────
-FlagEmbedding==1.4.0
-transformers>=4.44.2,<6
-
-# ── 生成模型（DashScope / qwen-plus）─────────────────────────────────────────
-dashscope>=1.26.4,<2
-
-# ── 文档解析 ───────────────────────────────────────────────────────────────────
 pypdf>=6.14,<7
 python-docx>=1.2,<2
-markdown-it-py>=4.2,<5
-charset-normalizer>=3.4,<4
+setuptools>=60,<71
+uvicorn>=0.51,<0.52
 
-# ── 开发 / 测试工具 ────────────────────────────────────────────────────────────
-httpx>=0.28,<0.29
+# ── 开发 / 测试依赖（pyproject.toml [dependency-groups].dev）──────────────────
 jsonschema>=4.26,<5
+mypy==2.3.0
 pytest>=9.1,<10
 pytest-asyncio>=1.4,<2
-mypy==2.3.0
 ruff==0.16.0
+
+# 说明:
+# - MinIO 访问不使用 MinIO SDK，经 Java 限时预签名 URL 走 HTTP。
+# - Pydantic、Transformers 等为传递依赖，由 uv.lock 固定。
+# - Markdown 解析为项目自有正则实现，不使用 markdown-it-py。

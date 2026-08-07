@@ -17,8 +17,9 @@ paths:
           in: path
           required: true
           schema:
-            type: string
-            minLength: 1
+            type: integer
+            format: int64
+            minimum: 1
       responses:
         '200':
           description: 删除已发起（或已在删除中，幂等返回），包体遵循 DocumentResponse 形状
@@ -44,8 +45,9 @@ paths:
           in: path
           required: true
           schema:
-            type: string
-            minLength: 1
+            type: integer
+            format: int64
+            minimum: 1
       responses:
         '200':
           description: 清理重试已发起，包体遵循 DocumentResponse 形状
@@ -69,14 +71,16 @@ components:
       additionalProperties: false
       required:
         - id
-        - kbId
+        - knowledgeBaseId
         - filename
         - status
+        - size
       properties:
         id:
-          type: string
-          minLength: 1
-        kbId:
+          type: integer
+          format: int64
+          minimum: 1
+        knowledgeBaseId:
           type: integer
           format: int64
           minimum: 1
@@ -85,23 +89,23 @@ components:
           minLength: 1
         normalizedName:
           type: string
-          minLength: 1
         status:
           type: string
           enum:
+            - PROCESSING
             - AVAILABLE
-            - INDEXING
-            - INDEX_FAILED
+            - FAILED
             - DELETING
             - CLEANUP_FAILED
+        size:
+          type: integer
+          format: int64
+          minimum: 0
         errorMessage:
           type: string
-        cleanupPhase:
+        createdAt:
           type: string
-          enum:
-            - MILVUS_CLEANUP
-            - MINIO_CLEANUP
-            - ""
-        cleanupAttempt:
-          type: integer
-          minimum: 0
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
