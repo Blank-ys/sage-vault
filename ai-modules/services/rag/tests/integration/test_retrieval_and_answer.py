@@ -59,10 +59,10 @@ def milvus_store() -> Generator[MilvusVectorStore]:
     )
     yield store
     try:
-        store._get_collection()
+        store._lifecycle.get_collection()
         from pymilvus import utility
 
-        utility.drop_collection(store._collection_name, using=store._alias)
+        utility.drop_collection(store._lifecycle.collection_name, using=store._lifecycle.alias)
     except Exception:
         logging.getLogger(__name__).debug("清理测试 collection 失败", exc_info=True)
 

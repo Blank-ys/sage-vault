@@ -26,7 +26,7 @@ def milvus_available() -> bool:
         vector_dim=4,
     )
     try:
-        store._connect()
+        store._lifecycle.connect()
         return True
     except (OSError, MilvusException):
         return False
@@ -181,7 +181,7 @@ async def test_save_chunks_succeeds_after_schema_mismatch(vector_store: MilvusVe
     """先创建旧版 7 字段 collection，再使用 MilvusVectorStore，验证自动重建后可正常写入。"""
     if not milvus_available:
         pytest.skip("Milvus 不可达")
-    vector_store._connect()
+    vector_store._lifecycle.connect()
     old_fields = [
         FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
         FieldSchema(name="knowledge_base_id", dtype=DataType.INT64),
@@ -192,7 +192,7 @@ async def test_save_chunks_succeeds_after_schema_mismatch(vector_store: MilvusVe
         FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=4),
     ]
     old_schema = CollectionSchema(old_fields, description="Legacy Sage Vault document chunks")
-    collection = Collection(name=vector_store._collection_name, schema=old_schema, using=vector_store._alias)
+    collection = Collection(name=vector_store._lifecycle.collection_name, schema=old_schema, using=vector_store._lifecycle.alias)
     index_params = {"index_type": "FLAT", "metric_type": "L2", "params": {}}
     collection.create_index(field_name="vector", index_params=index_params)
 
@@ -202,4 +202,4 @@ async def test_save_chunks_succeeds_after_schema_mismatch(vector_store: MilvusVe
     await vector_store.save_chunks(chunks, vectors)
 
     assert await vector_store.count_by_document("doc-mismatch") == 2
-    utility.drop_collection(vector_store._collection_name, using=vector_store._alias)
+    utility.drop_collection(vector_store._lifecycle.collection_name, using=vector_store._lifecycle.alias)

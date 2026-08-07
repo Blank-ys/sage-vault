@@ -60,10 +60,10 @@ def milvus_store() -> Generator[MilvusVectorStore]:
     )
     yield store
     try:
-        store._get_collection()
+        store._lifecycle.get_collection()
         from pymilvus import utility
 
-        utility.drop_collection(store._collection_name, using=store._alias)
+        utility.drop_collection(store._lifecycle.collection_name, using=store._lifecycle.alias)
     except Exception:
         logging.getLogger(__name__).debug("清理测试 collection 失败", exc_info=True)
 
@@ -126,10 +126,10 @@ async def test_markdown_indexing_publishes_chunks_with_headings(
     assert await milvus_store.count_by_document(command.document_id) == result.chunks_count
     assert callback.results == [result]
 
-    collection = milvus_store._get_collection()
+    collection = milvus_store._lifecycle.get_collection()
     collection.load()
     rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
+        expr=milvus_store._queries.document_expr(command.document_id),
         output_fields=["sequence", "text"],
     )
     rows.sort(key=lambda row: row["sequence"])

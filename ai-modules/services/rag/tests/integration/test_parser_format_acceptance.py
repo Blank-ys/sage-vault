@@ -81,10 +81,10 @@ def milvus_store() -> Generator[MilvusVectorStore]:
     )
     yield store
     try:
-        store._get_collection()
+        store._lifecycle.get_collection()
         from pymilvus import utility
 
-        utility.drop_collection(store._collection_name, using=store._alias)
+        utility.drop_collection(store._lifecycle.collection_name, using=store._lifecycle.alias)
     except Exception:
         logging.getLogger(__name__).debug("清理测试 collection 失败", exc_info=True)
 
@@ -230,10 +230,10 @@ async def test_four_formats_indexing_succeeds_and_publishes_chinese_chunks(
     assert result.chunks_count >= 1
     assert await milvus_store.count_by_document(document_id) == result.chunks_count
 
-    collection = milvus_store._get_collection()
+    collection = milvus_store._lifecycle.get_collection()
     collection.load()
     rows = collection.query(
-        expr=milvus_store._document_expr(document_id),
+        expr=milvus_store._queries.document_expr(document_id),
         output_fields=["filename", "sequence", "text", "section_title", "page_number"],
     )
     rows.sort(key=lambda row: row["sequence"])

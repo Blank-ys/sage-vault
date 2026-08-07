@@ -56,10 +56,10 @@ def milvus_store() -> Generator[MilvusVectorStore]:
     )
     yield store
     try:
-        store._get_collection()
+        store._lifecycle.get_collection()
         from pymilvus import utility
 
-        utility.drop_collection(store._collection_name, using=store._alias)
+        utility.drop_collection(store._lifecycle.collection_name, using=store._lifecycle.alias)
     except Exception:
         logging.getLogger(__name__).debug("清理测试 collection 失败", exc_info=True)
 
@@ -118,10 +118,10 @@ async def test_short_single_paragraph_document(
     assert result.chunks_count == 1
     assert await milvus_store.count_by_document(command.document_id) == 1
 
-    collection = milvus_store._get_collection()
+    collection = milvus_store._lifecycle.get_collection()
     collection.load()
     rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
+        expr=milvus_store._queries.document_expr(command.document_id),
         output_fields=["chunk_id", "knowledge_base_id", "document_id", "filename", "sequence", "text"],
     )
     assert len(rows) == 1
@@ -155,10 +155,10 @@ async def test_multi_paragraph_document_keeps_boundaries(
     assert result.chunks_count == 2
     assert await milvus_store.count_by_document(command.document_id) == 2
 
-    collection = milvus_store._get_collection()
+    collection = milvus_store._lifecycle.get_collection()
     collection.load()
     rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
+        expr=milvus_store._queries.document_expr(command.document_id),
         output_fields=["sequence", "text"],
     )
     rows.sort(key=lambda row: row["sequence"])
@@ -187,10 +187,10 @@ async def test_long_paragraph_is_chunked(
     assert result.chunks_count > 1
     assert await milvus_store.count_by_document(command.document_id) == result.chunks_count
 
-    collection = milvus_store._get_collection()
+    collection = milvus_store._lifecycle.get_collection()
     collection.load()
     rows = collection.query(
-        expr=milvus_store._document_expr(command.document_id),
+        expr=milvus_store._queries.document_expr(command.document_id),
         output_fields=["text"],
     )
     full_text = "".join(row["text"] for row in rows)
