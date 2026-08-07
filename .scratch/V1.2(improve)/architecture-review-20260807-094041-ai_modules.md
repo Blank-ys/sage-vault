@@ -134,6 +134,8 @@ bootstrap
 
 ## 2. 深化 Answering execution module
 
+**状态：`resolved`**
+
 **推荐强度：Worth exploring**
 
 ### Files

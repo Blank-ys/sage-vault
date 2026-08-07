@@ -53,7 +53,7 @@ def test_classify_unknown_error_returns_controlled_category() -> None:
         ValueError("opaque"),
     ],
 )
-def test_mask_failure_detail_always_in_controlled_vocabulary(error) -> None:
+def test_mask_failure_detail_always_in_controlled_vocabulary(error: BaseException) -> None:
     assert mask_failure_detail(error) in {
         FAILURE_CATEGORY_EMBEDDING,
         FAILURE_CATEGORY_VECTOR_STORE,

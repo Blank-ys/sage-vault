@@ -146,6 +146,7 @@ class MilvusVectorStore:
 
     async def delete_by_document(self, document_id: str) -> None:
         collection = self._get_collection()
+        collection.load()
         collection.delete(expr=self._document_expr(document_id))
         collection.flush()
 

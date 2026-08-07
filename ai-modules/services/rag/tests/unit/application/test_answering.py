@@ -271,3 +271,166 @@ async def test_generation_crash_after_deltas_emits_failed_keeping_earlier_deltas
         "vector_store_failed",
         "unexpected_failure",
     }
+
+
+class FailingVectorStore(VectorStorePort):
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def save_chunks(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
+        pass
+
+    async def delete_by_document(self, document_id: str) -> None:
+        pass
+
+    async def search(
+        self,
+        knowledge_base_id: int,
+        vector: list[float],
+        top_k: int,
+    ) -> list[RetrievedChunk]:
+        raise self._error
+
+
+async def test_retrieval_failure_emits_failed_with_vector_store_detail() -> None:
+    """检索阶段异常不再从事件流中逃逸，与生成阶段保持一致的 Failed 语义。"""
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=FailingVectorStore(RuntimeError("milvus search unavailable")),
+        generator=CapturingGenerator([]),
+        top_k=3,
+        refusal_threshold=1.0,
+    )
+
+    events = [event async for event in service.answer(1, "问题", "gen-1")]
+
+    assert [type(e).__name__ for e in events] == ["Started", "Failed"]
+    assert isinstance(events[-1], Failed)
+    assert events[-1].detail == "vector_store_failed"
+    assert "milvus" not in events[-1].detail
+
+
+async def test_cancel_on_unrelated_instance_does_not_stop_this_stream() -> None:
+    """取消命令被路由到其他实例时返回 False，且不影响本实例的在途生成。"""
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    this_instance = CancellationRegistry()
+    other_instance = CancellationRegistry()
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=CapturingGenerator(["答案"]),
+        top_k=3,
+        refusal_threshold=1.0,
+        cancellations=this_instance,
+    )
+
+    events = []
+    async for event in service.answer(1, "问题", "gen-1"):
+        events.append(event)
+        if isinstance(event, Delta):
+            assert other_instance.cancel("gen-1") is False
+
+    assert isinstance(events[-1], Completed)
+
+
+class RecordingAsyncIterator:
+    """记录 aclose 调用、可配置在指定位置抛错的 AsyncIterator[str]。"""
+
+    def __init__(self, deltas: list[str], crash_at: int | None = None) -> None:
+        self._deltas = iter(deltas)
+        self._yielded = 0
+        self._crash_at = crash_at
+        self.closed = False
+
+    def __aiter__(self) -> "RecordingAsyncIterator":
+        return self
+
+    async def __anext__(self) -> str:
+        if self._crash_at is not None and self._yielded >= self._crash_at:
+            raise RuntimeError("generation backend crashed")
+        try:
+            value = next(self._deltas)
+        except StopIteration as stop:
+            raise StopAsyncIteration from stop
+        self._yielded += 1
+        return value
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class RecordingGenerator(GenerationPort):
+    def __init__(self, deltas: list[str], crash_at: int | None = None) -> None:
+        self._deltas = deltas
+        self._crash_at = crash_at
+        self.iterator: RecordingAsyncIterator | None = None
+
+    def generate(
+        self,
+        generation_id: str,
+        question: str,
+        chunks: list[RetrievedChunk],
+    ) -> AsyncIterator[str]:
+        iterator = RecordingAsyncIterator(self._deltas, self._crash_at)
+        self.iterator = iterator
+        return iterator
+
+
+async def test_generator_is_closed_after_normal_completion() -> None:
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    generator = RecordingGenerator(["答案"])
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=generator,
+        top_k=3,
+        refusal_threshold=1.0,
+    )
+
+    events = [event async for event in service.answer(1, "问题", "gen-1")]
+
+    assert isinstance(events[-1], Completed)
+    assert generator.iterator is not None
+    assert generator.iterator.closed is True
+
+
+async def test_generator_is_closed_after_cancel_mid_stream() -> None:
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    generator = RecordingGenerator(["第一段", "第二段", "第三段"])
+    cancellations = CancellationRegistry()
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=generator,
+        top_k=3,
+        refusal_threshold=1.0,
+        cancellations=cancellations,
+    )
+
+    events = []
+    async for event in service.answer(1, "问题", "gen-1"):
+        events.append(event)
+        if isinstance(event, Delta):
+            cancellations.cancel("gen-1")
+
+    assert events == [Started("gen-1"), Delta("gen-1", "第一段"), Stopped("gen-1")]
+    assert generator.iterator is not None
+    assert generator.iterator.closed is True
+
+
+async def test_generator_is_closed_after_generation_crash() -> None:
+    chunks = [(1, RetrievedChunk("c1", "d1", "file.txt", 0, "答案内容", score=0.3))]
+    generator = RecordingGenerator(["部分"], crash_at=1)
+    service = AnsweringService(
+        embedder=InMemoryEmbedder([0.1, 0.2]),
+        vector_store=InMemoryVectorStore(chunks),
+        generator=generator,
+        top_k=3,
+        refusal_threshold=1.0,
+    )
+
+    events = [event async for event in service.answer(1, "问题", "gen-1")]
+
+    assert [type(e).__name__ for e in events] == ["Started", "Delta", "Failed"]
+    assert generator.iterator is not None
+    assert generator.iterator.closed is True
