@@ -166,7 +166,7 @@ Nacos 只负责发现和配置，不构成认证机制。
 
 首个试点中，前端、Java 与 Python 在 Windows 宿主机原生运行；Ubuntu 24 VMware 虚拟机只运行 MySQL、Redis、Nacos、MinIO、Milvus 等中间件。基础组件由项目级唯一开发编排启动。
 
-本地嵌入目标 profile 使用 RTX 4060 Laptop GPU（8 GB 显存）：Python 3.12、FlagEmbedding、FP16、单进程、单 worker、单模型实例、batch 4、嵌入 semaphore 1；其中 batch 与共享执行槽为 V1 目标，当前代码未按 profile 切换 batch（单一 `embedding_batch_size` 默认 1）。CUDA 不可用时 GPU profile 保持 not ready，禁止静默降级。显式 `cpu-dev` 使用 FP32、batch 1、semaphore 1，只用于排障；Linux CPU 镜像只证明可移植性。
+本地嵌入目标 profile 使用 RTX 4060 Laptop GPU（8 GB 显存）：Python 3.12、FlagEmbedding、FP16、单进程、单 worker、单模型实例、batch 4（经 `.env` 配置）、嵌入 semaphore 1。代码不按 profile 自动切换 batch，由 `embedding_batch_size` 显式配置；共享执行槽仍为 V1 目标。CUDA 不可用时 GPU profile 保持 not ready，禁止静默降级。显式 `cpu-dev` 使用 FP32、batch 1、semaphore 1，只用于排障；Linux CPU 镜像只证明可移植性。
 
 问答查询与企业文档入库共享一个 GPU 执行槽是 V1 目标，尚未实现：当前 indexing 与 answering 各创建独立 `BgeM3Embedder` 实例，未共享执行槽。查询队列优先且上限为 5、入库队列上限为 1 个批次、溢出返回可重试忙碌错误同为 V1 目标；代码仅预留 `embedding_max_queue_size` 设置且默认禁用，`errors.yaml` 也未注册忙碌错误码。五路并发回答仍由完整系统验收证明，不等同于五路并行嵌入。
 

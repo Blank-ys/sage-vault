@@ -57,7 +57,7 @@ V1 不使用 PostgreSQL、pgvector、Redisson 或 Redis Stream。异步任务由
 | MinIO 访问 | 经 Java 限时预签名 URL 走 HTTP，不使用 MinIO SDK | 已实现 |
 | 本地嵌入 | FlagEmbedding `1.4.0`、`BAAI/bge-m3` | FlagEmbedding 已固定；模型 commit SHA 待锁定 |
 | Transformers | `>=4.44.2,<6` | 传递依赖，由 FlagEmbedding 解析；最终由 `uv.lock` 固定 |
-| Windows GPU Torch | `2.7.1+cu128` | 候选待验证，不是基线；当前 `uv.lock` 解析为 pypi `torch 2.12.1`，与 pyproject 的 cu128 index 声明漂移，需重建 lock 后再定基线 |
+| Windows GPU Torch | `2.11.0+cu128`（cu128 index） | 当前锁定；`pyproject.toml` 直接依赖 `torch==2.11.0+cu128`，`uv.lock` 已从 cu128 index 解析，不再漂移；本机 RTX 4060 Laptop 已验证 CUDA 可用与 bge-m3 FP16 嵌入 |
 | Linux CPU Torch | 与最终 Windows Torch 同版本 | 候选待验证；wheel/hash 未锁定 |
 | 传递依赖 | Starlette、AnyIO、Hugging Face Hub client | 由 `uv.lock` 固定；Hub client 只用于联网制品准备 |
 | 生成 | openai `>=1.40,<2` 访问百炼 OpenAI 兼容接口；默认模型标识 `qwen-plus` | 已实现 |
@@ -121,7 +121,7 @@ V1 不使用 React、TypeScript 或 TailwindCSS。
 | GPU | NVIDIA GeForce RTX 4060 Laptop，8,188 MiB | 当前硬件基线 |
 | NVIDIA Driver | `591.86` | 当前已核实 |
 | CUDA runtime | PyTorch `cu128` wheel 自带 CUDA 12.8 runtime | 候选待验证 |
-| GPU profile | FP16、单进程、单 worker、单模型已实现；batch `4`、共享 GPU 执行槽、查询/入库队列（上限 5 / 1 批次）为 V1 目标尚未落地 | V1 目标：batch/队列/共享槽未实现 |
+| GPU profile | FP16、单进程、单 worker、单模型、batch `4`（经 `.env` 配置）已实现；共享 GPU 执行槽、查询/入库队列（上限 5 / 1 批次）仍为 V1 目标 | batch 已落地；队列/共享槽未实现 |
 | CPU dev profile | FP32、单 worker、batch `1`、semaphore `1` | V1 已确认；仅排障/可移植性 |
 
 ## 版本升级规则
